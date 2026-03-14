@@ -8,11 +8,16 @@ import { defineConfig, loadEnv, type PluginOption } from 'vite';
 const workspaceRoot = path.resolve(process.cwd()); // add something after in the path resolve for mono repos
 const convexProjectDir = workspaceRoot;
 const convexFunctionsDir = 'src/convex';
+const localConvexPort = 3210;
+const localConvexSiteProxyPort = 3211;
+const localConvexUrl = `http://localhost:${localConvexPort}`;
+const localConvexSiteUrl = `http://localhost:${localConvexSiteProxyPort}`;
 
 const getEnvValue = (loadedEnv: Record<string, string>, key: string) =>
 	process.env[key] ?? loadedEnv[key];
 
-const LOCAL_CONVEX_ENV_KEYS = [] as const;
+// update this to include all the env vars needed for the convex backend
+const LOCAL_CONVEX_ENV_KEYS = ['CONVEX_API_KEY'] as const;
 
 const getLocalConvexEnvVars = (loadedEnv: Record<string, string>) => {
 	return Object.fromEntries(
@@ -28,14 +33,19 @@ export default defineConfig(({ mode }) => {
 	const useLocalConvex = getEnvValue(loadedEnv, 'USE_LOCAL_CONVEX') === 'true';
 	const resetLocalBackend = getEnvValue(loadedEnv, 'RESET_LOCAL_BACKEND') === 'true';
 
+	if (useLocalConvex) {
+		process.env.PUBLIC_CONVEX_URL = localConvexUrl;
+		process.env.PUBLIC_CONVEX_SITE_URL = localConvexSiteUrl;
+	}
+
 	// add plugins here
 	const plugins: PluginOption[] = [tailwindcss(), devtoolsJson(), sveltekit()];
 
 	if (useLocalConvex) {
 		plugins.push(
 			convexLocal({
-				port: 3210,
-				siteProxyPort: 3211,
+				port: localConvexPort,
+				siteProxyPort: localConvexSiteProxyPort,
 				projectDir: convexProjectDir,
 				convexDir: convexFunctionsDir,
 				reset: resetLocalBackend,
