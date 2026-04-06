@@ -160,7 +160,7 @@ export default function LandingPage() {
               <h1 className="mt-4 text-6xl leading-[0.92] text-white sm:text-7xl lg:text-[6.75rem] [font-family:var(--font-display)] uppercase">
                 One browser source.
                 <br />
-                <span className="text-primary">Infinite canvas.</span>
+                <span className="text-primary">Infinite possibilities.</span>
               </h1>
               <div className="mt-8 space-y-5">
                 <p className="signal-copy text-lg">
