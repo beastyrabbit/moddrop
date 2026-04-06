@@ -3,11 +3,50 @@
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { dark, shadcn } from "@clerk/themes";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { UserRecordBootstrap } from "@/components/user-record-bootstrap";
 import convex from "@/lib/convexClient";
 
 const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+type ClerkScriptProps = {
+  __internal_clerkJSUrl?: string;
+  __internal_clerkUIUrl?: string;
+};
+
+function decodeClerkFrontendApi(publishableKey: string) {
+  const parts = publishableKey.split("_");
+  if (parts.length < 3) {
+    return null;
+  }
+
+  try {
+    const base64 = parts[2]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(parts[2].length / 4) * 4, "=");
+    const decoded = atob(base64).replace(/\$/g, "");
+    return decoded || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildClerkScriptProps(
+  publishableKey: string,
+): ClerkScriptProps {
+  const frontendApi = decodeClerkFrontendApi(publishableKey);
+  if (!frontendApi) {
+    return {};
+  }
+
+  const scriptHost = `https://${frontendApi}`;
+  return {
+    __internal_clerkJSUrl: `${scriptHost}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`,
+    __internal_clerkUIUrl: `${scriptHost}/npm/@clerk/ui@1/dist/ui.browser.js`,
+  };
+}
+
 const clerkAppearance = {
   theme: [shadcn, dark],
   variables: {
@@ -58,12 +97,16 @@ if (!clerkPublishableKey) {
   );
 }
 
+const clerkProviderProps: Omit<ComponentProps<typeof ClerkProvider>, "children"> &
+  ClerkScriptProps = {
+  publishableKey: clerkPublishableKey,
+  appearance: clerkAppearance,
+  ...buildClerkScriptProps(clerkPublishableKey),
+};
+
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider
-      publishableKey={clerkPublishableKey}
-      appearance={clerkAppearance}
-    >
+    <ClerkProvider {...clerkProviderProps}>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <UserRecordBootstrap />
         {children}
