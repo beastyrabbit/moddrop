@@ -10,7 +10,8 @@ RUN apk add --no-cache python3 make g++
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY backend/stream-canvas/package.json backend/stream-canvas/package.json
-RUN pnpm install --filter stream-canvas --frozen-lockfile --prod --ignore-scripts
+RUN pnpm install --filter stream-canvas --frozen-lockfile --prod --ignore-scripts \
+  && pnpm --filter stream-canvas rebuild better-sqlite3
 
 FROM node:22-alpine AS runner
 
