@@ -44,6 +44,7 @@ jobs:
               - 'components/**'
               - 'lib/**'
               - 'public/**'
+              - '.dockerignore'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
@@ -59,6 +60,7 @@ jobs:
               - 'convex/**'
               - 'convex.json'
             stream_canvas:
+              - '.dockerignore'
               - 'backend/stream-canvas/**'
 
   tag-convex-changes:
