@@ -632,7 +632,13 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
   const [settingsShapeId, setSettingsShapeId] = useState<string | null>(null);
 
   const getUri = useCallback(async () => {
-    const token = await getToken();
+    const tokenGetter = getToken as typeof getToken & ((
+      options?: { skipCache?: boolean },
+    ) => Promise<string | null>);
+    let token = await tokenGetter();
+    if (!token) {
+      token = await tokenGetter({ skipCache: true });
+    }
     if (!token) throw new Error("Not authenticated");
     return buildEditorWsUrl(roomId, token);
   }, [roomId, getToken]);

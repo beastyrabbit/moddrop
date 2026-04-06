@@ -5,7 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "dev": "portless frontend next dev",
+    "dev": "concurrently -n frontend,convex,canvas -c blue,magenta,yellow \"pnpm dev:frontend\" \"pnpm dev:convex\" \"pnpm dev:canvas\"",
+    "dev:frontend": "portless frontend next dev",
     "dev:convex": "pnpm exec convex dev",
     "dev:canvas": "pnpm --dir backend/stream-canvas run dev",
     "build": "next build",
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.8",
+    "@clerk/themes": "^2.4.57",
     "@tldraw/sync": "^4.5.7",
     "clsx": "^2.1.1",
     "convex": "^1.34.1",
@@ -36,6 +38,7 @@
     "@types/node": "^25.5.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "concurrently": "^9.2.1",
     "tailwindcss": "4.2.2",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"

@@ -2,7 +2,6 @@
 
 import { useAuth, useClerk } from "@clerk/nextjs";
 import {
-  ArrowRight,
   AudioLines,
   type LucideIcon,
   ImageIcon,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { LandingFooter } from "@/components/common/LandingFooter";
 
 const stackMarks = ["OBS", "Twitch", "Clerk", "tldraw", "WebSockets", "SQLite"];
 
@@ -87,51 +87,6 @@ const mediaTypes: Array<{
   { label: "Audio", icon: AudioLines },
 ];
 
-function LandingActions({
-  isLoaded,
-  isSignedIn,
-  onSignIn,
-}: {
-  isLoaded: boolean;
-  isSignedIn: boolean;
-  onSignIn: () => void;
-}) {
-  if (isLoaded && isSignedIn) {
-    return (
-      <>
-        <Link href="/app" className="signal-button min-w-[210px]">
-          Open app
-          <ArrowRight className="size-5" />
-        </Link>
-        <Link
-          href="/app/settings"
-          className="signal-button signal-button--ghost min-w-[210px]"
-        >
-          Go to settings
-        </Link>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={onSignIn}
-        className="signal-button min-w-[210px]"
-      >
-        Log in
-      </button>
-      <Link
-        href="/app"
-        className="signal-button signal-button--ghost min-w-[210px]"
-      >
-        See the app
-      </Link>
-    </>
-  );
-}
-
 export default function LandingPage() {
   const clerk = useClerk();
   const { isLoaded, isSignedIn } = useAuth();
@@ -145,10 +100,10 @@ export default function LandingPage() {
 
   return (
     <main className="relative overflow-hidden">
-      <div className="signal-grid absolute inset-0 opacity-[0.14]" />
+      <div className="pointer-events-none absolute inset-0 z-0 signal-grid opacity-[0.14]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(51,255,51,0.09),transparent_20%),radial-gradient(circle_at_84%_12%,rgba(255,124,70,0.08),transparent_24%),radial-gradient(circle_at_50%_100%,rgba(40,120,70,0.12),transparent_30%)]" />
 
-      <div className="mx-auto max-w-[1440px] px-4 pb-18 pt-4 sm:px-6 sm:pt-6">
+      <div className="relative z-10 mx-auto max-w-[1440px] px-4 pb-18 pt-4 sm:px-6 sm:pt-6">
         <header className="signal-surface flex items-center justify-between rounded-[20px] px-4 py-3 sm:px-5">
           <Link
             href="/"
@@ -231,15 +186,7 @@ export default function LandingPage() {
                 clips, sponsor art, and quick stream drops.
               </p>
 
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <LandingActions
-                  isLoaded={isLoaded}
-                  isSignedIn={Boolean(isSignedIn)}
-                  onSignIn={handleSignIn}
-                />
-              </div>
-
-              <div className="mt-7 flex flex-wrap gap-2">
+              <div className="mt-8 flex flex-wrap gap-2">
                 {[
                   "1 source",
                   "shared room",
@@ -413,15 +360,10 @@ export default function LandingPage() {
             <p className="mx-auto mt-5 max-w-2xl text-base leading-8 text-white/64">
               One room. One source. One clear job.
             </p>
-            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
-              <LandingActions
-                isLoaded={isLoaded}
-                isSignedIn={Boolean(isSignedIn)}
-                onSignIn={handleSignIn}
-              />
-            </div>
           </div>
         </section>
+
+        <LandingFooter />
       </div>
     </main>
   );

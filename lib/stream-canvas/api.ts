@@ -5,52 +5,78 @@ export const CANVAS_API =
   process.env.NEXT_PUBLIC_CANVAS_API_URL ??
   "http://stream-canvas.localhost:1355";
 
+type ClerkTokenGetter = () => Promise<string | null>;
+
+async function getClerkToken(
+  getToken: ClerkTokenGetter,
+  options?: { skipCache?: boolean },
+) {
+  const tokenGetter = getToken as typeof getToken & ((
+    config?: { skipCache?: boolean },
+  ) => Promise<string | null>);
+  return tokenGetter(options);
+}
+
+async function parseApiError(res: Response) {
+  const body = await res.json().catch(() => ({}));
+  return (body as { error?: string }).error ?? `API error ${res.status}`;
+}
+
 /** Fetch helper that attaches the Clerk session token. */
 async function fetchApi(
   path: string,
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
   init?: RequestInit,
 ) {
-  const token = await getToken();
+  const token = await getClerkToken(getToken);
   if (!token) throw new Error("Not authenticated");
 
-  const res = await fetch(`${CANVAS_API}${path}`, {
-    ...init,
-    headers: {
-      ...init?.headers,
-      Authorization: `Bearer ${token}`,
-      ...(init?.body && typeof init.body === "string"
-        ? { "Content-Type": "application/json" }
-        : {}),
-    },
-  });
+  const makeRequest = (bearer: string) =>
+    fetch(`${CANVAS_API}${path}`, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${bearer}`,
+        ...(init?.body && typeof init.body === "string"
+          ? { "Content-Type": "application/json" }
+          : {}),
+      },
+    });
+
+  let res = await makeRequest(token);
+
+  // Clerk can briefly hand out a stale cached token while rotating sessions.
+  // Retry once with a fresh token before surfacing an auth error to the UI.
+  if (res.status === 401) {
+    const freshToken = await getClerkToken(getToken, { skipCache: true });
+    if (freshToken && freshToken !== token) {
+      res = await makeRequest(freshToken);
+    }
+  }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(
-      (body as { error?: string }).error ?? `API error ${res.status}`,
-    );
+    throw new Error(await parseApiError(res));
   }
   return res.json();
 }
 
 /** Create or get the current user's room. */
 export function createRoom(
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
 ): Promise<CanvasRoom> {
   return fetchApi("/api/rooms", getToken, { method: "POST" });
 }
 
 /** Get the current user's room. */
 export function getMyRoom(
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
 ): Promise<CanvasRoom> {
   return fetchApi("/api/rooms/me", getToken);
 }
 
 /** List all rooms the user can access (own + invited). */
 export function getAccessibleRooms(
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
 ): Promise<AccessibleRoom[]> {
   return fetchApi("/api/rooms/accessible", getToken);
 }
@@ -59,7 +85,7 @@ export function getAccessibleRooms(
 export function updateRoom(
   roomId: string,
   data: { twitchChannel?: string; allowedUsers?: string[] },
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
 ): Promise<CanvasRoom> {
   return fetchApi(`/api/rooms/${roomId}`, getToken, {
     method: "PATCH",
@@ -70,7 +96,7 @@ export function updateRoom(
 /** Regenerate the OBS room secret. */
 export function regenerateSecret(
   roomId: string,
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
 ): Promise<{ ok: boolean }> {
   return fetchApi(`/api/rooms/${roomId}/regenerate-secret`, getToken, {
     method: "POST",
@@ -80,7 +106,7 @@ export function regenerateSecret(
 /** Get the OBS secret (owner only, for settings page). */
 export function getObsSecret(
   roomId: string,
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
 ): Promise<{ obsSecret: string }> {
   return fetchApi(`/api/rooms/${roomId}/obs-secret`, getToken);
 }
@@ -111,19 +137,28 @@ export async function exchangeObsToken(secret: string): Promise<{
 export async function uploadFile(
   roomId: string,
   file: File,
-  getToken: () => Promise<string | null>,
+  getToken: ClerkTokenGetter,
 ): Promise<{ id: string; url: string; filename: string }> {
-  const token = await getToken();
+  const token = await getClerkToken(getToken);
   if (!token) throw new Error("Not authenticated");
 
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${CANVAS_API}/api/rooms/${roomId}/upload`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  });
+  const makeRequest = (bearer: string) =>
+    fetch(`${CANVAS_API}/api/rooms/${roomId}/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${bearer}` },
+      body: formData,
+    });
+
+  let res = await makeRequest(token);
+  if (res.status === 401) {
+    const freshToken = await getClerkToken(getToken, { skipCache: true });
+    if (freshToken && freshToken !== token) {
+      res = await makeRequest(freshToken);
+    }
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

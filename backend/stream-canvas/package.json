@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "portless stream-canvas node --watch --env-file=.env --experimental-strip-types src/index.ts",
+    "dev": "portless moddrop-stream-canvas node --watch --env-file=.env --experimental-strip-types src/index.ts",
     "start": "node --env-file=.env --experimental-strip-types src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test --test-force-exit --experimental-strip-types src/*.test.ts",

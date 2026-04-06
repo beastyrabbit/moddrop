@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative min-h-screen">
-      <div className="signal-grid absolute inset-0 opacity-20" />
+      <div className="pointer-events-none absolute inset-0 signal-grid opacity-20" />
       <header className="sticky top-0 z-30 border-b border-white/6 bg-black/55 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-4">
