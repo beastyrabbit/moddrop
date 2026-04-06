@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import {
   Unbounded,
   Space_Mono,
 } from "next/font/google";
 import { Toaster } from "sonner";
 import { AppProviders } from "@/components/providers";
+import {
+  buildClerkScriptProps,
+  clerkAppearance,
+  getClerkPublishableKey,
+} from "@/lib/clerk-config";
 import "./globals.css";
 
 const sans = Unbounded({
@@ -39,15 +45,24 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const clerkPublishableKey = getClerkPublishableKey();
+  const clerkProviderProps = {
+    publishableKey: clerkPublishableKey,
+    appearance: clerkAppearance,
+    ...buildClerkScriptProps(clerkPublishableKey),
+  };
+
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${sans.variable} ${mono.variable} ${display.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
       >
-        <AppProviders>
-          {children}
-          <Toaster richColors position="bottom-right" />
-        </AppProviders>
+        <ClerkProvider {...clerkProviderProps}>
+          <AppProviders>
+            {children}
+            <Toaster richColors position="bottom-right" />
+          </AppProviders>
+        </ClerkProvider>
       </body>
     </html>
   );
