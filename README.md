@@ -6,7 +6,7 @@
   <p>
     <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js_16-App_Router-0b0b0b?style=for-the-badge&logo=nextdotjs" />
     <img alt="React 19" src="https://img.shields.io/badge/React_19-Live_UI-111827?style=for-the-badge&logo=react" />
-    <img alt="Bun" src="https://img.shields.io/badge/Bun-Fullstack-f5f5f5?style=for-the-badge&logo=bun&logoColor=111" />
+    <img alt="pnpm" src="https://img.shields.io/badge/pnpm-Workspace-f69220?style=for-the-badge&logo=pnpm&logoColor=fff" />
     <img alt="tldraw" src="https://img.shields.io/badge/tldraw-Canvas-1d4ed8?style=for-the-badge" />
   </p>
 </div>
@@ -15,15 +15,15 @@ Moddrop gives a stream one live canvas inside OBS. The streamer owns the room, i
 
 ## Stack
 
-`Next.js` `React` `Clerk` `Convex` `tldraw` `Hono` `WebSocket` `SQLite` `Bun`
+`Next.js` `React` `Clerk` `Convex` `tldraw` `Hono` `WebSocket` `SQLite` `pnpm`
 
 ## Run
 
 ```bash
-bun install
-bun run dev
-bun run dev:convex
-bun run dev:canvas
+pnpm install
+pnpm run dev
+pnpm run dev:convex
+pnpm run dev:canvas
 ```
 
 `frontend.localhost:1355`  
@@ -32,6 +32,6 @@ bun run dev:canvas
 ## Check
 
 ```bash
-bun run lint && bun run typecheck && bun run test && bun run build
-cd backend/stream-canvas && bun run typecheck && bun run test
+pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build
+pnpm --dir backend/stream-canvas run typecheck && pnpm --dir backend/stream-canvas run test
 ```

@@ -1,15 +1,26 @@
 # syntax=docker/dockerfile:1.6
 
-FROM oven/bun:1.3.11-alpine AS deps
+FROM node:22-alpine AS deps
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --ignore-scripts
+RUN corepack enable
 
-FROM oven/bun:1.3.11-alpine AS builder
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY backend/stream-canvas/package.json backend/stream-canvas/package.json
+RUN pnpm install --frozen-lockfile --ignore-scripts
+
+FROM node:22-alpine AS builder
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
+
+RUN corepack enable
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -28,7 +39,7 @@ ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
 ENV NEXT_PUBLIC_CANVAS_API_URL=${NEXT_PUBLIC_CANVAS_API_URL}
 ENV NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
 
-RUN bun run build
+RUN pnpm run build
 
 FROM node:22-alpine AS runner
 

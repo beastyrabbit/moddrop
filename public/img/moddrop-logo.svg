@@ -1,0 +1,46 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="512"
+  height="512"
+  viewBox="0 0 512 512"
+  fill="none"
+>
+  <title>Moddrop company logo</title>
+  <path
+    d="M112 88H400C417.673 88 432 102.327 432 120V320C432 337.673 417.673 352 400 352H228L152 424V352H112C94.327 352 80 337.673 80 320V120C80 102.327 94.327 88 112 88Z"
+    fill="#050508"
+    stroke="#1A1F1B"
+    stroke-width="12"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M134 318V170H168L203 235L238 170H271V318H242V220L206 286H200L163 220V318H134Z"
+    fill="#F5F7F2"
+  />
+  <path
+    fill-rule="evenodd"
+    clip-rule="evenodd"
+    d="M217 170H297C335.66 170 367 201.34 367 240V248C367 286.66 335.66 318 297 318H217V170ZM247 198V290H295C320.405 290 341 269.405 341 244V244C341 218.595 320.405 198 295 198H247Z"
+    fill="#F5F7F2"
+  />
+  <path
+    d="M348 170H379V288H430V318H348V170Z"
+    fill="#F5F7F2"
+  />
+  <circle cx="256" cy="127" r="18" fill="#9CFF57" />
+  <rect x="246" y="145" width="20" height="34" rx="8" fill="#9CFF57" />
+  <path
+    d="M210 187H302L320 202L300 216H212L192 202L210 187Z"
+    fill="#9CFF57"
+  />
+  <path
+    d="M244 210H268V360L256 394L244 360V210Z"
+    fill="#9CFF57"
+  />
+  <path
+    d="M256 210V388"
+    stroke="#050508"
+    stroke-linecap="round"
+    stroke-width="6"
+  />
+</svg>

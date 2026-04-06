@@ -45,7 +45,8 @@ jobs:
               - 'lib/**'
               - 'public/**'
               - 'package.json'
-              - 'bun.lock'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
               - 'next.config.mjs'
               - 'postcss.config.mjs'
               - 'tailwind.config.ts'
@@ -106,11 +107,16 @@ jobs:
     runs-on: arc-beastypage
     steps:
       - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
+      - uses: pnpm/action-setup@v4
         with:
-          bun-version: 1.3.11
-      - run: bun install --frozen-lockfile
-      - run: bunx convex deploy
+          version: 10.33.0
+          run_install: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm exec convex deploy
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
           CONVEX_DEPLOYMENT: ${{ secrets.CONVEX_DEPLOYMENT }}
@@ -185,7 +191,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
       - uses: docker/build-push-action@v7
         with:
-          context: ./backend/stream-canvas
+          context: .
           file: ./backend/stream-canvas/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

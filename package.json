@@ -3,18 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "portless frontend next dev",
-    "dev:convex": "bunx convex dev",
-    "dev:canvas": "cd backend/stream-canvas && bun run dev",
+    "dev:convex": "pnpm exec convex dev",
+    "dev:canvas": "pnpm --dir backend/stream-canvas run dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "convex:gen": "CONVEX_AGENT_MODE=anonymous bunx convex codegen",
-    "prepare": "CONVEX_AGENT_MODE=anonymous bunx convex codegen"
+    "convex:gen": "CONVEX_AGENT_MODE=anonymous pnpm exec convex codegen",
+    "prepare": "CONVEX_AGENT_MODE=anonymous pnpm exec convex codegen"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.8",
