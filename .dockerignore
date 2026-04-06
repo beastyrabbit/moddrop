@@ -5,7 +5,9 @@
 .playwright-mcp
 .vscode
 node_modules
-backend
+backend/*
+!backend/stream-canvas/
+!backend/stream-canvas/**
 coverage
 dist
 build
