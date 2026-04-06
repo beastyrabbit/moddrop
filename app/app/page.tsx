@@ -1,7 +1,14 @@
 "use client";
 
 import { useAuth, useClerk } from "@clerk/nextjs";
-import { ArrowRight, Crown, Loader2, Plus, Settings } from "lucide-react";
+import {
+  ArrowRight,
+  Crown,
+  Loader2,
+  LogOut,
+  Plus,
+  Settings,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PageHero } from "@/components/common/PageHero";
@@ -86,11 +93,25 @@ export default function StreamCanvasPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 sm:py-10">
-      <PageHero
-        eyebrow="Control room"
-        title="Your rooms"
-        description="Create a room for your stream, or jump back into one you already control."
-      />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <PageHero
+          eyebrow="Control room"
+          title="Your rooms"
+          description="Create a room for your stream, or jump back into one you already control."
+        />
+        <button
+          type="button"
+          onClick={() => clerk.signOut()}
+          className={cn(
+            "inline-flex items-center justify-center gap-2 rounded-lg border border-border/50",
+            "px-4 py-2 text-sm font-semibold text-muted-foreground",
+            "transition hover:bg-foreground hover:text-background",
+          )}
+        >
+          <LogOut className="size-4" />
+          Log out
+        </button>
+      </div>
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-400">

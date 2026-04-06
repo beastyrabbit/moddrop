@@ -36,7 +36,12 @@ export const metadata: Metadata = {
   description:
     "Collaborative stream canvases for live overlays and browser-source control.",
   icons: {
-    icon: "/favicon.svg",
+    icon: [
+      { url: "/img/moddrop-logo-mark.svg", type: "image/svg+xml" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/img/moddrop-logo-mark.svg",
+    apple: "/img/moddrop-logo-mark.svg",
   },
 };
 

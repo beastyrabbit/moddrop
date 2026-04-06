@@ -3,6 +3,7 @@
 import { useClerk, useUser } from "@clerk/nextjs";
 import { useConvexAuth } from "convex/react";
 import { ArrowUpRight, LogIn, LogOut, Settings2 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -28,8 +29,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/"
               className="inline-flex items-center gap-2 text-sm font-semibold tracking-[0.14em] text-white/88 uppercase"
             >
-              <span className="inline-flex size-5 items-center justify-center border border-[#33ff33] bg-[#33ff33] text-[0.7rem] font-black text-black">
-                ▶
+              <span className="inline-flex size-5 items-center justify-center overflow-hidden rounded-sm border border-[#33ff33]/45 bg-black">
+                <Image
+                  src="/img/moddrop-logo-mark.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="size-5"
+                  aria-hidden="true"
+                />
               </span>
               Moddrop
             </Link>
