@@ -1,25 +1,31 @@
 node_modules
-
+.next
 .convex
-
-# Output
-.output
+.agents
+.claude
+.crush
+.goose
+.junie
+.pi
+.playwright-mcp
+CLAUDE.md
+skills-lock.json
+backend/stream-canvas/node_modules
+backend/stream-canvas/data
+backend/stream-canvas/bun.lockb
+coverage
+dist
+build
+out
+tsconfig.tsbuildinfo
 .vercel
 .netlify
 .wrangler
-/.svelte-kit
-/build
-
-# OS
+.svelte-kit
 .DS_Store
 Thumbs.db
 
-# Env
 .env
 .env.*
 !.env.example
 !.env.test
-
-# Vite
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*

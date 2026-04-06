@@ -1,0 +1,54 @@
+import type { Metadata } from "next";
+import {
+  Unbounded,
+  Space_Mono,
+} from "next/font/google";
+import { Toaster } from "sonner";
+import { AppProviders } from "@/components/providers";
+import "./globals.css";
+
+const sans = Unbounded({
+  variable: "--font-sans",
+  subsets: ["latin"],
+  weight: ["200", "300", "400", "500", "600", "700", "800", "900"],
+});
+
+const mono = Space_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
+const display = Unbounded({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+});
+
+export const metadata: Metadata = {
+  title: "Moddrop",
+  description:
+    "Collaborative stream canvases for live overlays and browser-source control.",
+  icons: {
+    icon: "/favicon.svg",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body
+        className={`${sans.variable} ${mono.variable} ${display.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
+      >
+        <AppProviders>
+          {children}
+          <Toaster richColors position="bottom-right" />
+        </AppProviders>
+      </body>
+    </html>
+  );
+}

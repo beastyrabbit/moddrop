@@ -1,13 +1,25 @@
 {
-	"files.associations": {
-		"*.css": "tailwindcss"
-	},
-	"window.titleBarStyle": "custom",
-	"workbench.colorCustomizations": {
-		"titleBar.activeBackground": "#ff3e00",
-		"titleBar.activeForeground": "#ffffff",
-		"titleBar.inactiveBackground": "#ff3e00",
-		"titleBar.inactiveForeground": "#ffffff",
-		"titleBar.border": "#ff3e00"
-	}
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "window.titleBarStyle": "custom",
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#ff3e00",
+    "titleBar.activeForeground": "#ffffff",
+    "titleBar.inactiveBackground": "#ff3e00",
+    "titleBar.inactiveForeground": "#ffffff",
+    "titleBar.border": "#ff3e00"
+  }
 }
