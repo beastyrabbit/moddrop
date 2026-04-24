@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import {
-  Unbounded,
-  Space_Mono,
-} from "next/font/google";
+import { Unbounded, Space_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { AppProviders } from "@/components/providers";
 import {
@@ -37,11 +34,11 @@ export const metadata: Metadata = {
     "Collaborative stream canvases for live overlays and browser-source control.",
   icons: {
     icon: [
-      { url: "/img/moddrop-logo-mark.svg", type: "image/svg+xml" },
+      { url: "/img/moddrop-icon.svg", type: "image/svg+xml" },
       { url: "/favicon.svg", type: "image/svg+xml" },
     ],
-    shortcut: "/img/moddrop-logo-mark.svg",
-    apple: "/img/moddrop-logo-mark.svg",
+    shortcut: "/img/moddrop-icon.svg",
+    apple: "/img/moddrop-icon.svg",
   },
 };
 

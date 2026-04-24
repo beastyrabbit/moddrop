@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">ModDrop Drop Broadcast Icon</title>
+<desc id="desc">Geometric M, central drop, and broadcast wave arcs.</desc>
+<g>
+  <path d="M14 14 L14 327 L88 286 L89 155 L172 213
+C151 249 137 294 134 347
+C139 390 168 426 210 446
+C239 456 286 453 323 431
+C360 407 376 361 376 315
+C372 282 357 248 337 213
+L421 156 L422 284 L497 327 L497 14 L270 167
+C296 217 323 264 333 306
+C343 345 337 377 316 397
+C293 419 268 424 230 419
+C196 414 174 382 168 347
+C164 313 174 286 190 252
+C202 227 220 194 239 166 Z" fill="currentColor" shape-rendering="geometricPrecision"/>
+  <path d="M256 336 m-56 0 a56 56 0 1 0 112 0 a56 56 0 1 0 -112 0" fill="currentColor" shape-rendering="geometricPrecision"/>
+  <path d="M45 361 C52 421 90 475 126 500 L110 512 C66 479 31 427 23 370 Z" fill="currentColor" shape-rendering="geometricPrecision"/>
+  <path d="M91 351 C99 407 127 456 163 487 L183 466 C150 435 126 392 122 345 Z" fill="currentColor" shape-rendering="geometricPrecision"/>
+  <path d="M467 361 C460 421 422 475 386 500 L402 512 C446 479 481 427 489 370 Z" fill="currentColor" shape-rendering="geometricPrecision"/>
+  <path d="M421 351 C413 407 385 456 349 487 L329 466 C362 435 386 392 390 345 Z" fill="currentColor" shape-rendering="geometricPrecision"/>
+</g>
+</svg>
