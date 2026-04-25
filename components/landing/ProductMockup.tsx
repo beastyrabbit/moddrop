@@ -262,19 +262,13 @@ export function ProductMockup() {
                 <Image
                   src="/img/brands/twitch.svg"
                   alt="Twitch"
-                  width={14}
+                  width={12}
                   height={14}
                 />
                 <Image
                   src="/img/brands/youtube.svg"
                   alt="YouTube"
-                  width={18}
-                  height={14}
-                />
-                <Image
-                  src="/img/brands/discord.svg"
-                  alt="Discord"
-                  width={16}
+                  width={20}
                   height={14}
                 />
                 <Image

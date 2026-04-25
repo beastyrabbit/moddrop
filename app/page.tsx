@@ -296,67 +296,72 @@ export default function LandingPage() {
         </section>
 
         <section className="mx-auto max-w-[1320px] pt-4 pb-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4 rounded-[12px] border border-white/10 bg-[#080d12]/80 px-6 py-5">
-            <p className="font-mono text-[0.7rem] tracking-[0.22em] text-white/48 uppercase">
-              Works with
-            </p>
-            <div className="flex items-center gap-6 text-white/74">
-              <Link
-                href="https://obsproject.com"
-                aria-label="OBS Studio"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="opacity-80 hover:opacity-100"
-              >
-                <Image
-                  src="/img/brands/obs.svg"
-                  alt="OBS Studio"
-                  width={24}
-                  height={24}
-                />
-              </Link>
-              <Link
-                href="https://twitch.tv"
+          <div className="grid gap-4 rounded-[12px] border border-white/10 bg-[#080d12]/80 px-6 py-5 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-8">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <p className="font-mono text-[0.7rem] tracking-[0.22em] text-white/48 uppercase">
+                Works with
+              </p>
+              <span
                 aria-label="Twitch"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="opacity-80 hover:opacity-100"
+                role="img"
+                className="inline-flex h-10 w-12 items-center justify-center rounded-[10px] border border-primary/25 bg-primary/10"
               >
                 <Image
                   src="/img/brands/twitch.svg"
-                  alt="Twitch"
-                  width={24}
-                  height={24}
+                  alt=""
+                  width={17}
+                  height={20}
                 />
-              </Link>
-              <Link
-                href="https://youtube.com"
-                aria-label="YouTube"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="opacity-80 hover:opacity-100"
-              >
-                <Image
-                  src="/img/brands/youtube.svg"
-                  alt="YouTube"
-                  width={30}
-                  height={24}
-                />
-              </Link>
-              <Link
-                href="https://discord.com"
-                aria-label="Discord"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="opacity-80 hover:opacity-100"
-              >
-                <Image
-                  src="/img/brands/discord.svg"
-                  alt="Discord"
-                  width={28}
-                  height={24}
-                />
-              </Link>
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-white/10 pt-4 sm:justify-end sm:border-t-0 sm:border-l sm:pt-0 sm:pl-8">
+              <p className="font-mono text-[0.7rem] tracking-[0.22em] text-white/48 uppercase">
+                Coming soon
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  {
+                    name: "YouTube Live",
+                    src: "/img/brands/youtube.svg",
+                    width: 24,
+                    height: 17,
+                  },
+                  {
+                    name: "Kick",
+                    src: "/img/brands/kick.svg",
+                    width: 50,
+                    height: 16,
+                  },
+                  {
+                    name: "TikTok Live",
+                    src: "/img/brands/tiktok.svg",
+                    width: 16,
+                    height: 18,
+                  },
+                  {
+                    name: "Rumble",
+                    src: "/img/brands/rumble.svg",
+                    width: 64,
+                    height: 16,
+                  },
+                ].map((service) => (
+                  <span
+                    key={service.name}
+                    aria-label={service.name}
+                    role="img"
+                    className="inline-flex h-10 min-w-12 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.04] px-3"
+                  >
+                    <Image
+                      src={service.src}
+                      alt=""
+                      width={service.width}
+                      height={service.height}
+                      className="opacity-55 saturate-50"
+                    />
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </section>
