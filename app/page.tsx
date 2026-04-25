@@ -132,7 +132,7 @@ export default function LandingPage() {
               priority
               className="shrink-0"
             />
-            <span className="text-[1.02rem] font-black tracking-[0.02em] text-white">
+            <span className="hidden text-[1.02rem] font-black tracking-[0.02em] text-white sm:inline">
               MODDROP
             </span>
           </Link>
