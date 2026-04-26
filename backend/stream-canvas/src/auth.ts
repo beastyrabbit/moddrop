@@ -4,6 +4,7 @@ import type {
   CanvasWsTokenClaims,
   ClerkClaims,
   ObsTokenClaims,
+  UploadAccessTokenClaims,
 } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -90,8 +91,7 @@ export function normalizedClerkIssuer(): string | undefined {
 // Short-lived OBS tokens (HMAC-signed)
 // ---------------------------------------------------------------------------
 
-const INTERNAL_TOKEN_SIGNING_SECRET =
-  process.env.OBS_TOKEN_SIGNING_SECRET ?? randomBytes(32).toString("hex");
+const INTERNAL_TOKEN_SIGNING_SECRET = getInternalTokenSigningSecret();
 
 if (!process.env.OBS_TOKEN_SIGNING_SECRET) {
   if (config.nodeEnv === "production") {
@@ -100,6 +100,16 @@ if (!process.env.OBS_TOKEN_SIGNING_SECRET) {
   console.warn(
     "[stream-canvas] OBS_TOKEN_SIGNING_SECRET not set — using random secret. OBS tokens will not survive restarts.",
   );
+}
+if (
+  process.env.OBS_TOKEN_SIGNING_SECRET &&
+  Buffer.byteLength(process.env.OBS_TOKEN_SIGNING_SECRET, "utf8") < 32
+) {
+  const message = "OBS_TOKEN_SIGNING_SECRET must be at least 32 bytes.";
+  if (config.nodeEnv === "production") {
+    throw new Error(message);
+  }
+  console.warn(`[stream-canvas] ${message}`);
 }
 if (!config.clerkJwtKey && !config.clerkSecretKey) {
   if (config.nodeEnv === "production") {
@@ -110,6 +120,10 @@ if (!config.clerkJwtKey && !config.clerkSecretKey) {
   console.warn(
     "[stream-canvas] Neither CLERK_JWT_KEY nor CLERK_SECRET_KEY is set. All authenticated requests will fail.",
   );
+}
+
+function getInternalTokenSigningSecret(): string {
+  return process.env.OBS_TOKEN_SIGNING_SECRET ?? randomBytes(32).toString("hex");
 }
 if (!normalizedClerkIssuer()) {
   if (config.nodeEnv === "production") {
@@ -126,7 +140,9 @@ function hmacSign(payload: string): string {
     .digest("base64url");
 }
 
-function signClaims(claims: ObsTokenClaims | CanvasWsTokenClaims): string {
+function signClaims(
+  claims: ObsTokenClaims | CanvasWsTokenClaims | UploadAccessTokenClaims,
+): string {
   const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
   const signature = hmacSign(payload);
   return `${payload}.${signature}`;
@@ -198,6 +214,29 @@ export function verifyCanvasWsToken(
   return claims;
 }
 
+/** Mint a short-lived access token for an uploaded media file. */
+export function mintUploadAccessToken(roomId: string, uploadId: string): string {
+  const claims: UploadAccessTokenClaims = {
+    roomId,
+    uploadId,
+    scope: "stream-canvas-upload",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + config.uploadTokenTtlSeconds,
+  };
+  return signClaims(claims);
+}
+
+/** Verify and decode a short-lived uploaded media access token. */
+export function verifyUploadAccessToken(
+  token: string,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): UploadAccessTokenClaims | null {
+  const claims = verifySignedClaims(token);
+  if (!isUploadAccessTokenClaims(claims)) return null;
+  if (claims.exp < nowSeconds) return null;
+  return claims;
+}
+
 // ---------------------------------------------------------------------------
 // HTTP header helpers
 // ---------------------------------------------------------------------------
@@ -247,6 +286,25 @@ function isCanvasWsTokenClaims(value: unknown): value is CanvasWsTokenClaims {
     typeof value.userId === "string" &&
     value.role === "editor" &&
     value.scope === "stream-canvas-ws" &&
+    typeof value.exp === "number" &&
+    typeof value.iat === "number"
+  );
+}
+
+function isUploadAccessTokenClaims(
+  value: unknown,
+): value is UploadAccessTokenClaims {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "roomId" in value &&
+    "uploadId" in value &&
+    "scope" in value &&
+    "exp" in value &&
+    "iat" in value &&
+    typeof value.roomId === "string" &&
+    typeof value.uploadId === "string" &&
+    value.scope === "stream-canvas-upload" &&
     typeof value.exp === "number" &&
     typeof value.iat === "number"
   );

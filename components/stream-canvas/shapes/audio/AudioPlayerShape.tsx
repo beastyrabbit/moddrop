@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   BaseBoxShapeUtil,
   type Editor,
@@ -11,7 +18,7 @@ import {
   type TLResizeInfo,
   useValue,
 } from "tldraw";
-import { CANVAS_API, uploadFile } from "@/lib/stream-canvas/api";
+import { uploadFile } from "@/lib/stream-canvas/api";
 import {
   DEFAULT_MEDIA_VOLUME,
   getEffectiveMediaVolume,
@@ -66,9 +73,15 @@ export const audioPlayerShapeProps: RecordProps<AudioPlayerShape> = {
 export interface AudioUploadContext {
   roomId: string;
   getToken: () => Promise<string | null>;
+  resolveUrl: (
+    src: string,
+    options?: { forceRefresh?: boolean },
+  ) => Promise<string>;
 }
 
 export const AudioUploadCtx = createContext<AudioUploadContext | null>(null);
+
+const MEDIA_URL_REFRESH_INTERVAL_MS = 60_000;
 
 type EventWithStopPropagation = {
   stopPropagation(): void;
@@ -143,6 +156,7 @@ function AudioPlayerComponent({
   );
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [draftUrl, setDraftUrl] = useState(shape.props.url);
+  const [resolvedMediaUrl, setResolvedMediaUrl] = useState(shape.props.url);
   const [displayTime, setDisplayTime] = useState(
     shape.props.playbackPosition ?? 0,
   );
@@ -178,6 +192,56 @@ function AudioPlayerComponent({
     setDraftUrl(shape.props.url);
     setScrubTime(null);
   }, [shape.props.url]);
+
+  const resolveMediaUrl = useCallback(
+    async (options: { forceRefresh?: boolean } = {}) => {
+      if (!shape.props.url) return "";
+      return uploadCtx?.resolveUrl
+        ? uploadCtx.resolveUrl(shape.props.url, options)
+        : shape.props.url;
+    },
+    [shape.props.url, uploadCtx],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!shape.props.url) {
+      setResolvedMediaUrl("");
+      return;
+    }
+
+    const refresh = (forceRefresh = false) => {
+      resolveMediaUrl({ forceRefresh })
+        .then((url) => {
+          if (!cancelled) setResolvedMediaUrl(url);
+        })
+        .catch((error) => {
+          console.error("[audio-player] media URL resolution failed:", error);
+          if (!cancelled) setResolvedMediaUrl(shape.props.url);
+        });
+    };
+
+    refresh();
+    const refreshInterval = window.setInterval(() => {
+      refresh(true);
+    }, MEDIA_URL_REFRESH_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshInterval);
+    };
+  }, [shape.props.url, resolveMediaUrl]);
+
+  const refreshResolvedMediaUrl = useCallback(() => {
+    resolveMediaUrl({ forceRefresh: true })
+      .then((url) => {
+        setResolvedMediaUrl(url);
+        audioRef.current?.load();
+      })
+      .catch((error) => {
+        console.error("[audio-player] media URL refresh failed:", error);
+      });
+  }, [resolveMediaUrl]);
 
   useEffect(() => {
     if (!shape.props.url) {
@@ -219,7 +283,7 @@ function AudioPlayerComponent({
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !shape.props.url) return;
+    if (!audio || !shape.props.url || !resolvedMediaUrl) return;
 
     const desiredTime = clampPlaybackPosition(
       syncedPlaybackPosition +
@@ -249,6 +313,7 @@ function AudioPlayerComponent({
     audio.pause();
   }, [
     shape.props.url,
+    resolvedMediaUrl,
     isInteractive,
     isReadonly,
     syncedIsPlaying,
@@ -268,7 +333,7 @@ function AudioPlayerComponent({
         file,
         uploadCtx.getToken,
       );
-      const nextUrl = CANVAS_API + result.url;
+      const nextUrl = result.url;
       setDraftUrl(nextUrl);
       setUploadNotice(`Uploaded ${result.filename}`);
       onUpdateProps({
@@ -447,14 +512,16 @@ function AudioPlayerComponent({
       code: mediaError?.code,
       message: mediaError?.message,
       url: shape.props.url,
+      resolved: Boolean(resolvedMediaUrl),
     });
+    refreshResolvedMediaUrl();
   };
 
   const sharedAudioElement = shape.props.url ? (
     // biome-ignore lint/a11y/useMediaCaption: audio-only controls in the editor do not support caption tracks
     <audio
       ref={audioRef}
-      src={shape.props.url}
+      src={resolvedMediaUrl}
       loop={shape.props.loop}
       style={{ display: "none" }}
       onLoadedMetadata={handleLoadedMetadata}

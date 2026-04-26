@@ -7,6 +7,7 @@ export const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   "image/webp",
   "video/mp4",
   "video/webm",
+  "audio/webm",
   "audio/mpeg",
   "audio/ogg",
   "audio/wav",
@@ -14,7 +15,10 @@ export const ALLOWED_UPLOAD_MIME_TYPES = new Set([
 
 const FALLBACK_FILENAME = "upload";
 
-export function sniffUploadMime(buffer: Buffer): string | null {
+export function sniffUploadMime(
+  buffer: Buffer,
+  declaredMimeType?: string,
+): string | null {
   if (buffer.length < 4) return null;
 
   if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
@@ -46,6 +50,7 @@ export function sniffUploadMime(buffer: Buffer): string | null {
   }
 
   if (buffer.subarray(0, 4).equals(Buffer.from("1a45dfa3", "hex"))) {
+    if (declaredMimeType === "audio/webm") return "audio/webm";
     return "video/webm";
   }
 
@@ -92,12 +97,44 @@ export function sanitizeUploadFilename(filename: string): string {
 }
 
 export function validateUploadedMedia(
-  _buffer: Buffer,
+  buffer: Buffer,
   mimeType: string,
 ): { ok: true } | { ok: false; error: string } {
   if (!ALLOWED_UPLOAD_MIME_TYPES.has(mimeType)) {
     return { ok: false, error: "File type not allowed" };
   }
 
+  if (!hasMinimumMediaStructure(buffer, mimeType)) {
+    return { ok: false, error: "File appears to be truncated" };
+  }
+
   return { ok: true };
+}
+
+function hasMinimumMediaStructure(buffer: Buffer, mimeType: string): boolean {
+  switch (mimeType) {
+    case "image/png":
+      return (
+        buffer.length >= 24 &&
+        buffer.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")) &&
+        buffer.subarray(12, 16).toString("ascii") === "IHDR"
+      );
+    case "image/gif":
+      return buffer.length >= 10;
+    case "image/webp":
+    case "video/mp4":
+    case "video/webm":
+    case "audio/webm":
+      return buffer.length >= 12;
+    case "audio/ogg":
+      return buffer.length >= 27;
+    case "audio/wav":
+      return buffer.length >= 44;
+    case "audio/mpeg":
+      return buffer.length >= 4;
+    case "image/jpeg":
+      return buffer.length >= 4;
+    default:
+      return false;
+  }
 }

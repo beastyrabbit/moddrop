@@ -9,9 +9,19 @@ import {
   useEditor,
 } from "tldraw";
 import "tldraw/tldraw.css";
-import { buildObsWsUrl, exchangeObsToken } from "@/lib/stream-canvas/api";
+import {
+  buildObsWsUrl,
+  exchangeObsToken,
+  getObsUploadUrlRefreshDelayMs,
+  resolveObsUploadUrl,
+} from "@/lib/stream-canvas/api";
 import { STREAM_ZONE } from "@/lib/stream-canvas/stream-zone";
-import { customShapeUtils, syncShapeUtils } from "./shapes/shared";
+import { AudioUploadCtx } from "./shapes/audio/AudioPlayerShape";
+import {
+  CanvasMediaRefreshContext,
+  customShapeUtils,
+  syncShapeUtils,
+} from "./shapes/shared";
 
 const TLDRAW_LICENSE_KEY = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
@@ -63,6 +73,7 @@ function OBSSetup() {
 export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [roomId, setRoomId] = useState<string | null>(null);
   const initialTokenExchangeRef = useRef<ReturnType<
     typeof exchangeObsToken
   > | null>(null);
@@ -73,8 +84,11 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
     const tokenExchangePromise = exchangeObsToken(obsSecret);
     initialTokenExchangeRef.current = tokenExchangePromise;
     tokenExchangePromise
-      .then(() => {
-        if (!cancelled) setReady(true);
+      .then((data) => {
+        if (!cancelled) {
+          setRoomId(data.roomId);
+          setReady(true);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -103,8 +117,31 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
         throw new Error("OBS mirror is read-only");
       },
       resolve(asset) {
-        return asset.props.src ?? null;
+        if (!asset.props.src) return null;
+        return resolveObsUploadUrl(asset.props.src, obsSecret).catch((error) => {
+          console.error("[obs-mirror] asset URL resolution failed:", error);
+          return null;
+        });
       },
+    }),
+    [obsSecret],
+  );
+
+  const audioUploadCtx = useMemo(
+    () =>
+      roomId
+        ? {
+            roomId,
+            getToken: async () => null,
+            resolveUrl: (src: string, options?: { forceRefresh?: boolean }) =>
+              resolveObsUploadUrl(src, obsSecret, options),
+          }
+        : null,
+    [obsSecret, roomId],
+  );
+  const mediaRefreshCtx = useMemo(
+    () => ({
+      getRefreshDelayMs: (src: string) => getObsUploadUrlRefreshDelayMs(src),
     }),
     [],
   );
@@ -123,7 +160,7 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
     );
   }
 
-  if (!ready || storeWithStatus.status === "loading") {
+  if (!ready || !audioUploadCtx || storeWithStatus.status === "loading") {
     return null; // Transparent — nothing to show while connecting
   }
 
@@ -132,7 +169,11 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
       "[obs-mirror] WebSocket connection error:",
       storeWithStatus.error,
     );
-    return null; // Transparent on error — OBS shouldn't show error text
+    return (
+      <div className="flex h-screen items-center justify-center bg-black/70 px-6 text-center text-red-300 text-sm">
+        OBS connection error. Refresh the source or regenerate the OBS URL.
+      </div>
+    );
   }
 
   return (
@@ -147,15 +188,19 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
         inset: 0,
       }}
     >
-      <Tldraw
-        store={storeWithStatus.store}
-        shapeUtils={customShapeUtils}
-        licenseKey={TLDRAW_LICENSE_KEY}
-        hideUi
-        components={obsComponents}
-      >
-        <OBSSetup />
-      </Tldraw>
+      <CanvasMediaRefreshContext.Provider value={mediaRefreshCtx}>
+        <AudioUploadCtx.Provider value={audioUploadCtx}>
+          <Tldraw
+            store={storeWithStatus.store}
+            shapeUtils={customShapeUtils}
+            licenseKey={TLDRAW_LICENSE_KEY}
+            hideUi
+            components={obsComponents}
+          >
+            <OBSSetup />
+          </Tldraw>
+        </AudioUploadCtx.Provider>
+      </CanvasMediaRefreshContext.Provider>
     </div>
   );
 }

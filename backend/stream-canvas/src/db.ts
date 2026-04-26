@@ -1,7 +1,11 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { config } from "./config.ts";
-import { hashObsSecret, isHashedObsSecret } from "./obs-secret.ts";
+import {
+  hashObsSecret,
+  isHashedObsSecret,
+  OBS_SECRET_PREFIX,
+} from "./obs-secret.ts";
 import * as schema from "./schema.ts";
 
 const sqlite = new Database(config.databasePath);
@@ -27,20 +31,30 @@ sqlite.exec(`
     path TEXT NOT NULL,
     created_at INTEGER
   );
+  CREATE INDEX IF NOT EXISTS rooms_obs_secret_idx ON rooms(obs_secret);
+  CREATE INDEX IF NOT EXISTS uploads_room_id_idx ON uploads(room_id);
 `);
 
 const legacySecrets = sqlite
-  .prepare<[], { id: string; obsSecret: string }>(
-    "SELECT id, obs_secret AS obsSecret FROM rooms",
+  .prepare<[string], { id: string; obsSecret: string }>(
+    "SELECT id, obs_secret AS obsSecret FROM rooms WHERE obs_secret NOT LIKE ?",
   )
-  .all();
+  .all(`${OBS_SECRET_PREFIX}%`);
 const backfillSecret = sqlite.prepare(
   "UPDATE rooms SET obs_secret = ?, updated_at = ? WHERE id = ?",
 );
+const backfillStartedAt = Date.now();
+let backfilledSecrets = 0;
 for (const room of legacySecrets) {
   if (!isHashedObsSecret(room.obsSecret)) {
     backfillSecret.run(hashObsSecret(room.obsSecret), Date.now(), room.id);
+    backfilledSecrets += 1;
   }
+}
+if (backfilledSecrets > 0) {
+  console.log(
+    `[stream-canvas] backfilled ${backfilledSecrets} legacy OBS secrets in ${Date.now() - backfillStartedAt}ms`,
+  );
 }
 
 export const db = drizzle({ client: sqlite, schema });

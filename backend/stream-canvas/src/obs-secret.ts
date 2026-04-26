@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-const OBS_SECRET_PREFIX = "obs_secret_sha256_v1:";
+export const OBS_SECRET_PREFIX = "obs_secret_sha256_v1:";
 const OBS_SECRET_HASH_CONTEXT = "moddrop-stream-canvas-obs-secret-v1";
 
 export function generateObsSecret(): string {

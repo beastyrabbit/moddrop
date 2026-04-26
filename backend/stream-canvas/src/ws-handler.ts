@@ -13,7 +13,7 @@ import {
 } from "./auth.ts";
 import { config } from "./config.ts";
 import { db, sqlite } from "./db.ts";
-import { FixedWindowRateLimit } from "./rate-limit.ts";
+import { FixedWindowRateLimit, rateLimitKeyFromHeaders } from "./rate-limit.ts";
 import { isValidRoomId } from "./room-validation.ts";
 import { rooms } from "./schema.ts";
 import { streamCanvasSchema } from "./tldraw-schema.ts";
@@ -92,7 +92,7 @@ interface AuthResult {
  * are passed as URL query parameters:
  *   ws://host/ws?roomId=XXX&token=SHORT_LIVED_CANVAS_OR_OBS_TOKEN
  */
-async function authenticateUpgrade(
+export async function authenticateWebSocketUpgrade(
   req: IncomingMessage,
 ): Promise<AuthResult | null> {
   // Validate Origin header
@@ -102,7 +102,7 @@ async function authenticateUpgrade(
     return null;
   }
 
-  const url = new URL(req.url ?? "", `http://${req.headers.host}`);
+  const url = new URL(req.url ?? "", "http://stream-canvas.local");
   const roomId = url.searchParams.get("roomId");
   const token = url.searchParams.get("token");
   if (!roomId || !token) return null;
@@ -159,7 +159,7 @@ export async function handleWebSocketUpgrade(
     return;
   }
 
-  const auth = await authenticateUpgrade(req);
+  const auth = await authenticateWebSocketUpgrade(req);
   if (!auth) {
     wsFailureLimiter.consume(failureKey);
     ws.close(4001, "Unauthorized");
@@ -191,16 +191,14 @@ export async function handleWebSocketUpgrade(
 }
 
 function clientKey(req: IncomingMessage): string {
-  const forwardedFor = req.headers["x-forwarded-for"];
-  const firstForwarded = Array.isArray(forwardedFor)
-    ? forwardedFor[0]
-    : forwardedFor?.split(",")[0]?.trim();
-  const realIp = req.headers["x-real-ip"];
-  const cfConnectingIp = req.headers["cf-connecting-ip"];
-  const headerIp = Array.isArray(cfConnectingIp)
-    ? cfConnectingIp[0]
-    : (cfConnectingIp ??
-      (Array.isArray(realIp) ? realIp[0] : realIp) ??
-      firstForwarded);
-  return headerIp ?? req.socket.remoteAddress ?? "unknown";
+  return rateLimitKeyFromHeaders(
+    {
+      get: (name) => {
+        const value = req.headers[name.toLowerCase()];
+        return Array.isArray(value) ? value[0] : value;
+      },
+    },
+    req.socket.remoteAddress,
+    config.trustProxyHeaders,
+  );
 }

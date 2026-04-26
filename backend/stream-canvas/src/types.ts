@@ -28,3 +28,12 @@ export interface CanvasWsTokenClaims {
   exp: number;
   iat: number;
 }
+
+/** Decoded claims from a short-lived uploaded media access token. */
+export interface UploadAccessTokenClaims {
+  roomId: string;
+  uploadId: string;
+  scope: "stream-canvas-upload";
+  exp: number;
+  iat: number;
+}

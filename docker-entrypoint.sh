@@ -11,7 +11,10 @@ const replacements = [
   ["https://placeholder.convex.cloud", process.env.NEXT_PUBLIC_CONVEX_URL],
   ["https://placeholder.convex.site", process.env.NEXT_PUBLIC_CONVEX_SITE_URL],
   ["pk_placeholder_CLERK_KEY", process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY],
-  ["http://placeholder.canvas.local", process.env.NEXT_PUBLIC_CANVAS_API_URL],
+  [
+    "__NEXT_PUBLIC_CANVAS_API_URL__",
+    process.env.NEXT_PUBLIC_CANVAS_API_URL || "/canvas-api",
+  ],
   ["tldraw-placeholder-key", process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY],
 ];
 

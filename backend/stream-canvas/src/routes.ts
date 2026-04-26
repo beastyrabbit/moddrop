@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { v4 as uuidv4 } from "uuid";
@@ -10,7 +12,9 @@ import {
   isOriginAllowed,
   mintCanvasWsToken,
   mintObsToken,
+  mintUploadAccessToken,
   verifyClerkJwt,
+  verifyUploadAccessToken,
 } from "./auth.ts";
 import { config } from "./config.ts";
 import { db } from "./db.ts";
@@ -49,6 +53,10 @@ const obsTokenLimiter = new FixedWindowRateLimit({
   windowMs: 60_000,
   max: 20,
 });
+const uploadAccessLimiter = new FixedWindowRateLimit({
+  windowMs: 60_000,
+  max: 240,
+});
 const wsTokenLimiter = new FixedWindowRateLimit({
   windowMs: 60_000,
   max: 60,
@@ -57,6 +65,7 @@ const uploadLimiter = new FixedWindowRateLimit({
   windowMs: 10 * 60_000,
   max: 30,
 });
+let activeUploadParsers = 0;
 
 const authed = new Hono<AuthEnv>();
 authed.use("*", async (c, next) => {
@@ -75,16 +84,18 @@ authed.use("*", async (c, next) => {
   const bearer = extractBearer(c.req.header("Authorization"));
   if (!bearer) return c.json({ error: "Missing authorization" }, 401);
 
+  let claims: ClerkClaims;
   try {
-    const claims = await verifyClerkJwt(bearer, { origin });
-    c.set("clerkUser", claims);
-    authFailureLimiter.reset(authKey);
-    await next();
+    claims = await verifyClerkJwt(bearer, { origin });
   } catch (err) {
     authFailureLimiter.consume(authKey);
-    console.error("[auth] JWT verification failed:", err);
+    console.warn("[auth] JWT verification failed:", summarizeError(err));
     return c.json({ error: "Invalid token" }, 401);
   }
+
+  c.set("clerkUser", claims);
+  authFailureLimiter.reset(authKey);
+  return next();
 });
 
 // ---------------------------------------------------------------------------
@@ -105,6 +116,16 @@ api.get("/uploads/:uploadId/:filename", async (c) => {
     return c.json({ error: "Not found" }, 404);
   }
 
+  const token = c.req.query("token");
+  const tokenClaims = token ? verifyUploadAccessToken(token) : null;
+  if (
+    !tokenClaims ||
+    tokenClaims.uploadId !== upload.id ||
+    tokenClaims.roomId !== upload.roomId
+  ) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
   const fileStats = await stat(upload.path);
   const fileSize = fileStats.size;
   const range = parseSingleByteRange(c.req.header("range"), fileSize);
@@ -113,7 +134,10 @@ api.get("/uploads/:uploadId/:filename", async (c) => {
   c.header("Accept-Ranges", "bytes");
   c.header("Content-Type", contentType);
   c.header("X-Content-Type-Options", "nosniff");
-  c.header("Cache-Control", "public, max-age=31536000, immutable");
+  c.header(
+    "Cache-Control",
+    `private, max-age=${uploadCacheMaxAgeSeconds()}, must-revalidate`,
+  );
 
   if (range.kind === "invalid") {
     c.header("Content-Range", `bytes */${fileSize}`);
@@ -144,17 +168,16 @@ api.get("/uploads/:uploadId/:filename", async (c) => {
  * long-lived obsSecret (from the OBS URL) for a short-lived WS token.
  */
 api.post("/obs/token", async (c) => {
-  if (isBodyTooLarge(c, 2048)) {
-    return c.json({ error: "Request body too large" }, 413);
-  }
-
   const limit = obsTokenLimiter.consume(`obs:${clientKey(c)}`);
   if (!limit.allowed) {
     c.header("Retry-After", String(limit.retryAfterSeconds));
     return c.json({ error: "Too many token exchange attempts" }, 429);
   }
 
-  const body = await c.req.json<{ secret?: unknown }>().catch(() => null);
+  const bodyResult = await readRequestBody(c, 2048);
+  if (!bodyResult.ok) return bodyResult.response;
+
+  const body = parseJsonBody<{ secret?: unknown }>(bodyResult.bytes);
   if (!body || typeof body.secret !== "string") {
     return c.json({ error: "Missing secret" }, 400);
   }
@@ -163,7 +186,10 @@ api.post("/obs/token", async (c) => {
   }
 
   const room = await findRoomByObsSecret(body.secret);
-  if (!room) return c.json({ error: "Invalid secret" }, 401);
+  if (!room) {
+    logSecurityEvent(c, "obs_token_invalid_secret");
+    return c.json({ error: "Invalid secret" }, 401);
+  }
 
   const token = mintObsToken(room.id);
   return c.json({
@@ -171,6 +197,47 @@ api.post("/obs/token", async (c) => {
     roomId: room.id,
     twitchChannel: room.twitchChannel,
     expiresIn: config.obsTokenTtlSeconds,
+  });
+});
+
+api.post("/obs/uploads/:uploadId/access-url", async (c) => {
+  const limit = uploadAccessLimiter.consume(`obs-upload:${clientKey(c)}`);
+  if (!limit.allowed) {
+    c.header("Retry-After", String(limit.retryAfterSeconds));
+    return c.json({ error: "Too many upload token attempts" }, 429);
+  }
+
+  const uploadId = c.req.param("uploadId");
+  if (!isValidRoomId(uploadId)) return c.json({ error: "Not found" }, 404);
+
+  const bodyResult = await readRequestBody(c, 2048);
+  if (!bodyResult.ok) return bodyResult.response;
+
+  const body = parseJsonBody<{ secret?: unknown }>(bodyResult.bytes);
+  if (!body || typeof body.secret !== "string") {
+    return c.json({ error: "Missing secret" }, 400);
+  }
+  if (body.secret.length === 0 || body.secret.length > 256) {
+    return c.json({ error: "Invalid secret" }, 400);
+  }
+
+  const room = await findRoomByObsSecret(body.secret);
+  if (!room) {
+    logSecurityEvent(c, "obs_upload_invalid_secret", { uploadId });
+    return c.json({ error: "Invalid secret" }, 401);
+  }
+
+  const upload = await db.query.uploads.findFirst({
+    where: eq(uploads.id, uploadId),
+  });
+  if (!upload || upload.roomId !== room.id) {
+    logSecurityEvent(c, "obs_upload_room_mismatch", { uploadId });
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  return c.json({
+    url: buildUploadAccessUrl(upload),
+    expiresIn: config.uploadTokenTtlSeconds,
   });
 });
 
@@ -235,11 +302,10 @@ authed.patch("/rooms/:id", async (c) => {
   const room = await findOwnedRoom(c);
   if (!room) return c.json({ error: "Not found" }, 404);
 
-  if (isBodyTooLarge(c, MAX_ROOM_CONFIG_BODY_BYTES)) {
-    return c.json({ error: "Request body too large" }, 413);
-  }
+  const bodyResult = await readRequestBody(c, MAX_ROOM_CONFIG_BODY_BYTES);
+  if (!bodyResult.ok) return bodyResult.response;
 
-  const body = await c.req.json().catch(() => null);
+  const body = parseJsonBody(bodyResult.bytes);
   const validation = validateRoomConfigUpdate(body, room.ownerClerkId);
   if (!validation.ok) {
     return c.json({ error: validation.error }, 400);
@@ -287,6 +353,26 @@ authed.post("/rooms/:id/ws-token", async (c) => {
   });
 });
 
+authed.get("/rooms/:id/uploads/:uploadId/access-url", async (c) => {
+  const room = await findAccessibleRoom(c);
+  if (!room) return c.json({ error: "Not found" }, 404);
+
+  const uploadId = c.req.param("uploadId");
+  if (!isValidRoomId(uploadId)) return c.json({ error: "Not found" }, 404);
+
+  const upload = await db.query.uploads.findFirst({
+    where: eq(uploads.id, uploadId),
+  });
+  if (!upload || upload.roomId !== room.id) {
+    return c.json({ error: "Not found" }, 404);
+  }
+
+  return c.json({
+    url: buildUploadAccessUrl(upload),
+    expiresIn: config.uploadTokenTtlSeconds,
+  });
+});
+
 // Regenerate OBS secret
 authed.post("/rooms/:id/regenerate-secret", async (c) => {
   const room = await findOwnedRoom(c);
@@ -315,10 +401,6 @@ authed.get("/rooms/:id/obs-secret", async (c) => {
 // Upload a file
 authed.post("/rooms/:id/upload", async (c) => {
   const user = c.get("clerkUser");
-  if (isBodyTooLarge(c, config.maxUploadBodyBytes)) {
-    return c.json({ error: "File too large (max 10 MB)" }, 413);
-  }
-
   const roomId = c.req.param("id");
   if (!isValidRoomId(roomId)) {
     return c.json({ error: "Not found" }, 404);
@@ -341,51 +423,61 @@ authed.post("/rooms/:id/upload", async (c) => {
     return c.json({ error: "Too many uploads" }, 429);
   }
 
-  const formData = await c.req.formData();
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return c.json({ error: "No file provided" }, 400);
-  }
+  return withUploadSlot(c, async () => {
+    const bodyResult = await readRequestBody(
+      c,
+      config.maxUploadBodyBytes,
+      "File too large (max 10 MB)",
+    );
+    if (!bodyResult.ok) return bodyResult.response;
 
-  if (file.size > config.maxUploadFileBytes) {
-    return c.json({ error: "File too large (max 10 MB)" }, 413);
-  }
+    const file = parseMultipartUpload(c, bodyResult.bytes);
+    if (!file) {
+      return c.json({ error: "Invalid multipart body" }, 400);
+    }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  if (buffer.byteLength > config.maxUploadFileBytes) {
-    return c.json({ error: "File too large (max 10 MB)" }, 413);
-  }
+    if (file.bytes.byteLength > config.maxUploadFileBytes) {
+      return c.json({ error: "File too large (max 10 MB)" }, 413);
+    }
 
-  const sniffedMimeType = sniffUploadMime(buffer);
-  if (!sniffedMimeType) {
-    return c.json({ error: "File type not allowed" }, 415);
-  }
+    const sniffedMimeType = sniffUploadMime(file.bytes, file.type);
+    if (!sniffedMimeType) {
+      return c.json({ error: "File type not allowed" }, 415);
+    }
 
-  const mediaValidation = validateUploadedMedia(buffer, sniffedMimeType);
-  if (!mediaValidation.ok) {
-    return c.json({ error: mediaValidation.error }, 415);
-  }
+    const mediaValidation = validateUploadedMedia(file.bytes, sniffedMimeType);
+    if (!mediaValidation.ok) {
+      return c.json({ error: mediaValidation.error }, 415);
+    }
 
-  const uploadId = uuidv4();
-  const roomDir = join(config.uploadsDir, room.id);
-  await mkdir(roomDir, { recursive: true });
-  const safeName = sanitizeUploadFilename(file.name);
-  const filePath = join(roomDir, `${uploadId}-${safeName}`);
+    const uploadId = uuidv4();
+    const roomDir = join(config.uploadsDir, room.id);
+    await mkdir(roomDir, { recursive: true });
+    const safeName = sanitizeUploadFilename(file.name);
+    const filePath = join(roomDir, `${uploadId}-${safeName}`);
 
-  await writeFile(filePath, buffer);
+    await writeFile(filePath, file.bytes);
 
-  await db.insert(uploads).values({
-    id: uploadId,
-    roomId: room.id,
-    filename: safeName,
-    mimeType: sniffedMimeType,
-    size: buffer.byteLength,
-    path: filePath,
-    createdAt: new Date(),
+    try {
+      await db.insert(uploads).values({
+        id: uploadId,
+        roomId: room.id,
+        filename: safeName,
+        mimeType: sniffedMimeType,
+        size: file.bytes.byteLength,
+        path: filePath,
+        createdAt: new Date(),
+      });
+    } catch (err) {
+      await rm(filePath, { force: true }).catch((cleanupErr) => {
+        console.error("[upload] failed to clean up orphaned file:", cleanupErr);
+      });
+      throw err;
+    }
+
+    const url = `/uploads/${uploadId}/${encodeURIComponent(safeName)}`;
+    return c.json({ id: uploadId, url, filename: safeName }, 201);
   });
-
-  const url = `/uploads/${uploadId}/${encodeURIComponent(safeName)}`;
-  return c.json({ id: uploadId, url, filename: safeName }, 201);
 });
 
 api.route("/api", authed);
@@ -472,15 +564,220 @@ function sanitizeAccessibleRoom(room: RoomRecord, clerkUserId: string) {
   };
 }
 
-function isBodyTooLarge(c: Context, maxBytes: number): boolean {
+function buildUploadAccessUrl(upload: UploadRecord): string {
+  const token = mintUploadAccessToken(upload.roomId, upload.id);
+  const filename = encodeURIComponent(upload.filename);
+  return `/uploads/${upload.id}/${filename}?token=${encodeURIComponent(token)}`;
+}
+
+function uploadCacheMaxAgeSeconds(): number {
+  return Math.max(0, config.uploadTokenTtlSeconds - 30);
+}
+
+async function withUploadSlot(
+  c: Context,
+  handler: () => Promise<Response>,
+): Promise<Response> {
+  if (activeUploadParsers >= config.maxConcurrentUploads) {
+    c.header("Retry-After", "10");
+    return c.json({ error: "Too many concurrent uploads" }, 503);
+  }
+
+  activeUploadParsers += 1;
+  try {
+    return await handler();
+  } finally {
+    activeUploadParsers -= 1;
+  }
+}
+
+function logSecurityEvent(
+  c: Context,
+  event: string,
+  fields: Record<string, string | undefined> = {},
+): void {
+  const clientHash = createHash("sha256").update(clientKey(c)).digest("base64url");
+  console.warn("[security]", {
+    event,
+    client: clientHash.slice(0, 16),
+    ...fields,
+  });
+}
+
+function summarizeError(error: unknown): Record<string, string | undefined> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return { message: String(error) };
+}
+
+type BodyReadResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; response: Response };
+
+async function readRequestBody(
+  c: Context,
+  maxBytes: number,
+  tooLargeMessage = "Request body too large",
+): Promise<BodyReadResult> {
+  const declaredLengthError = validateDeclaredContentLength(
+    c,
+    maxBytes,
+    tooLargeMessage,
+  );
+  if (declaredLengthError) return { ok: false, response: declaredLengthError };
+
+  const stream = c.req.raw.body;
+  if (!stream) return { ok: true, bytes: new Uint8Array() };
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return {
+        ok: false,
+        response: c.json({ error: tooLargeMessage }, 413),
+      };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return { ok: true, bytes };
+}
+
+function validateDeclaredContentLength(
+  c: Context,
+  maxBytes: number,
+  tooLargeMessage: string,
+): Response | null {
   const contentLength = c.req.header("content-length");
-  if (!contentLength) return false;
+  if (!contentLength) return null;
+
   const parsed = Number(contentLength);
-  return Number.isFinite(parsed) && parsed > maxBytes;
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return c.json({ error: "Invalid Content-Length" }, 400);
+  }
+  if (parsed > maxBytes) {
+    return c.json({ error: tooLargeMessage }, 413);
+  }
+  return null;
+}
+
+function parseJsonBody<T = unknown>(bytes: Uint8Array): T | null {
+  try {
+    const text = new TextDecoder().decode(bytes);
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+interface UploadedFilePart {
+  name: string;
+  type: string;
+  bytes: Buffer;
+}
+
+function parseMultipartUpload(c: Context, bytes: Uint8Array): UploadedFilePart | null {
+  const contentType = c.req.header("content-type");
+  const boundary = parseMultipartBoundary(contentType);
+  if (!boundary) return null;
+
+  const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const delimiter = Buffer.from(`--${boundary}`);
+  const firstDelimiter = buffer.indexOf(delimiter);
+  if (firstDelimiter === -1) return null;
+
+  let partStart = firstDelimiter + delimiter.length;
+  if (buffer.subarray(partStart, partStart + 2).equals(Buffer.from("--"))) {
+    return null;
+  }
+  if (buffer.subarray(partStart, partStart + 2).equals(Buffer.from("\r\n"))) {
+    partStart += 2;
+  }
+
+  const headerEnd = buffer.indexOf(Buffer.from("\r\n\r\n"), partStart);
+  if (headerEnd === -1 || headerEnd - partStart > 8192) return null;
+
+  const headers = parseMultipartHeaders(
+    buffer.subarray(partStart, headerEnd).toString("utf8"),
+  );
+  const disposition = headers.get("content-disposition");
+  if (!disposition?.startsWith("form-data")) return null;
+  if (parseDispositionValue(disposition, "name") !== "file") return null;
+
+  const filename = parseDispositionValue(disposition, "filename");
+  if (!filename) return null;
+
+  const dataStart = headerEnd + 4;
+  const nextBoundary = buffer.indexOf(Buffer.from(`\r\n--${boundary}`), dataStart);
+  if (nextBoundary === -1) return null;
+
+  return {
+    name: filename,
+    type: headers.get("content-type") ?? "",
+    bytes: buffer.subarray(dataStart, nextBoundary),
+  };
+}
+
+function parseMultipartBoundary(contentType: string | undefined): string | null {
+  const match = contentType?.match(/(?:^|;)\s*boundary=(?:"([^"]+)"|([^;]+))/i);
+  const boundary = (match?.[1] ?? match?.[2])?.trim();
+  if (!boundary || boundary.length > 200) return null;
+  return boundary;
+}
+
+function parseMultipartHeaders(rawHeaders: string): Map<string, string> {
+  const headers = new Map<string, string>();
+  for (const line of rawHeaders.split("\r\n")) {
+    const separator = line.indexOf(":");
+    if (separator === -1) continue;
+    headers.set(
+      line.slice(0, separator).trim().toLowerCase(),
+      line.slice(separator + 1).trim(),
+    );
+  }
+  return headers;
+}
+
+function parseDispositionValue(disposition: string, name: string): string | null {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = disposition.match(
+    new RegExp(`(?:^|;)\\s*${escapedName}="([^"]*)"`, "i"),
+  );
+  return match?.[1] ?? null;
 }
 
 function clientKey(c: Context): string {
-  return rateLimitKeyFromHeaders({ get: (name) => c.req.header(name) });
+  let remoteAddress: string | undefined;
+  try {
+    remoteAddress = getConnInfo(c).remote.address;
+  } catch {
+    remoteAddress = undefined;
+  }
+
+  return rateLimitKeyFromHeaders(
+    { get: (name) => c.req.header(name) },
+    remoteAddress,
+    config.trustProxyHeaders,
+  );
 }
 
 interface RoomRecord {
@@ -491,4 +788,10 @@ interface RoomRecord {
   allowedUsers: string[] | null;
   createdAt: Date | null;
   updatedAt: Date | null;
+}
+
+interface UploadRecord {
+  id: string;
+  roomId: string;
+  filename: string;
 }

@@ -28,7 +28,13 @@ const wss = new WebSocketServer({
 });
 
 server.on("upgrade", (req, socket, head) => {
-  const url = new URL(req.url ?? "", `http://${req.headers.host}`);
+  let url: URL;
+  try {
+    url = new URL(req.url ?? "", "http://stream-canvas.local");
+  } catch {
+    socket.destroy();
+    return;
+  }
 
   // Only upgrade requests to /ws
   if (url.pathname !== "/ws") {
@@ -37,7 +43,10 @@ server.on("upgrade", (req, socket, head) => {
   }
 
   wss.handleUpgrade(req, socket, head, (ws) => {
-    handleWebSocketUpgrade(ws, req);
+    handleWebSocketUpgrade(ws, req).catch((err) => {
+      console.error("[ws] upgrade handler failed:", err);
+      ws.close(1011, "Internal error");
+    });
   });
 });
 

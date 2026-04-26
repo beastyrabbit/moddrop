@@ -1,6 +1,9 @@
+import { isIP } from "node:net";
+
 interface RateLimitOptions {
   windowMs: number;
   max: number;
+  maxEntries?: number;
 }
 
 interface RateLimitEntry {
@@ -15,10 +18,10 @@ export interface RateLimitResult {
 
 export class FixedWindowRateLimit {
   private readonly entries = new Map<string, RateLimitEntry>();
-  private readonly options: RateLimitOptions;
+  private readonly options: Required<RateLimitOptions>;
 
   constructor(options: RateLimitOptions) {
-    this.options = options;
+    this.options = { maxEntries: 10_000, ...options };
   }
 
   isBlocked(key: string, now = Date.now()): RateLimitResult {
@@ -54,23 +57,56 @@ export class FixedWindowRateLimit {
   }
 
   private cleanup(now: number): void {
-    if (this.entries.size < 1000) return;
+    if (this.entries.size < 1000 && this.entries.size <= this.options.maxEntries) {
+      return;
+    }
+
     for (const [key, entry] of this.entries) {
       if (entry.resetAt <= now) {
         this.entries.delete(key);
       }
+    }
+
+    while (this.entries.size > this.options.maxEntries) {
+      const oldestKey = this.entries.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.entries.delete(oldestKey);
     }
   }
 }
 
 export function rateLimitKeyFromHeaders(headers: {
   get(name: string): string | undefined;
-}): string {
-  const forwardedFor = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+}): string;
+export function rateLimitKeyFromHeaders(
+  headers: { get(name: string): string | undefined },
+  remoteAddress: string | undefined,
+  trustProxyHeaders: boolean,
+): string;
+export function rateLimitKeyFromHeaders(
+  headers: { get(name: string): string | undefined },
+  remoteAddress?: string,
+  trustProxyHeaders = false,
+): string {
+  const remoteKey = normalizeClientAddress(remoteAddress);
+  if (!trustProxyHeaders) {
+    return remoteKey;
+  }
+
   return (
-    headers.get("cf-connecting-ip") ??
-    headers.get("x-real-ip") ??
-    forwardedFor ??
-    "unknown"
+    normalizeIp(headers.get("cf-connecting-ip")) ??
+    normalizeIp(headers.get("x-real-ip")) ??
+    normalizeIp(headers.get("x-forwarded-for")?.split(",")[0]) ??
+    remoteKey
   );
+}
+
+function normalizeClientAddress(address: string | undefined): string {
+  return normalizeIp(address) ?? "unknown-remote";
+}
+
+function normalizeIp(address: string | undefined): string | undefined {
+  const trimmed = address?.trim();
+  if (!trimmed) return undefined;
+  return isIP(trimmed) ? trimmed : undefined;
 }

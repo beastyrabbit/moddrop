@@ -16,6 +16,8 @@ import { createRoom, getAccessibleRooms } from "@/lib/stream-canvas/api";
 import type { AccessibleRoom } from "@/lib/stream-canvas/types";
 import { cn } from "@/lib/utils";
 
+const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
+
 export function StreamCanvasHome() {
   const clerk = useClerk();
   const { getToken, isLoaded, isSignedIn } = useAuth();
@@ -44,7 +46,19 @@ export function StreamCanvasHome() {
   const handleCreate = async () => {
     setCreating(true);
     try {
-      await createRoom(getToken);
+      const created = await createRoom(getToken);
+      if (created.obsSetupSecret) {
+        try {
+          window.sessionStorage.setItem(
+            `${PENDING_OBS_SECRET_PREFIX}${created.id}`,
+            created.obsSetupSecret,
+          );
+        } catch {
+          setError(
+            "Room created, but the one-time OBS secret could not be kept in this browser session.",
+          );
+        }
+      }
       const updated = await getAccessibleRooms(getToken);
       setRooms(updated);
     } catch (err) {

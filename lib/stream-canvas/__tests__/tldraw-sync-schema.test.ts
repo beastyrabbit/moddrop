@@ -60,6 +60,11 @@ function makeAudioShape() {
 }
 
 describe("stream canvas tldraw sync schema", () => {
+  it("registers each shape type once", () => {
+    const shapeTypes = syncShapeUtils.map((ShapeUtil) => ShapeUtil.type);
+    expect(new Set(shapeTypes).size).toBe(shapeTypes.length);
+  });
+
   it("accepts youtube embed shapes when custom shape utils are registered", () => {
     const store = createTLStore({
       shapeUtils: syncShapeUtils,
