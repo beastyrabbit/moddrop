@@ -4,7 +4,7 @@ import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { getConnInfo } from "@hono/node-server/conninfo";
-import { eq } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -94,7 +94,6 @@ authed.use("*", async (c, next) => {
   }
 
   c.set("clerkUser", claims);
-  authFailureLimiter.reset(authKey);
   return next();
 });
 
@@ -288,11 +287,19 @@ authed.get("/rooms/me", async (c) => {
 authed.get("/rooms/accessible", async (c) => {
   const user = c.get("clerkUser");
 
-  const allRooms = await db.select().from(rooms);
-  const accessible = allRooms.filter((r) => {
-    if (r.ownerClerkId === user.sub) return true;
-    return r.allowedUsers?.includes(user.sub) ?? false;
-  });
+  const accessible = await db
+    .select()
+    .from(rooms)
+    .where(
+      or(
+        eq(rooms.ownerClerkId, user.sub),
+        sql`EXISTS (
+          SELECT 1
+          FROM json_each(${rooms.allowedUsers})
+          WHERE json_each.value = ${user.sub}
+        )`,
+      ),
+    );
 
   return c.json(accessible.map((r) => sanitizeAccessibleRoom(r, user.sub)));
 });
@@ -401,21 +408,8 @@ authed.get("/rooms/:id/obs-secret", async (c) => {
 // Upload a file
 authed.post("/rooms/:id/upload", async (c) => {
   const user = c.get("clerkUser");
-  const roomId = c.req.param("id");
-  if (!isValidRoomId(roomId)) {
-    return c.json({ error: "Not found" }, 404);
-  }
-
-  const room = await db.query.rooms.findFirst({
-    where: eq(rooms.id, roomId),
-  });
+  const room = await findAccessibleRoom(c);
   if (!room) return c.json({ error: "Not found" }, 404);
-
-  const isOwner = room.ownerClerkId === user.sub;
-  const isAllowed = room.allowedUsers?.includes(user.sub) ?? false;
-  if (!isOwner && !isAllowed) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
 
   const limit = uploadLimiter.consume(`upload:${user.sub}:${room.id}`);
   if (!limit.allowed) {
@@ -440,7 +434,7 @@ authed.post("/rooms/:id/upload", async (c) => {
       return c.json({ error: "File too large (max 10 MB)" }, 413);
     }
 
-    const sniffedMimeType = sniffUploadMime(file.bytes, file.type);
+    const sniffedMimeType = sniffUploadMime(file.bytes);
     if (!sniffedMimeType) {
       return c.json({ error: "File type not allowed" }, 415);
     }
@@ -691,7 +685,6 @@ function parseJsonBody<T = unknown>(bytes: Uint8Array): T | null {
 
 interface UploadedFilePart {
   name: string;
-  type: string;
   bytes: Buffer;
 }
 
@@ -732,7 +725,6 @@ function parseMultipartUpload(c: Context, bytes: Uint8Array): UploadedFilePart |
 
   return {
     name: filename,
-    type: headers.get("content-type") ?? "",
     bytes: buffer.subarray(dataStart, nextBoundary),
   };
 }

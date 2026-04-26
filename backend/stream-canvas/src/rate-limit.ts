@@ -25,8 +25,15 @@ export class FixedWindowRateLimit {
   }
 
   isBlocked(key: string, now = Date.now()): RateLimitResult {
+    if (this.entries.size > this.options.maxEntries) {
+      this.cleanup(now);
+    }
+
     const entry = this.entries.get(key);
     if (!entry || entry.resetAt <= now) {
+      if (entry) {
+        this.entries.delete(key);
+      }
       return { allowed: true, retryAfterSeconds: 0 };
     }
     return {
@@ -45,15 +52,14 @@ export class FixedWindowRateLimit {
 
     entry.count += 1;
     this.entries.set(key, entry);
+    if (this.entries.size > this.options.maxEntries) {
+      this.cleanup(now);
+    }
 
     return {
       allowed: entry.count <= this.options.max,
       retryAfterSeconds: Math.ceil((entry.resetAt - now) / 1000),
     };
-  }
-
-  reset(key: string): void {
-    this.entries.delete(key);
   }
 
   private cleanup(now: number): void {

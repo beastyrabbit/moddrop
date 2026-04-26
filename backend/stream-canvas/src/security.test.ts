@@ -139,10 +139,8 @@ test("upload validation sniffs signatures and sanitizes filenames", () => {
     "image/webp",
   );
   assert.equal(sniffUploadMime(Buffer.from("not really an image")), null);
-  assert.equal(
-    sniffUploadMime(Buffer.from("1a45dfa300000000", "hex"), "audio/webm"),
-    "audio/webm",
-  );
+  assert.equal(sniffUploadMime(webmWithTrackType(1)), "video/webm");
+  assert.equal(sniffUploadMime(webmWithTrackType(2)), "audio/webm");
   assert.deepEqual(validateUploadedMedia(png, "image/png"), {
     ok: true,
   });
@@ -165,6 +163,13 @@ test("upload validation sniffs signatures and sanitizes filenames", () => {
     "bad_name_script.png",
   );
 });
+
+function webmWithTrackType(trackType: 1 | 2): Buffer {
+  return Buffer.from([
+    0x1a, 0x45, 0xdf, 0xa3, 0x18, 0x53, 0x80, 0x67, 0x16, 0x54, 0xae, 0x6b,
+    0xae, 0x84, 0xd7, 0x81, 0x01, 0x83, 0x81, trackType,
+  ]);
+}
 
 test("fixed-window rate limiter blocks after the configured allowance", () => {
   const limiter = new FixedWindowRateLimit({ windowMs: 1000, max: 2 });

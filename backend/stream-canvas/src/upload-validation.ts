@@ -15,10 +15,7 @@ export const ALLOWED_UPLOAD_MIME_TYPES = new Set([
 
 const FALLBACK_FILENAME = "upload";
 
-export function sniffUploadMime(
-  buffer: Buffer,
-  declaredMimeType?: string,
-): string | null {
+export function sniffUploadMime(buffer: Buffer): string | null {
   if (buffer.length < 4) return null;
 
   if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
@@ -50,8 +47,7 @@ export function sniffUploadMime(
   }
 
   if (buffer.subarray(0, 4).equals(Buffer.from("1a45dfa3", "hex"))) {
-    if (declaredMimeType === "audio/webm") return "audio/webm";
-    return "video/webm";
+    return sniffWebMMime(buffer);
   }
 
   if (buffer.subarray(0, 4).toString("ascii") === "OggS") {
@@ -76,6 +72,59 @@ export function sniffUploadMime(
   }
 
   return null;
+}
+
+function sniffWebMMime(buffer: Buffer): "video/webm" | "audio/webm" {
+  let sawAudioTrack = false;
+  const scanLimit = Math.min(buffer.length - 2, 64 * 1024);
+
+  for (let offset = 4; offset < scanLimit; offset += 1) {
+    if (buffer[offset] !== 0x83) continue;
+
+    const size = readEbmlVint(buffer, offset + 1, true);
+    if (!size || size.value < 1 || size.value > 8) continue;
+
+    const valueOffset = offset + 1 + size.length;
+    const valueEnd = valueOffset + size.value;
+    if (valueEnd > buffer.length) continue;
+
+    const trackType = readUnsignedInt(buffer.subarray(valueOffset, valueEnd));
+    if (trackType === 1) return "video/webm";
+    if (trackType === 2) sawAudioTrack = true;
+  }
+
+  return sawAudioTrack ? "audio/webm" : "video/webm";
+}
+
+function readEbmlVint(
+  buffer: Buffer,
+  offset: number,
+  maskMarkerBit: boolean,
+): { value: number; length: number } | null {
+  const firstByte = buffer[offset];
+  if (firstByte === undefined || firstByte === 0) return null;
+
+  let marker = 0x80;
+  let length = 1;
+  while (length <= 8 && (firstByte & marker) === 0) {
+    marker >>= 1;
+    length += 1;
+  }
+  if (length > 8 || offset + length > buffer.length) return null;
+
+  let value = maskMarkerBit ? firstByte & (marker - 1) : firstByte;
+  for (let index = 1; index < length; index += 1) {
+    value = value * 256 + (buffer[offset + index] ?? 0);
+  }
+  return { value, length };
+}
+
+function readUnsignedInt(buffer: Buffer): number {
+  let value = 0;
+  for (const byte of buffer) {
+    value = value * 256 + byte;
+  }
+  return value;
 }
 
 export function sanitizeUploadFilename(filename: string): string {
