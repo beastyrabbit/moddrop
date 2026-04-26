@@ -31,6 +31,7 @@ import "tldraw/tldraw.css";
 import {
   buildEditorWsUrl,
   CANVAS_API,
+  getEditorWsToken,
   uploadFile,
 } from "@/lib/stream-canvas/api";
 import {
@@ -632,15 +633,8 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
   const [settingsShapeId, setSettingsShapeId] = useState<string | null>(null);
 
   const getUri = useCallback(async () => {
-    const tokenGetter = getToken as typeof getToken & ((
-      options?: { skipCache?: boolean },
-    ) => Promise<string | null>);
-    let token = await tokenGetter();
-    if (!token) {
-      token = await tokenGetter({ skipCache: true });
-    }
-    if (!token) throw new Error("Not authenticated");
-    return buildEditorWsUrl(roomId, token);
+    const data = await getEditorWsToken(roomId, getToken);
+    return buildEditorWsUrl(data.roomId, data.token);
   }, [roomId, getToken]);
 
   const assets = useMemo<TLAssetStore>(

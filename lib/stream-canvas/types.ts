@@ -6,9 +6,15 @@ export interface CanvasRoom {
   allowedUsers: string[];
   createdAt: string | null;
   updatedAt: string | null;
+  obsSetupSecret?: string;
 }
 
 /** Room with ownership info, returned by the accessible rooms endpoint. */
-export interface AccessibleRoom extends CanvasRoom {
+export interface AccessibleRoom {
+  id: string;
+  twitchChannel: string | null;
+  collaboratorCount: number;
   isOwner: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
 }

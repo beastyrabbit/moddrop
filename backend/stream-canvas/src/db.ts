@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { config } from "./config.ts";
+import { hashObsSecret, isHashedObsSecret } from "./obs-secret.ts";
 import * as schema from "./schema.ts";
 
 const sqlite = new Database(config.databasePath);
@@ -27,6 +28,20 @@ sqlite.exec(`
     created_at INTEGER
   );
 `);
+
+const legacySecrets = sqlite
+  .prepare<[], { id: string; obsSecret: string }>(
+    "SELECT id, obs_secret AS obsSecret FROM rooms",
+  )
+  .all();
+const backfillSecret = sqlite.prepare(
+  "UPDATE rooms SET obs_secret = ?, updated_at = ? WHERE id = ?",
+);
+for (const room of legacySecrets) {
+  if (!isHashedObsSecret(room.obsSecret)) {
+    backfillSecret.run(hashObsSecret(room.obsSecret), Date.now(), room.id);
+  }
+}
 
 export const db = drizzle({ client: sqlite, schema });
 

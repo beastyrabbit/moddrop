@@ -8,7 +8,6 @@ import { PageHero } from "@/components/common/PageHero";
 import { UserMultiSelect } from "@/components/stream-canvas/UserMultiSelect";
 import {
   createRoom,
-  getObsSecret,
   regenerateSecret,
   updateRoom,
 } from "@/lib/stream-canvas/api";
@@ -37,19 +36,7 @@ export default function StreamCanvasSettingsPage() {
         setRoom(r);
         setTwitchChannel(r.twitchChannel ?? "");
         setAllowedUsers(r.allowedUsers);
-
-        // Load OBS secret
-        getObsSecret(r.id, getToken)
-          .then((data) => {
-            if (!cancelled) setObsSecret(data.obsSecret);
-          })
-          .catch((err) => {
-            if (!cancelled)
-              toast.error(
-                "Failed to load OBS secret: " +
-                  (err instanceof Error ? err.message : String(err)),
-              );
-          });
+        setObsSecret(r.obsSetupSecret ?? null);
       })
       .catch((err) => {
         if (!cancelled)
@@ -91,9 +78,9 @@ export default function StreamCanvasSettingsPage() {
       return;
 
     try {
-      await regenerateSecret(room.id, getToken);
-      const data = await getObsSecret(room.id, getToken);
+      const data = await regenerateSecret(room.id, getToken);
       setObsSecret(data.obsSecret);
+      setSecretRevealed(true);
       toast.success("OBS secret regenerated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to regenerate");
@@ -222,7 +209,7 @@ export default function StreamCanvasSettingsPage() {
             <div className="flex items-center gap-2">
               <code className="flex-1 overflow-x-auto rounded-lg border border-border/50 bg-background px-3 py-2 text-xs">
                 {obsUrl === null
-                  ? "Loading…"
+                  ? "Regenerate the secret to create a new copyable OBS URL."
                   : secretRevealed
                     ? obsUrl
                     : `${window.location.origin}/obs?secret=${"•".repeat(8)}`}
@@ -230,6 +217,7 @@ export default function StreamCanvasSettingsPage() {
               <button
                 type="button"
                 onClick={() => setSecretRevealed(!secretRevealed)}
+                disabled={!obsUrl}
                 className="rounded-lg border border-border/50 p-2 text-muted-foreground hover:text-foreground"
                 title={secretRevealed ? "Hide" : "Reveal"}
               >
@@ -252,6 +240,7 @@ export default function StreamCanvasSettingsPage() {
                     );
                   }
                 }}
+                disabled={!obsUrl}
                 className="rounded-lg border border-border/50 p-2 text-muted-foreground hover:text-foreground"
                 title="Copy URL"
               >
@@ -259,9 +248,9 @@ export default function StreamCanvasSettingsPage() {
               </button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Add this as a Browser Source in OBS at 1920×1080. The secret in
-              the URL is exchanged for a short-lived token every time the page
-              loads.
+              Add this as a Browser Source in OBS at 1920×1080. For security,
+              the full URL is only shown immediately after room creation or
+              regeneration.
             </p>
             <button
               type="button"

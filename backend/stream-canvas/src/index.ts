@@ -21,7 +21,11 @@ app.route("/", api);
 
 const server = serve({ fetch: app.fetch, port: config.port });
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({
+  noServer: true,
+  maxPayload: 256 * 1024,
+  perMessageDeflate: false,
+});
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "", `http://${req.headers.host}`);

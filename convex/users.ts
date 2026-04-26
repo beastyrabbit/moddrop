@@ -1,6 +1,16 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
+
+const MAX_RESOLVE_USERS = 50;
+const MAX_USERNAME_PREFIX_LENGTH = 30;
+
+interface PublicUserDto {
+  userId: string;
+  username: string;
+  showProfilePic: boolean;
+}
 
 async function getUserByToken(
   ctx: QueryCtx | MutationCtx,
@@ -17,6 +27,33 @@ async function getUserByToken(
 function clerkUserIdFromTokenIdentifier(tokenIdentifier: string) {
   const parts = tokenIdentifier.split("|");
   return parts[parts.length - 1] ?? tokenIdentifier;
+}
+
+function toPublicUser(user: Doc<"users">): PublicUserDto {
+  return {
+    userId: user.clerkUserId,
+    username: user.username ?? user.clerkUserId,
+    showProfilePic: user.showProfilePic ?? true,
+  };
+}
+
+export function normalizeUsernamePrefix(prefix: string): string {
+  return prefix.trim().toLowerCase().slice(0, MAX_USERNAME_PREFIX_LENGTH);
+}
+
+export function normalizeClerkUserIdList(userIds: string[]): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const userId of userIds) {
+    const trimmed = userId.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+    if (normalized.length >= MAX_RESOLVE_USERS) break;
+  }
+
+  return normalized;
 }
 
 async function deriveUniqueUsername(
@@ -74,7 +111,8 @@ export const viewer = query({
       return null;
     }
 
-    return getUserByToken(ctx, identity.tokenIdentifier);
+    const user = await getUserByToken(ctx, identity.tokenIdentifier);
+    return user ? toPublicUser(user) : null;
   },
 });
 
@@ -88,7 +126,7 @@ export const getOrCreateUser = mutation({
 
     const existing = await getUserByToken(ctx, identity.tokenIdentifier);
     if (existing) {
-      return existing;
+      return toPublicUser(existing);
     }
 
     const username = await deriveUniqueUsername(ctx, {
@@ -104,13 +142,16 @@ export const getOrCreateUser = mutation({
       tokenIdentifier: identity.tokenIdentifier,
       clerkUserId,
       ...(username ? { username } : {}),
-      apiKey: crypto.randomUUID(),
       showProfilePic: true,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
 
-    return ctx.db.get(id);
+    const user = await ctx.db.get(id);
+    if (!user) {
+      throw new Error("User created but could not be loaded");
+    }
+    return toPublicUser(user);
   },
 });
 
@@ -122,7 +163,7 @@ export const searchByUsername = query({
       return [];
     }
 
-    const prefix = args.prefix.trim().toLowerCase();
+    const prefix = normalizeUsernamePrefix(args.prefix);
     if (!prefix) {
       return [];
     }
@@ -135,10 +176,7 @@ export const searchByUsername = query({
     return candidates
       .filter((user) => user.username?.toLowerCase().startsWith(prefix))
       .slice(0, 10)
-      .map((user) => ({
-        userId: user.clerkUserId,
-        username: user.username ?? user.clerkUserId,
-      }));
+      .map(toPublicUser);
   },
 });
 
@@ -150,17 +188,21 @@ export const resolveUsernames = query({
       return [];
     }
 
+    const userIds = normalizeClerkUserIdList(args.userIds);
     const resolved = await Promise.all(
-      args.userIds.map(async (userId) => {
+      userIds.map(async (userId) => {
         const user = await ctx.db
           .query("users")
           .withIndex("byClerkUserId", (q) => q.eq("clerkUserId", userId))
           .unique();
 
-        return {
-          userId,
-          username: user?.username ?? userId,
-        };
+        return user
+          ? toPublicUser(user)
+          : {
+              userId,
+              username: userId,
+              showProfilePic: true,
+            };
       }),
     );
 

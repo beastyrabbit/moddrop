@@ -11,9 +11,8 @@ async function getClerkToken(
   getToken: ClerkTokenGetter,
   options?: { skipCache?: boolean },
 ) {
-  const tokenGetter = getToken as typeof getToken & ((
-    config?: { skipCache?: boolean },
-  ) => Promise<string | null>);
+  const tokenGetter = getToken as typeof getToken &
+    ((config?: { skipCache?: boolean }) => Promise<string | null>);
   return tokenGetter(options);
 }
 
@@ -61,16 +60,12 @@ async function fetchApi(
 }
 
 /** Create or get the current user's room. */
-export function createRoom(
-  getToken: ClerkTokenGetter,
-): Promise<CanvasRoom> {
+export function createRoom(getToken: ClerkTokenGetter): Promise<CanvasRoom> {
   return fetchApi("/api/rooms", getToken, { method: "POST" });
 }
 
 /** Get the current user's room. */
-export function getMyRoom(
-  getToken: ClerkTokenGetter,
-): Promise<CanvasRoom> {
+export function getMyRoom(getToken: ClerkTokenGetter): Promise<CanvasRoom> {
   return fetchApi("/api/rooms/me", getToken);
 }
 
@@ -97,18 +92,20 @@ export function updateRoom(
 export function regenerateSecret(
   roomId: string,
   getToken: ClerkTokenGetter,
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; obsSecret: string }> {
   return fetchApi(`/api/rooms/${roomId}/regenerate-secret`, getToken, {
     method: "POST",
   });
 }
 
-/** Get the OBS secret (owner only, for settings page). */
-export function getObsSecret(
+/** Mint a short-lived editor WebSocket token. */
+export function getEditorWsToken(
   roomId: string,
   getToken: ClerkTokenGetter,
-): Promise<{ obsSecret: string }> {
-  return fetchApi(`/api/rooms/${roomId}/obs-secret`, getToken);
+): Promise<{ token: string; roomId: string; expiresIn: number }> {
+  return fetchApi(`/api/rooms/${roomId}/ws-token`, getToken, {
+    method: "POST",
+  });
 }
 
 /** Exchange an OBS bootstrap secret for a short-lived WS token (unauthenticated). */
