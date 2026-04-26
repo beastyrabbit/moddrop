@@ -30,7 +30,9 @@ import {
 import "tldraw/tldraw.css";
 import {
   buildEditorWsUrl,
-  CANVAS_API,
+  getEditorUploadUrlRefreshDelayMs,
+  getEditorWsToken,
+  resolveEditorUploadUrl,
   uploadFile,
 } from "@/lib/stream-canvas/api";
 import {
@@ -41,7 +43,12 @@ import {
   AudioUploadCtx,
   getAudioSyncedPlaybackPosition,
 } from "./shapes/audio/AudioPlayerShape";
-import { customShapeUtils, customTools, syncShapeUtils } from "./shapes/shared";
+import {
+  CanvasMediaRefreshContext,
+  customShapeUtils,
+  customTools,
+  syncShapeUtils,
+} from "./shapes/shared";
 import {
   getSyncedPlaybackPosition,
   YouTubeInteractionCtx,
@@ -632,25 +639,24 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
   const [settingsShapeId, setSettingsShapeId] = useState<string | null>(null);
 
   const getUri = useCallback(async () => {
-    const tokenGetter = getToken as typeof getToken & ((
-      options?: { skipCache?: boolean },
-    ) => Promise<string | null>);
-    let token = await tokenGetter();
-    if (!token) {
-      token = await tokenGetter({ skipCache: true });
-    }
-    if (!token) throw new Error("Not authenticated");
-    return buildEditorWsUrl(roomId, token);
+    const data = await getEditorWsToken(roomId, getToken);
+    return buildEditorWsUrl(data.roomId, data.token);
   }, [roomId, getToken]);
 
   const assets = useMemo<TLAssetStore>(
     () => ({
       async upload(_asset, file) {
         const result = await uploadFile(roomId, file, getToken);
-        return { src: `${CANVAS_API}${result.url}` };
+        return { src: result.url };
       },
       resolve(asset) {
-        return asset.props.src ?? null;
+        if (!asset.props.src) return null;
+        return resolveEditorUploadUrl(roomId, asset.props.src, getToken).catch(
+          (error) => {
+            console.error("[stream-canvas] asset URL resolution failed:", error);
+            return null;
+          },
+        );
       },
     }),
     [roomId, getToken],
@@ -666,8 +672,20 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
   );
 
   const audioUploadCtx = useMemo(
-    () => ({ roomId, getToken }),
+    () => ({
+      roomId,
+      getToken,
+      resolveUrl: (src: string, options?: { forceRefresh?: boolean }) =>
+        resolveEditorUploadUrl(roomId, src, getToken, options),
+    }),
     [roomId, getToken],
+  );
+  const mediaRefreshCtx = useMemo(
+    () => ({
+      getRefreshDelayMs: (src: string) =>
+        getEditorUploadUrlRefreshDelayMs(roomId, src),
+    }),
+    [roomId],
   );
   const youtubeInteractionCtx = useMemo(
     () => ({
@@ -703,21 +721,23 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
 
   return (
     <div className="relative h-full w-full">
-      <AudioUploadCtx.Provider value={audioUploadCtx}>
-        <YouTubeInteractionCtx.Provider value={youtubeInteractionCtx}>
-          <Tldraw
-            store={storeWithStatus.store}
-            shapeUtils={customShapeUtils}
-            tools={customTools}
-            overrides={editorOverrides}
-            licenseKey={TLDRAW_LICENSE_KEY}
-            components={components}
-          >
-            <LegacyCleanup />
-            <YouTubeInteractionController />
-          </Tldraw>
-        </YouTubeInteractionCtx.Provider>
-      </AudioUploadCtx.Provider>
+      <CanvasMediaRefreshContext.Provider value={mediaRefreshCtx}>
+        <AudioUploadCtx.Provider value={audioUploadCtx}>
+          <YouTubeInteractionCtx.Provider value={youtubeInteractionCtx}>
+            <Tldraw
+              store={storeWithStatus.store}
+              shapeUtils={customShapeUtils}
+              tools={customTools}
+              overrides={editorOverrides}
+              licenseKey={TLDRAW_LICENSE_KEY}
+              components={components}
+            >
+              <LegacyCleanup />
+              <YouTubeInteractionController />
+            </Tldraw>
+          </YouTubeInteractionCtx.Provider>
+        </AudioUploadCtx.Provider>
+      </CanvasMediaRefreshContext.Provider>
     </div>
   );
 }

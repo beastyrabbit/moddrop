@@ -2,18 +2,19 @@
 
 import { useAuth, useClerk } from "@clerk/nextjs";
 import { Copy, Eye, EyeOff, Loader2, RefreshCw, Save, Tv } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageHero } from "@/components/common/PageHero";
 import { UserMultiSelect } from "@/components/stream-canvas/UserMultiSelect";
 import {
   createRoom,
-  getObsSecret,
   regenerateSecret,
   updateRoom,
 } from "@/lib/stream-canvas/api";
 import type { CanvasRoom } from "@/lib/stream-canvas/types";
 import { cn } from "@/lib/utils";
+
+const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
 
 export default function StreamCanvasSettingsPage() {
   const clerk = useClerk();
@@ -25,6 +26,8 @@ export default function StreamCanvasSettingsPage() {
   const [twitchChannel, setTwitchChannel] = useState("");
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const regenerateRequestRef = useRef(0);
 
   // Load or create room
   useEffect(() => {
@@ -37,19 +40,9 @@ export default function StreamCanvasSettingsPage() {
         setRoom(r);
         setTwitchChannel(r.twitchChannel ?? "");
         setAllowedUsers(r.allowedUsers);
-
-        // Load OBS secret
-        getObsSecret(r.id, getToken)
-          .then((data) => {
-            if (!cancelled) setObsSecret(data.obsSecret);
-          })
-          .catch((err) => {
-            if (!cancelled)
-              toast.error(
-                "Failed to load OBS secret: " +
-                  (err instanceof Error ? err.message : String(err)),
-              );
-          });
+        const pendingSecret = r.obsSetupSecret ?? takePendingObsSecret(r.id);
+        setObsSecret(pendingSecret);
+        setSecretRevealed(Boolean(pendingSecret));
       })
       .catch((err) => {
         if (!cancelled)
@@ -69,7 +62,7 @@ export default function StreamCanvasSettingsPage() {
     try {
       const updated = await updateRoom(
         room.id,
-        { twitchChannel: twitchChannel || undefined, allowedUsers },
+        { twitchChannel: twitchChannel.trim() || null, allowedUsers },
         getToken,
       );
       setRoom(updated);
@@ -82,7 +75,7 @@ export default function StreamCanvasSettingsPage() {
   }, [room, twitchChannel, allowedUsers, getToken]);
 
   const handleRegenerate = useCallback(async () => {
-    if (!room) return;
+    if (!room || regenerating) return;
     if (
       !window.confirm(
         "Regenerate OBS secret? The current OBS browser source URL will stop working.",
@@ -90,20 +83,32 @@ export default function StreamCanvasSettingsPage() {
     )
       return;
 
+    const requestId = regenerateRequestRef.current + 1;
+    regenerateRequestRef.current = requestId;
+    setRegenerating(true);
     try {
-      await regenerateSecret(room.id, getToken);
-      const data = await getObsSecret(room.id, getToken);
+      const data = await regenerateSecret(room.id, getToken);
+      if (regenerateRequestRef.current !== requestId) return;
       setObsSecret(data.obsSecret);
+      setSecretRevealed(true);
       toast.success("OBS secret regenerated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to regenerate");
+    } finally {
+      if (regenerateRequestRef.current === requestId) {
+        setRegenerating(false);
+      }
     }
-  }, [room, getToken]);
+  }, [room, regenerating, getToken]);
 
   const obsUrl =
     obsSecret && typeof window !== "undefined"
-      ? `${window.location.origin}/obs?secret=${obsSecret}`
+      ? `${window.location.origin}/obs#secret=${obsSecret}`
       : null;
+  const maskedObsUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/obs#secret=${"•".repeat(8)}`
+      : "/obs#secret=••••••••";
 
   if (!isLoaded) {
     return (
@@ -222,14 +227,15 @@ export default function StreamCanvasSettingsPage() {
             <div className="flex items-center gap-2">
               <code className="flex-1 overflow-x-auto rounded-lg border border-border/50 bg-background px-3 py-2 text-xs">
                 {obsUrl === null
-                  ? "Loading…"
+                  ? "Regenerate the secret to create a new copyable OBS URL."
                   : secretRevealed
                     ? obsUrl
-                    : `${window.location.origin}/obs?secret=${"•".repeat(8)}`}
+                    : maskedObsUrl}
               </code>
               <button
                 type="button"
                 onClick={() => setSecretRevealed(!secretRevealed)}
+                disabled={!obsUrl}
                 className="rounded-lg border border-border/50 p-2 text-muted-foreground hover:text-foreground"
                 title={secretRevealed ? "Hide" : "Reveal"}
               >
@@ -252,6 +258,7 @@ export default function StreamCanvasSettingsPage() {
                     );
                   }
                 }}
+                disabled={!obsUrl}
                 className="rounded-lg border border-border/50 p-2 text-muted-foreground hover:text-foreground"
                 title="Copy URL"
               >
@@ -259,21 +266,37 @@ export default function StreamCanvasSettingsPage() {
               </button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Add this as a Browser Source in OBS at 1920×1080. The secret in
-              the URL is exchanged for a short-lived token every time the page
-              loads.
+              Add this as a Browser Source in OBS at 1920×1080. For security,
+              the full URL is only shown immediately after room creation or
+              regeneration.
             </p>
-            <button
-              type="button"
-              onClick={handleRegenerate}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-400 transition hover:bg-red-500/10"
-            >
-              <RefreshCw className="size-3" />
-              Regenerate Secret
-            </button>
+              <button
+                type="button"
+                onClick={handleRegenerate}
+                disabled={regenerating}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-400 transition hover:bg-red-500/10"
+              >
+                <RefreshCw
+                  className={cn("size-3", regenerating && "animate-spin")}
+                />
+                Regenerate Secret
+              </button>
           </section>
         </div>
       )}
     </main>
   );
+}
+
+function takePendingObsSecret(roomId: string): string | null {
+  try {
+    const key = `${PENDING_OBS_SECRET_PREFIX}${roomId}`;
+    const secret = window.sessionStorage.getItem(key);
+    if (secret) {
+      window.sessionStorage.removeItem(key);
+    }
+    return secret;
+  } catch {
+    return null;
+  }
 }

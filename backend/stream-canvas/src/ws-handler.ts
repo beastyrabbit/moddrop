@@ -6,8 +6,15 @@ import {
 } from "@tldraw/sync-core";
 import { eq } from "drizzle-orm";
 import type { WebSocket } from "ws";
-import { isOriginAllowed, verifyClerkJwt, verifyObsToken } from "./auth.ts";
+import {
+  isOriginAllowed,
+  verifyCanvasWsToken,
+  verifyObsToken,
+} from "./auth.ts";
+import { config } from "./config.ts";
 import { db, sqlite } from "./db.ts";
+import { FixedWindowRateLimit, rateLimitKeyFromHeaders } from "./rate-limit.ts";
+import { isValidRoomId } from "./room-validation.ts";
 import { rooms } from "./schema.ts";
 import { streamCanvasSchema } from "./tldraw-schema.ts";
 import type { ConnectionRole } from "./types.ts";
@@ -30,6 +37,10 @@ function createRoomStorage(roomId: string) {
 // ---------------------------------------------------------------------------
 
 const activeRooms = new Map<string, TLSocketRoom>();
+const wsFailureLimiter = new FixedWindowRateLimit({
+  windowMs: 5 * 60_000,
+  max: 30,
+});
 
 function getOrCreateRoom(roomId: string): TLSocketRoom {
   let room = activeRooms.get(roomId);
@@ -79,9 +90,9 @@ interface AuthResult {
  *
  * Browser WebSocket() API does not support custom headers, so tokens
  * are passed as URL query parameters:
- *   ws://host/ws?roomId=XXX&token=CLERK_JWT_OR_OBS_TOKEN
+ *   ws://host/ws?roomId=XXX&token=SHORT_LIVED_CANVAS_OR_OBS_TOKEN
  */
-async function authenticateUpgrade(
+export async function authenticateWebSocketUpgrade(
   req: IncomingMessage,
 ): Promise<AuthResult | null> {
   // Validate Origin header
@@ -91,37 +102,35 @@ async function authenticateUpgrade(
     return null;
   }
 
-  const url = new URL(req.url ?? "", `http://${req.headers.host}`);
+  const url = new URL(req.url ?? "", "http://stream-canvas.local");
   const roomId = url.searchParams.get("roomId");
   const token = url.searchParams.get("token");
   if (!roomId || !token) return null;
 
-  // Try as Clerk JWT first (canvas editors)
-  try {
-    const claims = await verifyClerkJwt(token);
+  if (!isValidRoomId(roomId)) return null;
 
-    // Check if user is allowed in this room
+  // Browser editors use short-lived canvas tickets minted by the HTTP API.
+  const editorClaims = verifyCanvasWsToken(token);
+  if (editorClaims && editorClaims.roomId === roomId) {
     const room = await db.query.rooms.findFirst({
       where: eq(rooms.id, roomId),
     });
     if (!room) return null;
 
-    const isOwner = room.ownerClerkId === claims.sub;
-    const isAllowed = room.allowedUsers?.includes(claims.sub) ?? false;
+    const isOwner = room.ownerClerkId === editorClaims.userId;
+    const isAllowed = room.allowedUsers?.includes(editorClaims.userId) ?? false;
     if (!isOwner && !isAllowed) return null;
 
-    return { role: "editor", roomId, userId: claims.sub };
-  } catch (err) {
-    // Not a valid Clerk JWT — try as OBS token
-    console.debug(
-      "[ws] Clerk JWT verification failed, trying OBS token:",
-      err instanceof Error ? err.message : err,
-    );
+    return { role: "editor", roomId, userId: editorClaims.userId };
   }
 
   // Try as short-lived OBS token
   const obsClaims = verifyObsToken(token);
   if (obsClaims && obsClaims.roomId === roomId) {
+    const room = await db.query.rooms.findFirst({
+      where: eq(rooms.id, roomId),
+    });
+    if (!room) return null;
     return { role: "obs", roomId };
   }
 
@@ -143,13 +152,34 @@ export async function handleWebSocketUpgrade(
   ws: WebSocket,
   req: IncomingMessage,
 ) {
-  const auth = await authenticateUpgrade(req);
+  const failureKey = `ws:${clientKey(req)}`;
+  const failureLimit = wsFailureLimiter.isBlocked(failureKey);
+  if (!failureLimit.allowed) {
+    ws.close(4008, "Too many authentication failures");
+    return;
+  }
+
+  const auth = await authenticateWebSocketUpgrade(req);
   if (!auth) {
+    wsFailureLimiter.consume(failureKey);
     ws.close(4001, "Unauthorized");
     return;
   }
 
+  if (
+    !activeRooms.has(auth.roomId) &&
+    activeRooms.size >= config.maxActiveRooms
+  ) {
+    ws.close(1013, "Too many active rooms");
+    return;
+  }
+
   const room = getOrCreateRoom(auth.roomId);
+  if (room.getNumActiveSessions() >= config.maxWsSessionsPerRoom) {
+    ws.close(1013, "Room session limit reached");
+    return;
+  }
+
   const sessionId = crypto.randomUUID();
 
   // tldraw's TLSocketRoom attaches message/close/error listeners internally
@@ -158,4 +188,17 @@ export async function handleWebSocketUpgrade(
     socket: ws,
     isReadonly: auth.role === "obs",
   });
+}
+
+function clientKey(req: IncomingMessage): string {
+  return rateLimitKeyFromHeaders(
+    {
+      get: (name) => {
+        const value = req.headers[name.toLowerCase()];
+        return Array.isArray(value) ? value[0] : value;
+      },
+    },
+    req.socket.remoteAddress,
+    config.trustProxyHeaders,
+  );
 }

@@ -6,6 +6,7 @@ export default defineSchema({
     tokenIdentifier: v.string(),
     clerkUserId: v.string(),
     username: v.optional(v.string()),
+    usernameSearch: v.optional(v.string()),
     apiKey: v.optional(v.string()),
     showProfilePic: v.optional(v.boolean()),
     createdAt: v.number(),
@@ -14,5 +15,6 @@ export default defineSchema({
     .index("byTokenIdentifier", ["tokenIdentifier"])
     .index("byClerkUserId", ["clerkUserId"])
     .index("byUsername", ["username"])
+    .index("byUsernameSearch", ["usernameSearch"])
     .index("byApiKey", ["apiKey"]),
 });
