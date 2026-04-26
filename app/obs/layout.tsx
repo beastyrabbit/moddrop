@@ -31,6 +31,9 @@ export default function StreamCanvasOBSLayout({
         header, footer, .sonner-toaster, .tl-watermark_SEE-LICENSE {
           display: none !important;
         }
+        .obs-status {
+          background-color: #000 !important;
+        }
         .obs-mirror {
           --tl-color-background: rgba(0,0,0,0) !important;
         }

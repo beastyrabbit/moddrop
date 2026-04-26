@@ -41,7 +41,7 @@ function OBSInner() {
 
   if (!secret) {
     return (
-      <div className="flex h-screen items-center justify-center text-sm text-white/50">
+      <div className="obs-status flex h-screen items-center justify-center text-sm text-white/60">
         Missing OBS secret. Open the OBS URL from room settings or add
         #secret=YOUR_SECRET to the URL.
       </div>
