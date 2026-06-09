@@ -45,33 +45,41 @@ jobs:
       stream_canvas: ${{ steps.filter.outputs.stream_canvas }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v4
-        id: filter
         with:
-          filters: |
-            frontend:
-              - 'app/**'
-              - 'components/**'
-              - 'lib/**'
-              - 'public/**'
-              - '.dockerignore'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'next.config.mjs'
-              - 'postcss.config.mjs'
-              - 'tailwind.config.ts'
-              - 'tsconfig.json'
-              - 'biome.json'
-              - 'components.json'
-              - 'Dockerfile'
-              - 'docker-entrypoint.sh'
-            convex:
-              - 'convex/**'
-              - 'convex.json'
-            stream_canvas:
-              - '.dockerignore'
-              - 'backend/stream-canvas/**'
+          fetch-depth: 0
+      - name: Detect changed paths
+        id: filter
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          base="$BEFORE_SHA"
+          head="$HEAD_SHA"
+          if [ -z "$base" ] || [ "$base" = "null" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$(git rev-list --max-parents=0 "$head")"
+          fi
+
+          changed="$(git diff --name-only "$base" "$head" || git diff --name-only HEAD~1 HEAD || true)"
+
+          has_changed() {
+            printf '%s\n' "$changed" | grep -Eq "$1"
+          }
+
+          set_output() {
+            name="$1"
+            pattern="$2"
+            if has_changed "$pattern"; then
+              echo "$name=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$name=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          set_output frontend '^(app|components|lib|public)/|^(\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|next\.config\.mjs|postcss\.config\.mjs|tailwind\.config\.ts|tsconfig\.json|biome\.json|components\.json|Dockerfile|docker-entrypoint\.sh)$'
+          set_output convex '^convex/|^convex\.json$'
+          set_output stream_canvas '^backend/stream-canvas/|^\.dockerignore$'
 
   tag-convex-changes:
     runs-on: personal
