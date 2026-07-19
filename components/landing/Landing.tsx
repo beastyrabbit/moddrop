@@ -82,7 +82,7 @@ export function Landing() {
 
       <header className="aa-in relative z-10" style={enter(0)}>
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 px-5 py-6 sm:px-8">
-          <LandingLogo tone="dark" />
+          <LandingLogo tone="dark" priority />
           <LandingAuthActions
             className="flex items-center gap-1 sm:gap-3"
             secondaryClassName="aa-btn-quiet"
@@ -113,7 +113,7 @@ export function Landing() {
                 moments — placed live through a single OBS browser source.
               </p>
               <LaminatePass />
-              <div className="mt-7 flex flex-wrap items-center gap-4">
+              <div className="mt-7">
                 <Link
                   href={landingContent.ctas.secondary.href}
                   className="aa-seelink"
@@ -409,7 +409,7 @@ export function Landing() {
           </div>
         </section>
 
-        {/* Row 4 — setup, with the widest air on the page */}
+        {/* Row 4 — setup */}
         <section aria-labelledby="aa-steps-title" className="my-28 lg:my-40">
           <div className="mx-auto max-w-[1200px] px-5 sm:px-8">
             <p className="aa-eyebrow text-center">the run of show</p>
@@ -689,10 +689,6 @@ export function Landing() {
           box-shadow:
             inset 0 1px 0 rgba(242, 233, 216, 0.05),
             0 24px 48px -28px rgba(0, 0, 0, 0.5);
-        }
-        .aa-quiet {
-          background: color-mix(in srgb, var(--aa-billiard) 42%, var(--aa-pine));
-          border-color: rgba(198, 154, 88, 0.12);
         }
 
         /* Buttons */

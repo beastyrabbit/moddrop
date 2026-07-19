@@ -1,13 +1,3 @@
-export type LandingImage = {
-  src: string;
-  alt: string;
-};
-
-export type LandingCta = {
-  label: string;
-  href: string;
-};
-
 export type ContentTypeId =
   | "brb"
   | "emotes"
@@ -162,9 +152,7 @@ export const landingContent = {
   },
   logos: {
     onDark: "/img/moddrop-logo-lockup-on-dark.svg",
-    white: "/img/moddrop-logo-lockup-white.svg",
     dark: "/img/moddrop-logo-lockup-navy.svg",
-    icon: "/img/moddrop-icon.svg",
     iconDark: "/img/moddrop-icon-black.svg",
   },
 } as const;

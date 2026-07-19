@@ -25,9 +25,14 @@ export const contentTypeIcons: Record<ContentTypeId, IconComponent> = {
 type LandingLogoProps = {
   tone?: "dark" | "light";
   className?: string;
+  priority?: boolean;
 };
 
-export function LandingLogo({ tone = "dark", className }: LandingLogoProps) {
+export function LandingLogo({
+  tone = "dark",
+  className,
+  priority = false,
+}: LandingLogoProps) {
   return (
     <Link
       href="/"
@@ -43,7 +48,7 @@ export function LandingLogo({ tone = "dark", className }: LandingLogoProps) {
         alt="Moddrop"
         width={154}
         height={30}
-        priority
+        priority={priority}
         className="h-auto w-[132px] sm:w-[154px]"
         style={{ height: "auto" }}
       />
