@@ -92,6 +92,14 @@ body::after {
   background: radial-gradient(circle at center, transparent 55%, rgba(0, 0, 0, 0.58) 100%);
 }
 
+/* The landing (.aa-root) lights its own room — these fixed overlays sit above
+   its isolated stacking context and would paint scanlines and dark corners
+   over the warm design, so switch them off there. */
+body:has(.aa-root)::before,
+body:has(.aa-root)::after {
+  display: none;
+}
+
 a,
 button,
 input,

@@ -24,16 +24,38 @@ export function LandingAuthActions({
       clerk.openSignIn();
     } catch (error) {
       // Never leave the primary auth control as a silent no-op: if the modal
-      // can't open, log it and fall back to the sign-in route.
+      // can't open, log it and send the visitor to Clerk's hosted sign-in
+      // page — the app has no sign-in route of its own.
       console.error("[LandingAuthActions] openSignIn failed", error);
-      window.location.href = "/app";
+      void clerk.redirectToSignIn().catch((redirectError: unknown) => {
+        console.error(
+          "[LandingAuthActions] redirectToSignIn failed",
+          redirectError,
+        );
+      });
     }
   };
 
-  // Reserve the row until Clerk resolves so signed-in visitors aren't flashed
-  // the signed-out CTAs and the pre-load click window is closed.
+  // "Get started" is a plain link and must not wait for clerk-js, which loads
+  // late on slow networks and never with an ad blocker. Only the secondary
+  // slot depends on auth state: keep its width reserved while Clerk resolves
+  // so signed-out visitors get neither a CTA flash nor a layout shift.
   if (!isLoaded) {
-    return <div className={className} aria-hidden data-auth-loading />;
+    return (
+      <div className={className} data-auth-loading>
+        <span
+          aria-hidden
+          className={secondaryClassName}
+          style={{ visibility: "hidden" }}
+        >
+          Log in
+        </span>
+        <Link href="/app" className={primaryClassName}>
+          <span>Get started</span>
+          <ArrowRight aria-hidden className="size-4" />
+        </Link>
+      </div>
+    );
   }
 
   if (isSignedIn) {

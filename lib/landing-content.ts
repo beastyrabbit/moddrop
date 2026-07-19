@@ -9,7 +9,6 @@ export type ContentTypeId =
 export type SupportedContentType = {
   id: ContentTypeId;
   title: string;
-  shortTitle: string;
   description: string;
 };
 
@@ -30,9 +29,6 @@ export type Integration = {
 export const landingContent = {
   proposition: {
     eyebrow: "The live layer for your stream",
-    title: "Your mods handle the board. You stay live.",
-    description:
-      "Moddrop gives approved moderators a shared canvas for running stream moments through one OBS browser source.",
   },
   ctas: {
     primary: {
@@ -45,10 +41,6 @@ export const landingContent = {
     },
   },
   product: {
-    oneSourceTitle: "One browser source",
-    oneSourceDescription:
-      "Add Moddrop to OBS once. Your canvas updates without rebuilding the scene.",
-    collaborationTitle: "Approved mods, one shared canvas",
     collaborationDescription:
       "Invite the people you trust to place media and run the live layer while you focus on the stream.",
   },
@@ -56,37 +48,31 @@ export const landingContent = {
     {
       id: "brb",
       title: "BRB cards",
-      shortTitle: "BRB",
       description: "Timers, designs, and scene variations.",
     },
     {
       id: "emotes",
       title: "Emotes & effects",
-      shortTitle: "Emotes",
       description: "Emote walls and visual moments.",
     },
     {
       id: "clips",
       title: "Clips & highlights",
-      shortTitle: "Clips",
       description: "Queue, preview, and play stream clips.",
     },
     {
       id: "sponsors",
       title: "Sponsor assets",
-      shortTitle: "Sponsors",
       description: "Sponsor art and promotional blocks.",
     },
     {
       id: "scorebugs",
       title: "Scorebugs",
-      shortTitle: "Scores",
       description: "Scores, timers, and leaderboard graphics.",
     },
     {
       id: "audio",
       title: "Audio cues",
-      shortTitle: "Audio",
       description: "Sounds, music, and audio moments.",
     },
   ] satisfies readonly SupportedContentType[],
@@ -104,7 +90,7 @@ export const landingContent = {
     {
       number: "03",
       title: "Go live",
-      description: "Your mods run the layer while you stay focused on stream.",
+      description: "Your mods run the layer while you run the show.",
     },
   ] satisfies readonly SetupStep[],
   integrations: [
@@ -152,7 +138,6 @@ export const landingContent = {
   },
   logos: {
     onDark: "/img/moddrop-logo-lockup-on-dark.svg",
-    dark: "/img/moddrop-logo-lockup-navy.svg",
     iconDark: "/img/moddrop-icon-black.svg",
   },
 } as const;
