@@ -92,6 +92,14 @@ body::after {
   background: radial-gradient(circle at center, transparent 55%, rgba(0, 0, 0, 0.58) 100%);
 }
 
+/* The landing (.aa-root) lights its own room — these fixed overlays sit above
+   its isolated stacking context and would paint scanlines and dark corners
+   over the warm design, so switch them off there. */
+body:has(.aa-root)::before,
+body:has(.aa-root)::after {
+  display: none;
+}
+
 a,
 button,
 input,
@@ -234,24 +242,5 @@ textarea {
     color: rgba(227, 231, 228, 0.76);
     font-size: 0.98rem;
     line-height: 1.75;
-  }
-
-  .landing-grid {
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(51, 255, 51, 0.1), rgba(138, 63, 252, 0.08));
-    background-size:
-      48px 48px,
-      48px 48px,
-      100% 100%;
-    mask-image: linear-gradient(to bottom, black 0%, black 46%, transparent 100%);
-  }
-
-  .landing-beams {
-    background:
-      linear-gradient(105deg, transparent 0 18%, rgba(51, 255, 51, 0.11) 18.2% 18.6%, transparent 18.8% 100%),
-      linear-gradient(115deg, transparent 0 72%, rgba(138, 63, 252, 0.12) 72.2% 72.6%, transparent 72.8% 100%),
-      linear-gradient(180deg, rgba(8, 14, 18, 0.95), rgba(3, 5, 7, 0));
   }
 }
