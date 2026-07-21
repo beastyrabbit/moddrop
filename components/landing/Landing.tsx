@@ -1,27 +1,13 @@
 import { ArrowRight } from "lucide-react";
-import { DM_Sans, DM_Serif_Display } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { ModdropLogo } from "@/components/common/ModdropLogo";
 import { LandingAuthActions } from "@/components/landing/LandingAuthActions";
-import {
-  contentTypeIcons,
-  LandingLogo,
-} from "@/components/landing/LandingPrimitives";
+import { contentTypeIcons } from "@/components/landing/LandingPrimitives";
+import { SharedCanvasDemo } from "@/components/landing/SharedCanvasDemo";
 import { landingContent } from "@/lib/landing-content";
 import "./landing.css";
-
-const dmSerif = DM_Serif_Display({
-  variable: "--font-dm-serif",
-  subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-});
-
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-});
 
 const enter = (ms: number): CSSProperties =>
   ({ "--aa-d": `${ms}ms` }) as CSSProperties;
@@ -78,12 +64,12 @@ function LaminatePass() {
 
 export function Landing() {
   return (
-    <div className={`${dmSerif.variable} ${dmSans.variable} aa-root`}>
+    <div className="aa-root">
       <div className="aa-dim" aria-hidden="true" />
 
       <header className="aa-in relative z-10" style={enter(0)}>
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 px-5 py-6 sm:px-8">
-          <LandingLogo priority />
+          <ModdropLogo priority />
           <LandingAuthActions
             className="flex items-center gap-1 sm:gap-3"
             secondaryClassName="aa-btn-quiet"
@@ -155,79 +141,7 @@ export function Landing() {
                   <div className="aa-picturelight" aria-hidden="true" />
                   <div className="aa-frame">
                     <div className="aa-frame-mat">
-                      <div
-                        className="aa-canvasmock relative aspect-[3/2] overflow-hidden"
-                        role="img"
-                        aria-label="Preview of the shared canvas: a be-right-back card, a queued clip, an emote, and a 2–1 scorebug arranged around your stream, with the cursors of two mods, mika and dex, placing the pieces live."
-                      >
-                        <span className="aa-cm-tab">shared canvas</span>
-                        <span className="aa-cm-live">
-                          <i />
-                          Live
-                        </span>
-
-                        <div className="aa-cm-stream">
-                          <span className="aa-cm-streamlabel">your stream</span>
-                        </div>
-
-                        <div className="aa-cm-card aa-cm-brb">
-                          <em>be right back</em>
-                          <span>refilling the mug · 4:00</span>
-                        </div>
-
-                        <div className="aa-cm-card aa-cm-clip">
-                          <span className="aa-cm-thumb">
-                            <svg
-                              viewBox="0 0 20 20"
-                              width="13"
-                              height="13"
-                              aria-hidden="true"
-                              focusable="false"
-                            >
-                              <path d="M6 4 L15 10 L6 16 Z" />
-                            </svg>
-                          </span>
-                          clip · queued
-                        </div>
-
-                        <div className="aa-cm-emote">
-                          <EmoteIcon width={22} height={22} />
-                        </div>
-
-                        <div className="aa-cm-card aa-cm-score">
-                          <ScoreIcon
-                            width={13}
-                            height={13}
-                            className="aa-score-icon"
-                          />
-                          2–1
-                        </div>
-
-                        <div className="aa-cm-cur aa-cm-cur--mika">
-                          <svg
-                            viewBox="0 0 20 20"
-                            width="18"
-                            height="18"
-                            aria-hidden="true"
-                            focusable="false"
-                          >
-                            <path d="M4 2 L4 16.5 L7.7 13.2 L9.9 18 L12.4 16.9 L10.2 12.2 L15.5 12.2 Z" />
-                          </svg>
-                          <span className="aa-cm-curtag">mika · mod</span>
-                        </div>
-                        <div className="aa-cm-cur aa-cm-cur--dex">
-                          <svg
-                            viewBox="0 0 20 20"
-                            width="18"
-                            height="18"
-                            aria-hidden="true"
-                            focusable="false"
-                          >
-                            <path d="M4 2 L4 16.5 L7.7 13.2 L9.9 18 L12.4 16.9 L10.2 12.2 L15.5 12.2 Z" />
-                          </svg>
-                          <span className="aa-cm-curtag">dex · mod</span>
-                        </div>
-                      </div>
+                      <SharedCanvasDemo />
                     </div>
                   </div>
                 </figure>
@@ -543,7 +457,7 @@ export function Landing() {
 
       <footer className="mt-16 pb-12">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-x-8 gap-y-4 px-5 py-8 sm:px-8">
-          <LandingLogo />
+          <ModdropLogo />
           <p className="aa-display aa-foottag">
             {landingContent.proposition.eyebrow}
           </p>

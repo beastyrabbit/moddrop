@@ -67,7 +67,7 @@ test("Clerk claim validation requires issuer and authorized party match", () => 
   const claims = {
     sub: userId,
     iss: "https://example.clerk.accounts.dev",
-    azp: "https://frontend.localhost:1355",
+    azp: "https://moddrop.localhost:1355",
     iat: 1,
     exp: 2,
   };
@@ -75,23 +75,23 @@ test("Clerk claim validation requires issuer and authorized party match", () => 
   assert.doesNotThrow(() =>
     validateClerkClaims(claims, {
       issuer: "https://example.clerk.accounts.dev",
-      origin: "https://frontend.localhost:1355",
-      authorizedParties: ["https://frontend.localhost:1355"],
+      origin: "https://moddrop.localhost:1355",
+      authorizedParties: ["https://moddrop.localhost:1355"],
     }),
   );
 
   assert.throws(() =>
     validateClerkClaims(claims, {
       issuer: "https://other.example",
-      origin: "https://frontend.localhost:1355",
-      authorizedParties: ["https://frontend.localhost:1355"],
+      origin: "https://moddrop.localhost:1355",
+      authorizedParties: ["https://moddrop.localhost:1355"],
     }),
   );
   assert.throws(() =>
     validateClerkClaims(claims, {
       issuer: "https://example.clerk.accounts.dev",
       origin: "https://attacker.example",
-      authorizedParties: ["https://frontend.localhost:1355"],
+      authorizedParties: ["https://moddrop.localhost:1355"],
     }),
   );
 });

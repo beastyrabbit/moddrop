@@ -1,10 +1,24 @@
 "use client";
 
 import { useAuth, useClerk } from "@clerk/nextjs";
-import { Copy, Eye, EyeOff, Loader2, RefreshCw, Save, Tv } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Copy,
+  Eye,
+  EyeOff,
+  Loader2,
+  RefreshCw,
+  RotateCcw,
+  Save,
+} from "lucide-react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
-import { PageHero } from "@/components/common/PageHero";
+import { PageHeader } from "@/components/common/PageHeader";
 import { UserMultiSelect } from "@/components/stream-canvas/UserMultiSelect";
 import {
   createRoom,
@@ -21,40 +35,49 @@ export default function StreamCanvasSettingsPage() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [room, setRoom] = useState<CanvasRoom | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [obsSecret, setObsSecret] = useState<string | null>(null);
   const [secretRevealed, setSecretRevealed] = useState(false);
   const [twitchChannel, setTwitchChannel] = useState("");
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [confirmingRegeneration, setConfirmingRegeneration] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const loadRequestRef = useRef(0);
   const regenerateRequestRef = useRef(0);
 
-  // Load or create room
+  const loadRoom = useCallback(async () => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+    setRoom(null);
+    setLoadError(null);
+
+    try {
+      const loadedRoom = await createRoom(getToken);
+      if (loadRequestRef.current !== requestId) return;
+
+      setRoom(loadedRoom);
+      setTwitchChannel(loadedRoom.twitchChannel ?? "");
+      setAllowedUsers(loadedRoom.allowedUsers);
+      const pendingSecret =
+        loadedRoom.obsSetupSecret ?? takePendingObsSecret(loadedRoom.id);
+      setObsSecret(pendingSecret);
+      setSecretRevealed(Boolean(pendingSecret));
+    } catch (error) {
+      if (loadRequestRef.current === requestId) {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load room settings",
+        );
+      }
+    }
+  }, [getToken]);
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
-    let cancelled = false;
-
-    createRoom(getToken)
-      .then((r) => {
-        if (cancelled) return;
-        setRoom(r);
-        setTwitchChannel(r.twitchChannel ?? "");
-        setAllowedUsers(r.allowedUsers);
-        const pendingSecret = r.obsSetupSecret ?? takePendingObsSecret(r.id);
-        setObsSecret(pendingSecret);
-        setSecretRevealed(Boolean(pendingSecret));
-      })
-      .catch((err) => {
-        if (!cancelled)
-          toast.error(
-            err instanceof Error ? err.message : "Failed to load room settings",
-          );
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken, isLoaded, isSignedIn]);
+    void loadRoom();
+  }, [isLoaded, isSignedIn, loadRoom]);
 
   const handleSave = useCallback(async () => {
     if (!room) return;
@@ -67,21 +90,20 @@ export default function StreamCanvasSettingsPage() {
       );
       setRoom(updated);
       toast.success("Settings saved");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save");
     } finally {
       setSaving(false);
     }
   }, [room, twitchChannel, allowedUsers, getToken]);
 
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void handleSave();
+  };
+
   const handleRegenerate = useCallback(async () => {
     if (!room || regenerating) return;
-    if (
-      !window.confirm(
-        "Regenerate OBS secret? The current OBS browser source URL will stop working.",
-      )
-    )
-      return;
 
     const requestId = regenerateRequestRef.current + 1;
     regenerateRequestRef.current = requestId;
@@ -91,9 +113,12 @@ export default function StreamCanvasSettingsPage() {
       if (regenerateRequestRef.current !== requestId) return;
       setObsSecret(data.obsSecret);
       setSecretRevealed(true);
+      setConfirmingRegeneration(false);
       toast.success("OBS secret regenerated");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to regenerate");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to regenerate",
+      );
     } finally {
       if (regenerateRequestRef.current === requestId) {
         setRegenerating(false);
@@ -111,180 +136,301 @@ export default function StreamCanvasSettingsPage() {
       : "/obs#secret=••••••••";
 
   if (!isLoaded) {
-    return (
-      <main className="mx-auto max-w-4xl space-y-8 px-6 py-12">
-        <div className="flex min-h-[40vh] items-center justify-center">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-        </div>
-      </main>
-    );
+    return <SettingsLoadingState label="Loading your account" />;
   }
 
   if (!isSignedIn) {
     return (
-      <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 sm:py-10">
-        <PageHero
-          eyebrow="Room settings"
-          title="Sign in to configure your room"
-          description="The room owner can set the Twitch channel, invite collaborators, and manage the OBS URL."
+      <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 sm:py-12">
+        <PageHeader
+          title="Room settings"
+          description="Sign in to configure your stream, collaborators, and OBS browser source."
         />
-        <div className="flex justify-center">
+        <section className="rounded-xl border border-border bg-card p-6 sm:p-8">
+          <h2 className="font-product-display text-2xl">Sign in to continue</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+            Only a room owner can change these settings.
+          </p>
           <button
             type="button"
             onClick={() => clerk.openSignIn()}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg border border-border/50",
-              "px-5 py-2.5 text-sm font-semibold text-muted-foreground",
-              "transition hover:bg-foreground hover:text-background",
-            )}
+            className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
           >
             Sign in
           </button>
-        </div>
+        </section>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 sm:py-10">
-      <PageHero
-        eyebrow="Room settings"
-        title="Control the live surface"
-        description="Set the Twitch channel, decide who can edit, and manage the OBS browser-source URL for your room."
+    <main className="mx-auto max-w-5xl space-y-7 px-4 py-8 sm:px-6 sm:py-12">
+      <PageHeader
+        title="Room settings"
+        description="Manage what appears on your canvas, who can edit it, and how OBS connects."
       />
 
-      {!room ? (
-        <div className="flex min-h-[20vh] items-center justify-center">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+      {loadError ? (
+        <SettingsLoadError message={loadError} onRetry={loadRoom} />
+      ) : !room ? (
+        <SettingsLoadingState label="Loading room settings" compact />
       ) : (
         <div className="space-y-6">
-          {/* Twitch Channel */}
-          <section className="signal-surface rounded-2xl p-6">
-            <label
-              htmlFor="twitch-channel"
-              className="mb-2 block text-sm font-medium text-foreground"
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <section
+              aria-labelledby="stream-settings-title"
+              className="rounded-xl border border-border bg-card p-5 sm:p-6"
             >
-              <Tv className="mb-0.5 mr-1 inline size-4" />
-              Twitch Channel
-            </label>
-            <input
-              id="twitch-channel"
-              type="text"
-              value={twitchChannel}
-              onChange={(e) => setTwitchChannel(e.target.value)}
-              placeholder="e.g. BeastyRabbit"
-              className="w-full rounded-lg border border-border/50 bg-background px-3 py-2 text-sm"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              The Twitch stream embedded in the canvas center.
-            </p>
-          </section>
+              <SectionHeader
+                id="stream-settings-title"
+                title="Stream"
+                description="Choose the Twitch channel shown at the center of your canvas."
+              />
+              <div className="mt-5 max-w-xl">
+                <label
+                  htmlFor="twitch-channel"
+                  className="block text-sm font-semibold text-foreground"
+                >
+                  Twitch channel
+                </label>
+                <input
+                  id="twitch-channel"
+                  type="text"
+                  value={twitchChannel}
+                  onChange={(event) => setTwitchChannel(event.target.value)}
+                  placeholder="e.g. BeastyRabbit"
+                  autoComplete="off"
+                  className="mt-2 min-h-11 w-full rounded-lg border border-input bg-background px-3 text-base text-foreground placeholder:text-muted-foreground/70 sm:text-sm"
+                />
+              </div>
+            </section>
 
-          {/* Allowed Users */}
-          <section className="signal-surface rounded-2xl p-6">
-            <label
-              htmlFor="allowed-users"
-              className="mb-2 block text-sm font-medium text-foreground"
+            <section
+              aria-labelledby="collaborators-settings-title"
+              className="rounded-xl border border-border bg-card p-5 sm:p-6"
             >
-              Allowed Users
-            </label>
-            <UserMultiSelect
-              inputId="allowed-users"
-              value={allowedUsers}
-              onChange={setAllowedUsers}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Users who can edit your room. Search by username; access is stored
-              by Clerk user ID so renames do not break permissions.
-            </p>
-          </section>
+              <SectionHeader
+                id="collaborators-settings-title"
+                title="Collaborators"
+                description="Invite people by username. Access stays linked to their account if their username changes."
+              />
+              <div className="mt-5">
+                <label
+                  htmlFor="allowed-users"
+                  className="block text-sm font-semibold text-foreground"
+                >
+                  People with edit access
+                </label>
+                <div className="mt-2">
+                  <UserMultiSelect
+                    inputId="allowed-users"
+                    value={allowedUsers}
+                    onChange={setAllowedUsers}
+                  />
+                </div>
+              </div>
+            </section>
 
-          {/* Save */}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-lg border border-primary/24 bg-primary px-5 py-2.5",
-              "text-sm font-semibold text-primary-foreground transition hover:bg-[#6aff50]",
-              "disabled:opacity-50",
-            )}
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Save className="size-4" aria-hidden="true" />
+              )}
+              {saving ? "Saving changes…" : "Save changes"}
+            </button>
+          </form>
+
+          <section
+            aria-labelledby="obs-settings-title"
+            className="rounded-xl border border-border bg-card p-5 sm:p-6"
           >
-            {saving ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            Save room settings
-          </button>
+            <SectionHeader
+              id="obs-settings-title"
+              title="OBS browser source"
+              description="Add this URL to a 1920×1080 Browser Source in OBS."
+            />
 
-          {/* OBS Browser Source URL */}
-          <section className="signal-surface rounded-2xl p-6">
-            <h3 className="mb-3 text-sm font-medium text-foreground">
-              OBS Browser Source URL
-            </h3>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 overflow-x-auto rounded-lg border border-border/50 bg-background px-3 py-2 text-xs">
+            <div className="mt-5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch">
+              <code className="min-h-11 min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-input bg-background px-3 py-3 text-xs text-foreground">
                 {obsUrl === null
                   ? "Regenerate the secret to create a new copyable OBS URL."
                   : secretRevealed
                     ? obsUrl
                     : maskedObsUrl}
               </code>
-              <button
-                type="button"
-                onClick={() => setSecretRevealed(!secretRevealed)}
-                disabled={!obsUrl}
-                className="rounded-lg border border-border/50 p-2 text-muted-foreground hover:text-foreground"
-                title={secretRevealed ? "Hide" : "Reveal"}
-              >
-                {secretRevealed ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!obsUrl) return;
-                  try {
-                    await navigator.clipboard.writeText(obsUrl);
-                    toast.success("Copied to clipboard");
-                  } catch {
-                    toast.error(
-                      "Failed to copy — please select and copy manually",
-                    );
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                <button
+                  type="button"
+                  onClick={() => setSecretRevealed((revealed) => !revealed)}
+                  disabled={!obsUrl}
+                  aria-label={
+                    secretRevealed ? "Hide OBS URL" : "Reveal OBS URL"
                   }
-                }}
-                disabled={!obsUrl}
-                className="rounded-lg border border-border/50 p-2 text-muted-foreground hover:text-foreground"
-                title="Copy URL"
-              >
-                <Copy className="size-4" />
-              </button>
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-11"
+                >
+                  {secretRevealed ? (
+                    <EyeOff className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="size-4" aria-hidden="true" />
+                  )}
+                  <span className="sm:sr-only">
+                    {secretRevealed ? "Hide" : "Reveal"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!obsUrl) return;
+                    try {
+                      await navigator.clipboard.writeText(obsUrl);
+                      toast.success("Copied to clipboard");
+                    } catch {
+                      toast.error(
+                        "Failed to copy — please select and copy manually",
+                      );
+                    }
+                  }}
+                  disabled={!obsUrl}
+                  aria-label="Copy OBS URL"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-11"
+                >
+                  <Copy className="size-4" aria-hidden="true" />
+                  <span className="sm:sr-only">Copy</span>
+                </button>
+              </div>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Add this as a Browser Source in OBS at 1920×1080. For security,
-              the full URL is only shown immediately after room creation or
-              regeneration.
+
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              For security, the full URL is only available immediately after
+              room creation or regeneration.
             </p>
+
+            {confirmingRegeneration ? (
+              <div
+                role="alert"
+                className="mt-5 rounded-lg border border-[var(--app-ember)] bg-background p-4"
+              >
+                <p className="text-sm font-semibold text-foreground">
+                  Replace the current OBS secret?
+                </p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Your current browser source URL will stop working immediately.
+                </p>
+                <div className="mt-4 flex flex-col-reverse gap-2 min-[360px]:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingRegeneration(false)}
+                    disabled={regenerating}
+                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-semibold hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRegenerate()}
+                    disabled={regenerating}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-ember)] bg-[var(--app-ember)] px-4 text-sm font-semibold text-[var(--app-ink)] hover:bg-[#e27e5e] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RefreshCw
+                      className={cn("size-4", regenerating && "animate-spin")}
+                      aria-hidden="true"
+                    />
+                    {regenerating ? "Regenerating…" : "Regenerate now"}
+                  </button>
+                </div>
+              </div>
+            ) : (
               <button
                 type="button"
-                onClick={handleRegenerate}
-                disabled={regenerating}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-400 transition hover:bg-red-500/10"
+                onClick={() => setConfirmingRegeneration(true)}
+                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-ember)] px-4 text-sm font-semibold text-foreground hover:bg-[rgba(217,112,79,0.12)]"
               >
-                <RefreshCw
-                  className={cn("size-3", regenerating && "animate-spin")}
-                />
-                Regenerate Secret
+                <RefreshCw className="size-4" aria-hidden="true" />
+                Regenerate secret
               </button>
+            )}
           </section>
         </div>
       )}
     </main>
+  );
+}
+
+function SectionHeader({
+  id,
+  title,
+  description,
+}: {
+  id: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <h2 id={id} className="font-product-display text-2xl text-foreground">
+        {title}
+      </h2>
+      <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function SettingsLoadError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <section
+      aria-labelledby="settings-error-title"
+      className="rounded-xl border border-[var(--app-ember)] bg-card p-5 sm:p-6"
+    >
+      <h2 id="settings-error-title" className="text-base font-semibold">
+        Settings could not be loaded
+      </h2>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold hover:border-primary/60 hover:bg-[var(--app-billiard-hover)]"
+      >
+        <RotateCcw className="size-4" aria-hidden="true" />
+        Try again
+      </button>
+    </section>
+  );
+}
+
+function SettingsLoadingState({
+  label,
+  compact = false,
+}: {
+  label: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-center",
+        compact ? "min-h-52" : "min-h-[55vh]",
+      )}
+      role="status"
+    >
+      <Loader2
+        className="size-5 animate-spin text-[var(--app-brass-highlight)]"
+        aria-hidden="true"
+      />
+      <span className="sr-only">{label}</span>
+    </div>
   );
 }
 

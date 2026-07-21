@@ -8,7 +8,7 @@ export const CANVAS_API =
   configuredCanvasApi ??
   (process.env.NODE_ENV === "production"
     ? "/canvas-api"
-    : "http://stream-canvas.localhost:1355");
+    : "https://moddrop-stream-canvas.localhost:1355");
 
 type ClerkTokenGetter = () => Promise<string | null>;
 type UploadUrlResolveOptions = { forceRefresh?: boolean };

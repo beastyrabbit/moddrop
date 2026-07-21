@@ -1,12 +1,12 @@
 {
   "name": "moddrop",
   "private": true,
-  "version": "0.0.2",
+  "version": "0.5.0",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "dev": "concurrently -n frontend,convex,canvas -c blue,magenta,yellow \"pnpm dev:frontend\" \"pnpm dev:convex\" \"pnpm dev:canvas\"",
-    "dev:frontend": "portless frontend next dev",
+    "dev": "concurrently -n moddrop,convex,canvas -c blue,magenta,yellow \"pnpm dev:frontend\" \"pnpm dev:convex\" \"pnpm dev:canvas\"",
+    "dev:frontend": "portless moddrop next dev",
     "dev:convex": "pnpm exec convex dev",
     "dev:canvas": "pnpm --dir backend/stream-canvas run dev",
     "build": "next build",

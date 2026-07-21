@@ -41,8 +41,12 @@ describe("Landing", () => {
     authState.isSignedIn = false;
     const html = renderToString(<Landing />);
 
-    expect(html).toContain('role="img"');
-    expect(html).toContain("Preview of the shared canvas");
+    expect(html).toContain("<fieldset");
+    expect(html).toContain("Interactive shared canvas preview");
+    expect(html).toContain('aria-label="Stream drop zone"');
+    expect(html).toContain("Drag it or use the arrow keys");
+    expect(html).toContain("visual only");
+    expect(html).not.toContain("<audio");
   });
 });
 

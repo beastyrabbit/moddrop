@@ -8,7 +8,7 @@ import type { IncomingMessage } from "node:http";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
-const origin = "https://frontend.localhost:1355";
+const origin = "https://moddrop.localhost:1355";
 const issuer = "https://example.clerk.accounts.dev";
 const ownerUserId = "user_owner123";
 const collaboratorUserId = "user_collab123";

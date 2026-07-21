@@ -6,8 +6,8 @@ const databasePath = process.env.DATABASE_PATH ?? "data/stream-canvas.db";
 const uploadsDir = process.env.UPLOADS_DIR ?? "data/uploads";
 const defaultCorsOrigins = [
   "http://localhost:3000",
-  "http://frontend.localhost:1355",
-  "https://frontend.localhost:1355",
+  "http://moddrop.localhost:1355",
+  "https://moddrop.localhost:1355",
 ];
 const configuredCorsOrigins = process.env.CORS_ORIGINS?.split(",")
   .map((origin) => origin.trim())

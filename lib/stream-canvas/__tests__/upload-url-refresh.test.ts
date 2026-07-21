@@ -29,7 +29,7 @@ describe("upload URL refresh timing", () => {
 
     const resolved = await resolveEditorUploadUrl(roomId, src, getToken);
     expect(resolved).toBe(
-      `http://stream-canvas.localhost:1355${src}?token=signed-token`,
+      `https://moddrop-stream-canvas.localhost:1355${src}?token=signed-token`,
     );
 
     const delay = getEditorUploadUrlRefreshDelayMs(roomId, src);

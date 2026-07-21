@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Unbounded, Space_Mono } from "next/font/google";
+import {
+  DM_Sans,
+  DM_Serif_Display,
+  Space_Mono,
+  Unbounded,
+} from "next/font/google";
 import { Toaster } from "sonner";
 import { AppProviders } from "@/components/providers";
 import {
@@ -26,6 +31,18 @@ const display = Unbounded({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800", "900"],
+});
+
+const productSans = DM_Sans({
+  variable: "--font-dm-sans",
+  subsets: ["latin"],
+});
+
+const productDisplay = DM_Serif_Display({
+  variable: "--font-dm-serif",
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -59,12 +76,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${sans.variable} ${mono.variable} ${display.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
+        className={`${sans.variable} ${mono.variable} ${display.variable} ${productSans.variable} ${productDisplay.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
       >
         <ClerkProvider {...clerkProviderProps}>
           <AppProviders>
             {children}
-            <Toaster richColors position="bottom-right" />
+            <Toaster position="bottom-right" />
           </AppProviders>
         </ClerkProvider>
       </body>

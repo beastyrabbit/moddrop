@@ -26,8 +26,8 @@ pnpm run dev:convex
 pnpm run dev:canvas
 ```
 
-`frontend.localhost:1355`  
-`stream-canvas.localhost:1355`
+- `https://moddrop.localhost:1355`
+- `https://moddrop-stream-canvas.localhost:1355`
 
 ## Check
 

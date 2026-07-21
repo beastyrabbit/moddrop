@@ -1,2 +1,4 @@
 packages:
   - backend/stream-canvas
+allowBuilds:
+  better-sqlite3: true

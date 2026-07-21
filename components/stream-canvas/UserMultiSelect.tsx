@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { Search, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, Search, X } from "lucide-react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
 
@@ -27,16 +27,16 @@ export function UserMultiSelect({
 }: UserMultiSelectProps) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const generatedId = useId();
+  const listboxId = `${inputId ?? generatedId}-results`;
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Search users by prefix
   const results = useQuery(
     api.users.searchByUsername,
     search.trim().length > 0 ? { prefix: search.trim() } : "skip",
   );
 
-  // Resolve current value to usernames for display
   const resolved = useQuery(
     api.users.resolveUsernames,
     value.length > 0 ? { userIds: value } : "skip",
@@ -44,8 +44,8 @@ export function UserMultiSelect({
 
   const selectedMap = new Map<string, string>();
   if (resolved) {
-    for (const r of resolved) {
-      selectedMap.set(r.userId, r.username);
+    for (const user of resolved) {
+      selectedMap.set(user.userId, user.username);
     }
   }
 
@@ -68,12 +68,11 @@ export function UserMultiSelect({
     [value, onChange],
   );
 
-  // Close dropdown on outside click
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handler = (event: MouseEvent) => {
       if (
         containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
+        !containerRef.current.contains(event.target as Node)
       ) {
         setOpen(false);
       }
@@ -82,88 +81,145 @@ export function UserMultiSelect({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Filter out already-selected users from results
-  const filtered = results?.filter((r) => !value.includes(r.userId)) ?? [];
+  const filteredResults =
+    results?.filter((user) => !value.includes(user.userId)) ?? [];
+  const hasSearch = search.trim().length > 0;
+  const showResults = open && hasSearch;
 
   return (
     <div ref={containerRef} className="relative">
-      {/* Selected tags */}
       <div
         className={cn(
-          "flex flex-wrap items-center gap-1.5 rounded-lg border border-border/50",
+          "flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg border border-input",
           "bg-background px-2 py-1.5 text-sm",
-          "focus-within:ring-1 focus-within:ring-foreground/20",
+          "focus-within:border-[var(--app-brass-highlight)] focus-within:ring-2 focus-within:ring-[rgba(216,178,116,0.22)]",
         )}
       >
-        {value.map((userId) => (
-          <span
-            key={userId}
-            className="inline-flex items-center gap-1 rounded-md bg-foreground/10 px-2 py-0.5 text-xs font-medium"
-          >
-            {selectedMap.get(userId) ?? userId}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRemove(userId);
-              }}
-              className="ml-0.5 rounded-full p-0.5 hover:bg-foreground/20"
+        {value.map((userId) => {
+          const resolvedName = selectedMap.get(userId);
+          const displayName =
+            resolvedName ?? (resolved === undefined ? "Loading user…" : userId);
+
+          return (
+            <span
+              key={userId}
+              className="inline-flex min-h-8 max-w-full items-center gap-1 rounded-md border border-border bg-secondary pl-2.5 text-xs font-semibold text-foreground"
             >
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-        <div className="relative flex flex-1 items-center">
-          <Search className="absolute left-0 size-3.5 text-muted-foreground" />
+              {resolved === undefined ? (
+                <Loader2
+                  className="size-3 shrink-0 animate-spin text-muted-foreground"
+                  aria-hidden="true"
+                />
+              ) : null}
+              <span className="truncate">{displayName}</span>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleRemove(userId);
+                }}
+                aria-label={`Remove ${resolvedName ?? userId}`}
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--app-billiard-hover)] hover:text-foreground"
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </span>
+          );
+        })}
+
+        <div className="relative flex min-w-32 flex-1 items-center">
+          <Search
+            className="pointer-events-none absolute left-1 size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           <input
             id={inputId}
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={showResults}
+            aria-controls={listboxId}
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
+            onChange={(event) => {
+              setSearch(event.target.value);
               setOpen(true);
             }}
             onFocus={() => {
-              if (search.trim().length > 0) setOpen(true);
+              if (hasSearch) setOpen(true);
             }}
-            placeholder={value.length === 0 ? "Search by username…" : ""}
-            className="w-full min-w-[120px] bg-transparent py-1 pl-5 text-sm outline-none placeholder:text-muted-foreground/50"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setOpen(false);
+              }
+            }}
+            placeholder={
+              value.length === 0 ? "Search for a username…" : "Add another…"
+            }
+            className="min-h-8 w-full bg-transparent py-1 pr-2 pl-7 text-base text-foreground outline-none placeholder:text-muted-foreground/70 sm:text-sm"
           />
         </div>
       </div>
 
-      {/* Dropdown */}
-      {open && search.trim().length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-border/50 bg-background shadow-lg">
+      {value.length === 0 && !hasSearch ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          No collaborators added.
+        </p>
+      ) : null}
+
+      {showResults ? (
+        <div
+          id={listboxId}
+          role="listbox"
+          aria-label="User search results"
+          aria-live="polite"
+          className="absolute z-50 mt-2 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+        >
           {results === undefined ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">
+            <div
+              className="flex min-h-11 items-center gap-2 px-3 text-sm text-muted-foreground"
+              role="option"
+              aria-disabled="true"
+              aria-selected="false"
+              tabIndex={-1}
+            >
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               Searching…
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-muted-foreground">
-              No users found
+          ) : filteredResults.length === 0 ? (
+            <div
+              role="option"
+              aria-disabled="true"
+              aria-selected="false"
+              tabIndex={-1}
+              className="px-3 py-3 text-sm text-muted-foreground"
+            >
+              No users found for “{search.trim()}”.
             </div>
           ) : (
-            <ul className="max-h-48 overflow-y-auto py-1">
-              {filtered.map((entry) => (
-                <li key={entry.userId}>
+            <div className="max-h-52 overflow-y-auto p-1">
+              {filteredResults.map((entry) => (
+                <div key={entry.userId} role="none">
                   <button
                     type="button"
+                    role="option"
+                    aria-selected="false"
                     onClick={() => handleSelect(entry)}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-foreground/5"
+                    className="flex min-h-11 w-full min-w-0 flex-col justify-center rounded-md px-3 py-2 text-left hover:bg-[var(--app-billiard-hover)]"
                   >
-                    <span className="font-medium">{entry.username}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">
+                      {entry.username}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
                       {entry.userId}
                     </span>
                   </button>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
