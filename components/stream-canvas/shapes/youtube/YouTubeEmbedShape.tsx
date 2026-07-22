@@ -24,6 +24,8 @@ import {
   getEffectiveMediaVolume,
 } from "@/lib/stream-canvas/media-volume";
 import { rectIntersectsStreamZone } from "@/lib/stream-canvas/stream-zone";
+import type { YouTubePolicy } from "@/lib/stream-canvas/types";
+import { useMediaPreference } from "../../media-preferences";
 
 // ---------------------------------------------------------------------------
 // Shape type
@@ -34,7 +36,6 @@ type YouTubeEmbedShapeProps = {
   h: number;
   url: string;
   volume?: number;
-  editorAudioEnabled?: boolean;
   isPlaying?: boolean;
   playbackPosition?: number;
   playbackUpdatedAt?: number;
@@ -60,7 +61,6 @@ export const youtubeEmbedShapeProps: RecordProps<YouTubeEmbedShape> = {
   h: T.number,
   url: T.string,
   volume: T.optional(T.number),
-  editorAudioEnabled: T.optional(T.boolean),
   isPlaying: T.optional(T.boolean),
   playbackPosition: T.optional(T.number),
   playbackUpdatedAt: T.optional(T.number),
@@ -76,6 +76,9 @@ export const YouTubeInteractionCtx =
     interactiveShapeId: null,
     setInteractiveShapeId: () => {},
   });
+
+export const YouTubePolicyCtx = createContext<YouTubePolicy>("preview_only");
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -263,10 +266,11 @@ function YouTubeEmbedPlayer({
   const interactiveRef = useRef(false);
   const readonlyRef = useRef(isReadonly);
   const syncedVolume = shape.props.volume ?? DEFAULT_MEDIA_VOLUME;
-  const syncedEditorAudioEnabled = shape.props.editorAudioEnabled ?? false;
+  const previewPreference = useMediaPreference(shape.id);
   const audibleInReadonlyRef = useRef(isAudibleInReadonly);
   const syncedVolumeRef = useRef(syncedVolume);
-  const editorAudioEnabledRef = useRef(syncedEditorAudioEnabled);
+  const editorAudioEnabledRef = useRef(previewPreference.enabled);
+  const editorVolumeRef = useRef(previewPreference.volume);
   const updatePropsRef = useRef(onUpdateProps);
   const syncedStateRef = useRef({
     isPlaying: shape.props.isPlaying ?? false,
@@ -284,7 +288,9 @@ function YouTubeEmbedPlayer({
       return;
     }
 
-    const effectiveVolume = getEffectiveMediaVolume(syncedVolumeRef.current);
+    const effectiveVolume =
+      getEffectiveMediaVolume(syncedVolumeRef.current) *
+      editorVolumeRef.current;
     const isVolumeMuted = effectiveVolume <= 0.001;
 
     player.setVolume?.(Math.round(effectiveVolume * 100));
@@ -355,7 +361,8 @@ function YouTubeEmbedPlayer({
     readonlyRef.current = isReadonly;
     audibleInReadonlyRef.current = isAudibleInReadonly;
     syncedVolumeRef.current = syncedVolume;
-    editorAudioEnabledRef.current = syncedEditorAudioEnabled;
+    editorAudioEnabledRef.current = previewPreference.enabled;
+    editorVolumeRef.current = previewPreference.volume;
     updatePropsRef.current = onUpdateProps;
     syncedStateRef.current = {
       isPlaying: syncedIsPlaying,
@@ -393,7 +400,8 @@ function YouTubeEmbedPlayer({
     syncedPlaybackPosition,
     syncedPlaybackUpdatedAt,
     syncedVolume,
-    syncedEditorAudioEnabled,
+    previewPreference.enabled,
+    previewPreference.volume,
   ]);
 
   // Reset load attempts when the video changes so a new URL always gets a
@@ -601,7 +609,7 @@ function YouTubeEmbedPlayer({
             top: 8,
             right: 8,
             padding: "6px 10px",
-            borderRadius: 999,
+            borderRadius: 6,
             border: "1px solid rgba(255,255,255,0.25)",
             background: "rgba(0,0,0,0.78)",
             color: "#fff",
@@ -674,6 +682,7 @@ function YouTubeEmbedShapeComponent({
   editor: Editor;
   shape: YouTubeEmbedShape;
 }) {
+  const youtubePolicy = useContext(YouTubePolicyCtx);
   const videoId = extractYouTubeId(shape.props.url);
   const isReadonly = useValue(
     "youtube readonly state",
@@ -689,6 +698,10 @@ function YouTubeEmbedShapeComponent({
     pageBounds && rectIntersectsStreamZone(pageBounds),
   );
 
+  if (isReadonly && youtubePolicy !== "allow_on_air") {
+    return null;
+  }
+
   return (
     <HTMLContainer
       id={shape.id}
@@ -700,7 +713,25 @@ function YouTubeEmbedShapeComponent({
         background: "#000",
       }}
     >
-      {videoId ? (
+      {youtubePolicy === "disabled" ? (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#111827",
+            color: "rgba(255,255,255,0.72)",
+            fontFamily: "sans-serif",
+            fontSize: 13,
+            padding: 20,
+            textAlign: "center",
+          }}
+        >
+          YouTube is disabled by the room owner.
+        </div>
+      ) : videoId ? (
         <YouTubeEmbedPlayer
           editor={editor}
           shape={shape}
@@ -776,7 +807,6 @@ export class YouTubeEmbedShapeUtil extends BaseBoxShapeUtil<YouTubeEmbedShape> {
       h: 270,
       url: "",
       volume: DEFAULT_MEDIA_VOLUME,
-      editorAudioEnabled: false,
       isPlaying: false,
       playbackPosition: 0,
       playbackUpdatedAt: 0,
@@ -789,6 +819,10 @@ export class YouTubeEmbedShapeUtil extends BaseBoxShapeUtil<YouTubeEmbedShape> {
       height: shape.props.h,
       isFilled: true,
     });
+  }
+
+  override getIndicatorPath(): undefined {
+    return undefined;
   }
 
   component(shape: YouTubeEmbedShape) {

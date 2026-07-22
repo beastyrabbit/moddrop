@@ -11,7 +11,6 @@ type YouTubeEmbedShapeProps = {
   h: number;
   url: string;
   volume?: number;
-  editorAudioEnabled?: boolean;
   isPlaying?: boolean;
   playbackPosition?: number;
   playbackUpdatedAt?: number;
@@ -23,7 +22,6 @@ type AudioPlayerShapeProps = {
   url: string;
   volume: number;
   loop: boolean;
-  editorAudioEnabled?: boolean;
   isPlaying?: boolean;
   playbackPosition?: number;
   playbackUpdatedAt?: number;
@@ -44,7 +42,6 @@ export const youtubeEmbedShapeProps: RecordProps<YouTubeEmbedShape> = {
   h: T.number,
   url: T.string,
   volume: T.optional(T.number),
-  editorAudioEnabled: T.optional(T.boolean),
   isPlaying: T.optional(T.boolean),
   playbackPosition: T.optional(T.number),
   playbackUpdatedAt: T.optional(T.number),
@@ -56,7 +53,6 @@ export const audioPlayerShapeProps: RecordProps<AudioPlayerShape> = {
   url: T.string,
   volume: T.number,
   loop: T.boolean,
-  editorAudioEnabled: T.optional(T.boolean),
   isPlaying: T.optional(T.boolean),
   playbackPosition: T.optional(T.number),
   playbackUpdatedAt: T.optional(T.number),

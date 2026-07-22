@@ -29,7 +29,6 @@ function makeYouTubeShape() {
       h: 270,
       url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
       volume: 1,
-      editorAudioEnabled: false,
     },
     meta: {},
   };
@@ -53,7 +52,6 @@ function makeAudioShape() {
       url: "https://example.com/audio.mp3",
       volume: 0.8,
       loop: false,
-      editorAudioEnabled: false,
     },
     meta: {},
   };

@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { Readable } from "node:stream";
 import { getConnInfo } from "@hono/node-server/conninfo";
-import { eq, or, sql } from "drizzle-orm";
+import { and, count, eq, inArray, or } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -19,19 +16,15 @@ import {
 import { config } from "./config.ts";
 import { db } from "./db.ts";
 import { parseSingleByteRange } from "./http-range.ts";
-import {
-  generateObsSecret,
-  hashObsSecret,
-  isHashedObsSecret,
-  verifyObsSecret,
-} from "./obs-secret.ts";
+import { generateObsSecret, hashObsSecret } from "./obs-secret.ts";
+import { objectStore } from "./object-store.ts";
 import { FixedWindowRateLimit, rateLimitKeyFromHeaders } from "./rate-limit.ts";
 import {
   isValidRoomId,
   MAX_ROOM_CONFIG_BODY_BYTES,
   validateRoomConfigUpdate,
 } from "./room-validation.ts";
-import { rooms, uploads } from "./schema.ts";
+import { roomMembers, rooms, uploads } from "./schema.ts";
 import type { ClerkClaims } from "./types.ts";
 import {
   sanitizeUploadFilename,
@@ -103,15 +96,13 @@ authed.use("*", async (c, next) => {
 
 export const api = new Hono();
 
-// Health check
-api.get("/health", (c) => c.json({ status: "ok" }));
-
 // Serve uploaded files (public)
 api.get("/uploads/:uploadId/:filename", async (c) => {
   const upload = await db.query.uploads.findFirst({
     where: eq(uploads.id, c.req.param("uploadId")),
   });
-  if (!upload || !existsSync(upload.path)) {
+  const storedObject = upload ? await objectStore.stat(upload.objectKey) : null;
+  if (!upload || !storedObject) {
     return c.json({ error: "Not found" }, 404);
   }
 
@@ -125,8 +116,7 @@ api.get("/uploads/:uploadId/:filename", async (c) => {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
-  const fileStats = await stat(upload.path);
-  const fileSize = fileStats.size;
+  const fileSize = storedObject.size;
   const range = parseSingleByteRange(c.req.header("range"), fileSize);
   const contentType = upload.mimeType || "application/octet-stream";
 
@@ -146,15 +136,15 @@ api.get("/uploads/:uploadId/:filename", async (c) => {
   if (range.kind === "range") {
     c.header("Content-Range", `bytes ${range.start}-${range.end}/${fileSize}`);
     c.header("Content-Length", String(range.length));
-    const stream = createReadStream(upload.path, {
+    const stream = await objectStore.read(upload.objectKey, {
       start: range.start,
-      end: range.end,
+      length: range.length,
     });
     return c.body(Readable.toWeb(stream) as ReadableStream, 206);
   }
 
   c.header("Content-Length", String(fileSize));
-  const stream = createReadStream(upload.path);
+  const stream = await objectStore.read(upload.objectKey);
   return c.body(Readable.toWeb(stream) as ReadableStream);
 });
 
@@ -195,6 +185,7 @@ api.post("/obs/token", async (c) => {
     token,
     roomId: room.id,
     twitchChannel: room.twitchChannel,
+    youtubePolicy: room.youtubePolicy,
     expiresIn: config.obsTokenTtlSeconds,
   });
 });
@@ -251,26 +242,26 @@ authed.post("/rooms", async (c) => {
     where: eq(rooms.ownerClerkId, user.sub),
   });
   if (existing) {
-    return c.json(sanitizeOwnerRoom(existing));
+    return c.json(await ownerRoomResponse(existing));
   }
 
   const id = uuidv4();
   const now = new Date();
   const obsSecret = generateObsSecret();
 
-  await db.insert(rooms).values({
-    id,
-    ownerClerkId: user.sub,
-    obsSecret: hashObsSecret(obsSecret),
-    allowedUsers: [],
-    createdAt: now,
-    updatedAt: now,
-  });
+  const [room] = await db
+    .insert(rooms)
+    .values({
+      id,
+      ownerClerkId: user.sub,
+      obsSecret: hashObsSecret(obsSecret),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
 
-  const room = await db.query.rooms.findFirst({ where: eq(rooms.id, id) });
-  if (!room)
-    return c.json({ error: "Room created but could not be retrieved" }, 500);
-  return c.json(sanitizeOwnerRoom(room, obsSecret), 201);
+  if (!room) return c.json({ error: "Room creation failed" }, 500);
+  return c.json(await ownerRoomResponse(room, obsSecret), 201);
 });
 
 // Get current user's room
@@ -280,7 +271,7 @@ authed.get("/rooms/me", async (c) => {
     where: eq(rooms.ownerClerkId, user.sub),
   });
   if (!room) return c.json({ error: "No room found" }, 404);
-  return c.json(sanitizeOwnerRoom(room));
+  return c.json(await ownerRoomResponse(room));
 });
 
 // List all rooms the user can access (own room + rooms they're allowed on)
@@ -288,20 +279,51 @@ authed.get("/rooms/accessible", async (c) => {
   const user = c.get("clerkUser");
 
   const accessible = await db
-    .select()
+    .select({
+      id: rooms.id,
+      twitchChannel: rooms.twitchChannel,
+      youtubePolicy: rooms.youtubePolicy,
+      ownerClerkId: rooms.ownerClerkId,
+      createdAt: rooms.createdAt,
+      updatedAt: rooms.updatedAt,
+    })
     .from(rooms)
+    .leftJoin(roomMembers, eq(roomMembers.roomId, rooms.id))
     .where(
       or(
         eq(rooms.ownerClerkId, user.sub),
-        sql`EXISTS (
-          SELECT 1
-          FROM json_each(${rooms.allowedUsers})
-          WHERE json_each.value = ${user.sub}
-        )`,
+        eq(roomMembers.clerkUserId, user.sub),
       ),
-    );
+    )
+    .groupBy(rooms.id);
 
-  return c.json(accessible.map((r) => sanitizeAccessibleRoom(r, user.sub)));
+  const roomIds = accessible.map((room) => room.id);
+  const collaboratorCounts =
+    roomIds.length === 0
+      ? []
+      : await db
+          .select({
+            roomId: roomMembers.roomId,
+            collaboratorCount: count(roomMembers.clerkUserId),
+          })
+          .from(roomMembers)
+          .where(inArray(roomMembers.roomId, roomIds))
+          .groupBy(roomMembers.roomId);
+  const collaboratorCountByRoom = new Map(
+    collaboratorCounts.map((row) => [row.roomId, row.collaboratorCount]),
+  );
+
+  return c.json(
+    accessible.map((room) =>
+      sanitizeAccessibleRoom(
+        {
+          ...room,
+          collaboratorCount: collaboratorCountByRoom.get(room.id) ?? 0,
+        },
+        user.sub,
+      ),
+    ),
+  );
 });
 
 // Update room config
@@ -318,18 +340,36 @@ authed.patch("/rooms/:id", async (c) => {
     return c.json({ error: validation.error }, 400);
   }
 
-  await db
-    .update(rooms)
-    .set({
-      ...(validation.value.twitchChannel !== undefined && {
-        twitchChannel: validation.value.twitchChannel,
-      }),
-      ...(validation.value.allowedUsers !== undefined && {
-        allowedUsers: validation.value.allowedUsers,
-      }),
-      updatedAt: new Date(),
-    })
-    .where(eq(rooms.id, room.id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(rooms)
+      .set({
+        ...(validation.value.twitchChannel !== undefined && {
+          twitchChannel: validation.value.twitchChannel,
+        }),
+        ...(validation.value.youtubePolicy !== undefined && {
+          youtubePolicy: validation.value.youtubePolicy,
+          youtubeRiskAcknowledgedAt:
+            validation.value.youtubePolicy === "allow_on_air"
+              ? new Date()
+              : null,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(eq(rooms.id, room.id));
+
+    if (validation.value.allowedUsers !== undefined) {
+      await tx.delete(roomMembers).where(eq(roomMembers.roomId, room.id));
+      if (validation.value.allowedUsers.length > 0) {
+        await tx.insert(roomMembers).values(
+          validation.value.allowedUsers.map((clerkUserId) => ({
+            roomId: room.id,
+            clerkUserId,
+          })),
+        );
+      }
+    }
+  });
 
   const updated = await db.query.rooms.findFirst({
     where: eq(rooms.id, room.id),
@@ -338,7 +378,7 @@ authed.patch("/rooms/:id", async (c) => {
     return c.json({ error: "Updated room could not be retrieved" }, 500);
   }
 
-  return c.json(sanitizeOwnerRoom(updated));
+  return c.json(await ownerRoomResponse(updated));
 });
 
 // Mint a short-lived editor WebSocket ticket. Raw Clerk JWTs never go in WS URLs.
@@ -421,7 +461,7 @@ authed.post("/rooms/:id/upload", async (c) => {
     const bodyResult = await readRequestBody(
       c,
       config.maxUploadBodyBytes,
-      "File too large (max 10 MB)",
+      `File too large (max ${formatMegabytes(config.maxUploadFileBytes)} MB)`,
     );
     if (!bodyResult.ok) return bodyResult.response;
 
@@ -431,7 +471,12 @@ authed.post("/rooms/:id/upload", async (c) => {
     }
 
     if (file.bytes.byteLength > config.maxUploadFileBytes) {
-      return c.json({ error: "File too large (max 10 MB)" }, 413);
+      return c.json(
+        {
+          error: `File too large (max ${formatMegabytes(config.maxUploadFileBytes)} MB)`,
+        },
+        413,
+      );
     }
 
     const sniffedMimeType = sniffUploadMime(file.bytes);
@@ -445,12 +490,10 @@ authed.post("/rooms/:id/upload", async (c) => {
     }
 
     const uploadId = uuidv4();
-    const roomDir = join(config.uploadsDir, room.id);
-    await mkdir(roomDir, { recursive: true });
     const safeName = sanitizeUploadFilename(file.name);
-    const filePath = join(roomDir, `${uploadId}-${safeName}`);
+    const objectKey = `${room.id}/${uploadId}-${safeName}`;
 
-    await writeFile(filePath, file.bytes);
+    await objectStore.put(objectKey, file.bytes, sniffedMimeType);
 
     try {
       await db.insert(uploads).values({
@@ -459,11 +502,11 @@ authed.post("/rooms/:id/upload", async (c) => {
         filename: safeName,
         mimeType: sniffedMimeType,
         size: file.bytes.byteLength,
-        path: filePath,
+        objectKey,
         createdAt: new Date(),
       });
     } catch (err) {
-      await rm(filePath, { force: true }).catch((cleanupErr) => {
+      await objectStore.remove(objectKey).catch((cleanupErr) => {
         console.error("[upload] failed to clean up orphaned file:", cleanupErr);
       });
       throw err;
@@ -504,42 +547,38 @@ async function findAccessibleRoom(c: Context<AuthEnv>) {
   if (!room) return null;
 
   const isOwner = room.ownerClerkId === user.sub;
-  const isAllowed = room.allowedUsers?.includes(user.sub) ?? false;
+  const member = isOwner
+    ? null
+    : await db.query.roomMembers.findFirst({
+        where: and(
+          eq(roomMembers.roomId, room.id),
+          eq(roomMembers.clerkUserId, user.sub),
+        ),
+      });
+  const isAllowed = Boolean(member);
   if (!isOwner && !isAllowed) return null;
   return room;
 }
 
 async function findRoomByObsSecret(secret: string) {
   const hashedSecret = hashObsSecret(secret);
-  const hashedRoom = await db.query.rooms.findFirst({
+  return db.query.rooms.findFirst({
     where: eq(rooms.obsSecret, hashedSecret),
   });
-  if (hashedRoom) return hashedRoom;
-
-  const legacyRoom = await db.query.rooms.findFirst({
-    where: eq(rooms.obsSecret, secret),
-  });
-  if (!legacyRoom || !verifyObsSecret(secret, legacyRoom.obsSecret)) {
-    return null;
-  }
-
-  if (!isHashedObsSecret(legacyRoom.obsSecret)) {
-    await db
-      .update(rooms)
-      .set({ obsSecret: hashedSecret, updatedAt: new Date() })
-      .where(eq(rooms.id, legacyRoom.id));
-  }
-
-  return legacyRoom;
 }
 
 /** Owner settings endpoints keep full collaborator config, but never the stored secret. */
-function sanitizeOwnerRoom(room: RoomRecord, obsSetupSecret?: string) {
+async function ownerRoomResponse(room: RoomRecord, obsSetupSecret?: string) {
+  const members = await db
+    .select({ clerkUserId: roomMembers.clerkUserId })
+    .from(roomMembers)
+    .where(eq(roomMembers.roomId, room.id));
   return {
     id: room.id,
     ownerClerkId: room.ownerClerkId,
     twitchChannel: room.twitchChannel,
-    allowedUsers: room.allowedUsers ?? [],
+    youtubePolicy: room.youtubePolicy,
+    allowedUsers: members.map((member) => member.clerkUserId),
     createdAt: room.createdAt?.toISOString() ?? null,
     updatedAt: room.updatedAt?.toISOString() ?? null,
     ...(obsSetupSecret ? { obsSetupSecret } : {}),
@@ -547,11 +586,15 @@ function sanitizeOwnerRoom(room: RoomRecord, obsSetupSecret?: string) {
 }
 
 /** Shared room listings expose only what collaborators need to connect. */
-function sanitizeAccessibleRoom(room: RoomRecord, clerkUserId: string) {
+function sanitizeAccessibleRoom(
+  room: AccessibleRoomRecord,
+  clerkUserId: string,
+) {
   return {
     id: room.id,
     twitchChannel: room.twitchChannel,
-    collaboratorCount: room.allowedUsers?.length ?? 0,
+    youtubePolicy: room.youtubePolicy,
+    collaboratorCount: room.collaboratorCount,
     isOwner: room.ownerClerkId === clerkUserId,
     createdAt: room.createdAt?.toISOString() ?? null,
     updatedAt: room.updatedAt?.toISOString() ?? null,
@@ -590,7 +633,9 @@ function logSecurityEvent(
   event: string,
   fields: Record<string, string | undefined> = {},
 ): void {
-  const clientHash = createHash("sha256").update(clientKey(c)).digest("base64url");
+  const clientHash = createHash("sha256")
+    .update(clientKey(c))
+    .digest("base64url");
   console.warn("[security]", {
     event,
     client: clientHash.slice(0, 16),
@@ -688,7 +733,10 @@ interface UploadedFilePart {
   bytes: Buffer;
 }
 
-function parseMultipartUpload(c: Context, bytes: Uint8Array): UploadedFilePart | null {
+function parseMultipartUpload(
+  c: Context,
+  bytes: Uint8Array,
+): UploadedFilePart | null {
   const contentType = c.req.header("content-type");
   const boundary = parseMultipartBoundary(contentType);
   if (!boundary) return null;
@@ -720,7 +768,10 @@ function parseMultipartUpload(c: Context, bytes: Uint8Array): UploadedFilePart |
   if (!filename) return null;
 
   const dataStart = headerEnd + 4;
-  const nextBoundary = buffer.indexOf(Buffer.from(`\r\n--${boundary}`), dataStart);
+  const nextBoundary = buffer.indexOf(
+    Buffer.from(`\r\n--${boundary}`),
+    dataStart,
+  );
   if (nextBoundary === -1) return null;
 
   return {
@@ -729,7 +780,9 @@ function parseMultipartUpload(c: Context, bytes: Uint8Array): UploadedFilePart |
   };
 }
 
-function parseMultipartBoundary(contentType: string | undefined): string | null {
+function parseMultipartBoundary(
+  contentType: string | undefined,
+): string | null {
   const match = contentType?.match(/(?:^|;)\s*boundary=(?:"([^"]+)"|([^;]+))/i);
   const boundary = (match?.[1] ?? match?.[2])?.trim();
   if (!boundary || boundary.length > 200) return null;
@@ -749,7 +802,14 @@ function parseMultipartHeaders(rawHeaders: string): Map<string, string> {
   return headers;
 }
 
-function parseDispositionValue(disposition: string, name: string): string | null {
+function formatMegabytes(bytes: number): number {
+  return Math.floor(bytes / (1024 * 1024));
+}
+
+function parseDispositionValue(
+  disposition: string,
+  name: string,
+): string | null {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = disposition.match(
     new RegExp(`(?:^|;)\\s*${escapedName}="([^"]*)"`, "i"),
@@ -772,18 +832,14 @@ function clientKey(c: Context): string {
   );
 }
 
-interface RoomRecord {
-  id: string;
-  ownerClerkId: string;
-  twitchChannel: string | null;
-  obsSecret: string;
-  allowedUsers: string[] | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-}
-
-interface UploadRecord {
-  id: string;
-  roomId: string;
-  filename: string;
-}
+type RoomRecord = typeof rooms.$inferSelect;
+type AccessibleRoomRecord = Pick<
+  RoomRecord,
+  | "id"
+  | "ownerClerkId"
+  | "twitchChannel"
+  | "youtubePolicy"
+  | "createdAt"
+  | "updatedAt"
+> & { collaboratorCount: number };
+type UploadRecord = typeof uploads.$inferSelect;

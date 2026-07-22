@@ -16,12 +16,14 @@ import {
   resolveObsUploadUrl,
 } from "@/lib/stream-canvas/api";
 import { STREAM_ZONE } from "@/lib/stream-canvas/stream-zone";
+import type { YouTubePolicy } from "@/lib/stream-canvas/types";
 import { AudioUploadCtx } from "./shapes/audio/AudioPlayerShape";
 import {
   CanvasMediaRefreshContext,
   customShapeUtils,
   syncShapeUtils,
 } from "./shapes/shared";
+import { YouTubePolicyCtx } from "./shapes/youtube/YouTubeEmbedShape";
 
 const TLDRAW_LICENSE_KEY = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
@@ -74,6 +76,8 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [youtubePolicy, setYouTubePolicy] =
+    useState<YouTubePolicy>("preview_only");
   const initialTokenExchangeRef = useRef<ReturnType<
     typeof exchangeObsToken
   > | null>(null);
@@ -87,6 +91,7 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
       .then((data) => {
         if (!cancelled) {
           setRoomId(data.roomId);
+          setYouTubePolicy(data.youtubePolicy);
           setReady(true);
         }
       })
@@ -107,6 +112,7 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
       initialTokenExchangeRef.current ?? exchangeObsToken(obsSecret);
     initialTokenExchangeRef.current = null;
     const data = await tokenExchangePromise;
+    setYouTubePolicy(data.youtubePolicy);
     return buildObsWsUrl(data.roomId, data.token);
   }, [obsSecret]);
 
@@ -192,15 +198,17 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
     >
       <CanvasMediaRefreshContext.Provider value={mediaRefreshCtx}>
         <AudioUploadCtx.Provider value={audioUploadCtx}>
-          <Tldraw
-            store={storeWithStatus.store}
-            shapeUtils={customShapeUtils}
-            licenseKey={TLDRAW_LICENSE_KEY}
-            hideUi
-            components={obsComponents}
-          >
-            <OBSSetup />
-          </Tldraw>
+          <YouTubePolicyCtx.Provider value={youtubePolicy}>
+            <Tldraw
+              store={storeWithStatus.store}
+              shapeUtils={customShapeUtils}
+              licenseKey={TLDRAW_LICENSE_KEY}
+              hideUi
+              components={obsComponents}
+            >
+              <OBSSetup />
+            </Tldraw>
+          </YouTubePolicyCtx.Provider>
         </AudioUploadCtx.Provider>
       </CanvasMediaRefreshContext.Provider>
     </div>

@@ -74,7 +74,12 @@ import {
   getStreamZoneViewportPlacement,
   STREAM_ZONE,
 } from "@/lib/stream-canvas/stream-zone";
+import type { YouTubePolicy } from "@/lib/stream-canvas/types";
 import { CanvasStylePanel } from "./MediaInspectorPanel";
+import {
+  MediaPreferencesProvider,
+  useMediaPreference,
+} from "./media-preferences";
 import {
   type AudioPlayerShape,
   AudioUploadCtx,
@@ -88,6 +93,7 @@ import {
 import {
   type YouTubeEmbedShape,
   YouTubeInteractionCtx,
+  YouTubePolicyCtx,
 } from "./shapes/youtube/YouTubeEmbedShape";
 
 const TLDRAW_LICENSE_KEY = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
@@ -97,6 +103,133 @@ const CANVAS_EDITOR_OPTIONS = { maxPages: 1 } as const;
 interface CanvasEditorProps {
   roomId: string;
   twitchChannel?: string | null;
+  youtubePolicy: YouTubePolicy;
+}
+
+interface TwitchPlayer {
+  setMuted(muted: boolean): void;
+  setVolume(volume: number): void;
+}
+
+interface TwitchEmbedInstance {
+  addEventListener(event: string, callback: () => void): void;
+  getPlayer(): TwitchPlayer;
+}
+
+interface TwitchEmbedConstructor {
+  new (
+    element: HTMLElement,
+    options: Record<string, string | string[] | number | boolean>,
+  ): TwitchEmbedInstance;
+  VIDEO: string;
+  VIDEO_READY: string;
+}
+
+declare global {
+  interface Window {
+    Twitch?: { Embed: TwitchEmbedConstructor };
+  }
+}
+
+let twitchEmbedScriptPromise: Promise<TwitchEmbedConstructor> | null = null;
+
+function loadTwitchEmbed(): Promise<TwitchEmbedConstructor> {
+  if (window.Twitch?.Embed) return Promise.resolve(window.Twitch.Embed);
+  if (twitchEmbedScriptPromise) return twitchEmbedScriptPromise;
+  const promise = new Promise<TwitchEmbedConstructor>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src="https://embed.twitch.tv/embed/v1.js"]',
+    );
+    const script = existing ?? document.createElement("script");
+    const handleLoad = () => {
+      if (window.Twitch?.Embed) resolve(window.Twitch.Embed);
+      else reject(new Error("Twitch embed API did not initialize"));
+    };
+    script.addEventListener("load", handleLoad, { once: true });
+    script.addEventListener(
+      "error",
+      () => reject(new Error("Failed to load Twitch embed API")),
+      { once: true },
+    );
+    if (!existing) {
+      script.src = "https://embed.twitch.tv/embed/v1.js";
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  }).catch((error) => {
+    twitchEmbedScriptPromise = null;
+    throw error;
+  });
+  twitchEmbedScriptPromise = promise;
+  return promise;
+}
+
+function TwitchPreview({
+  channel,
+  hostname,
+  interactive,
+}: {
+  channel: string;
+  hostname: string;
+  interactive: boolean;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<TwitchPlayer | null>(null);
+  const preference = useMediaPreference("twitch-preview");
+  const preferenceRef = useRef({
+    enabled: preference.enabled,
+    volume: preference.volume,
+  });
+  preferenceRef.current = {
+    enabled: preference.enabled,
+    volume: preference.volume,
+  };
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    let cancelled = false;
+    host.replaceChildren();
+    void loadTwitchEmbed()
+      .then((Embed) => {
+        if (cancelled || !hostRef.current) return;
+        const embed = new Embed(hostRef.current, {
+          width: "100%",
+          height: "100%",
+          channel,
+          parent: [hostname],
+          layout: Embed.VIDEO,
+          autoplay: true,
+          muted: true,
+        });
+        embed.addEventListener(Embed.VIDEO_READY, () => {
+          if (cancelled) return;
+          playerRef.current = embed.getPlayer();
+          playerRef.current.setVolume(preferenceRef.current.volume);
+          playerRef.current.setMuted(!preferenceRef.current.enabled);
+        });
+      })
+      .catch((error) => console.error("[twitch] embed failed", error));
+    return () => {
+      cancelled = true;
+      playerRef.current = null;
+      host.replaceChildren();
+    };
+  }, [channel, hostname]);
+
+  useEffect(() => {
+    playerRef.current?.setVolume(preference.volume);
+    playerRef.current?.setMuted(!preference.enabled);
+  }, [preference.enabled, preference.volume]);
+
+  return (
+    <section
+      ref={hostRef}
+      className="size-full overflow-hidden rounded-sm"
+      style={{ pointerEvents: interactive ? "auto" : "none" }}
+      aria-label={`${channel} Twitch stream`}
+    />
+  );
 }
 
 /**
@@ -110,6 +243,7 @@ function CanvasBackground({ channel }: { channel?: string | null }) {
   const streamChipRef = useRef<HTMLButtonElement>(null);
   const streamMenuRef = useRef<HTMLDivElement>(null);
   const [interactMode, setInteractMode] = useState(false);
+  const twitchPreference = useMediaPreference("twitch-preview");
   const [streamMenu, setStreamMenu] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -233,17 +367,10 @@ function CanvasBackground({ channel }: { channel?: string | null }) {
                 </span>
               </div>
             ) : (
-              <iframe
-                src={`https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&parent=${hostname}&muted=true`}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  border: "none",
-                  borderRadius: "4px",
-                  pointerEvents: interactMode ? "auto" : "none",
-                }}
-                allowFullScreen
-                title={`${channel} Twitch stream`}
+              <TwitchPreview
+                channel={channel}
+                hostname={hostname}
+                interactive={interactMode}
               />
             )}
           </div>
@@ -296,17 +423,13 @@ function CanvasBackground({ channel }: { channel?: string | null }) {
               gap: "6px",
               fontSize: "11px",
               padding: "3px 10px",
-              borderRadius: "999px",
+              borderRadius: "6px",
               border: "1px solid rgba(59, 130, 246, 0.35)",
-              background: interactMode
-                ? "rgba(59, 130, 246, 0.22)"
-                : "rgba(15, 23, 42, 0.72)",
+              background: interactMode ? "#1e3a5f" : "#0f172a",
               color: "rgba(255, 255, 255, 0.9)",
               cursor: "context-menu",
               pointerEvents: "auto",
               userSelect: "none",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
             }}
           >
             <span
@@ -341,10 +464,8 @@ function CanvasBackground({ channel }: { channel?: string | null }) {
             padding: "6px",
             borderRadius: "10px",
             border: "1px solid rgba(148, 163, 184, 0.18)",
-            background: "rgba(15, 23, 42, 0.96)",
+            background: "#0f172a",
             boxShadow: "0 18px 40px rgba(2, 6, 23, 0.45)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
             pointerEvents: "auto",
           }}
           onPointerDown={(event) => event.stopPropagation()}
@@ -373,6 +494,23 @@ function CanvasBackground({ channel }: { channel?: string | null }) {
           >
             {interactMode ? "Back to drawing" : "Enter interact mode"}
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              twitchPreference.setEnabled(!twitchPreference.enabled)
+            }
+            className="w-full rounded-lg px-2.5 py-2 text-left text-[13px] text-white/90 hover:bg-white/10"
+          >
+            Personal audio: {twitchPreference.enabled ? "On" : "Muted"}
+          </button>
+          <a
+            href={`https://www.twitch.tv/${encodeURIComponent(channel ?? "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-lg px-2.5 py-2 text-[13px] text-white/90 hover:bg-white/10"
+          >
+            Open Twitch sign-in
+          </a>
         </div>
       ) : null}
     </>
@@ -405,27 +543,31 @@ const canvasAssetUrls: TLUiAssetUrlOverrides = {
   },
 };
 
-const editorOverrides: TLUiOverrides = {
-  tools(editor, tools) {
-    tools["youtube-embed"] = {
-      id: "youtube-embed",
-      icon: "youtube-embed-icon",
-      label: "YouTube",
-      onSelect: () => {
-        editor.setCurrentTool("youtube-embed");
-      },
-    };
-    tools["audio-player"] = {
-      id: "audio-player",
-      icon: "audio-player-icon",
-      label: "Audio",
-      onSelect: () => {
-        editor.setCurrentTool("audio-player");
-      },
-    };
-    return tools;
-  },
-};
+function createEditorOverrides(youtubePolicy: YouTubePolicy): TLUiOverrides {
+  return {
+    tools(editor, tools) {
+      if (youtubePolicy !== "disabled") {
+        tools["youtube-embed"] = {
+          id: "youtube-embed",
+          icon: "youtube-embed-icon",
+          label: "YouTube",
+          onSelect: () => {
+            editor.setCurrentTool("youtube-embed");
+          },
+        };
+      }
+      tools["audio-player"] = {
+        id: "audio-player",
+        icon: "audio-player-icon",
+        label: "Audio",
+        onSelect: () => {
+          editor.setCurrentTool("audio-player");
+        },
+      };
+      return tools;
+    },
+  };
+}
 
 /**
  * Media-first toolbar: adding images/GIFs/videos and embeds is the primary
@@ -434,12 +576,15 @@ const editorOverrides: TLUiOverrides = {
  * (overflowing into the "more" dropdown on narrow toolbars).
  */
 function CanvasToolbar() {
+  const youtubePolicy = useContext(YouTubePolicyCtx);
   return (
     <DefaultToolbar>
       <SelectToolbarItem />
       <HandToolbarItem />
       <AssetToolbarItem />
-      <ToolbarItem tool="youtube-embed" />
+      {youtubePolicy !== "disabled" ? (
+        <ToolbarItem tool="youtube-embed" />
+      ) : null}
       <ToolbarItem tool="audio-player" />
       <DrawToolbarItem />
       <EraserToolbarItem />
@@ -504,6 +649,7 @@ function MediaShapeContextMenuContent() {
     () => editor.getOnlySelectedShape(),
     [editor],
   );
+  const previewPreference = useMediaPreference(selectedShape?.id ?? "none");
 
   if (!selectedShape || !isMediaShape(selectedShape)) {
     return null;
@@ -514,7 +660,6 @@ function MediaShapeContextMenuContent() {
   const isAudioShape = selectedShape.type === "audio-player";
   const canInteract = (isYouTubeShape || isAudioShape) && hasUrl;
   const isInteractive = interactiveShapeId === selectedShape.id;
-  const isEditorAudioEnabled = selectedShape.props.editorAudioEnabled ?? false;
 
   return (
     <>
@@ -542,28 +687,10 @@ function MediaShapeContextMenuContent() {
             />
             <TldrawUiMenuItem
               id="media-shape-editor-audio"
-              label={`Editor audio: ${isEditorAudioEnabled ? "On" : "Off"}`}
-              onSelect={() => {
-                if (isYouTubeShape) {
-                  editor.updateShape({
-                    id: selectedShape.id,
-                    type: "youtube-embed",
-                    props: {
-                      editorAudioEnabled: !isEditorAudioEnabled,
-                    },
-                  });
-                }
-
-                if (isAudioShape) {
-                  editor.updateShape({
-                    id: selectedShape.id,
-                    type: "audio-player",
-                    props: {
-                      editorAudioEnabled: !isEditorAudioEnabled,
-                    },
-                  });
-                }
-              }}
+              label={`Personal audio: ${previewPreference.enabled ? "On" : "Muted"}`}
+              onSelect={() =>
+                previewPreference.setEnabled(!previewPreference.enabled)
+              }
             />
             <TldrawUiMenuItem
               id="media-shape-resync"
@@ -676,8 +803,12 @@ function YouTubeInteractionController() {
   return null;
 }
 
-export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
-  const { getToken } = useAuth();
+export function CanvasEditor({
+  roomId,
+  twitchChannel,
+  youtubePolicy,
+}: CanvasEditorProps) {
+  const { getToken, userId } = useAuth();
   const [interactiveShapeId, setInteractiveShapeId] = useState<string | null>(
     null,
   );
@@ -747,6 +878,17 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
     }),
     [interactiveShapeId],
   );
+  const editorOverrides = useMemo(
+    () => createEditorOverrides(youtubePolicy),
+    [youtubePolicy],
+  );
+  const editorTools = useMemo(
+    () =>
+      youtubePolicy === "disabled"
+        ? customTools.filter((Tool) => Tool.id !== "youtube-embed")
+        : customTools,
+    [youtubePolicy],
+  );
 
   const storeWithStatus = useSync({
     uri: getUri,
@@ -772,28 +914,70 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
 
   return (
     <div className="relative h-full w-full">
-      <CanvasMediaRefreshContext.Provider value={mediaRefreshCtx}>
-        <AudioUploadCtx.Provider value={audioUploadCtx}>
-          <YouTubeInteractionCtx.Provider value={youtubeInteractionCtx}>
-            <Tldraw
-              store={storeWithStatus.store}
-              shapeUtils={customShapeUtils}
-              tools={customTools}
-              overrides={editorOverrides}
-              assetUrls={canvasAssetUrls}
-              licenseKey={TLDRAW_LICENSE_KEY}
-              components={components}
-              // Rooms are single-canvas (hiding PageMenu alone would still
-              // allow page creation via keyboard shortcuts, stranding
-              // overlays on pages the OBS mirror never shows).
-              options={CANVAS_EDITOR_OPTIONS}
-            >
-              <LegacyCleanup />
-              <YouTubeInteractionController />
-            </Tldraw>
-          </YouTubeInteractionCtx.Provider>
-        </AudioUploadCtx.Provider>
-      </CanvasMediaRefreshContext.Provider>
+      <MediaPreferencesProvider roomId={roomId} userId={userId}>
+        <CanvasMediaRefreshContext.Provider value={mediaRefreshCtx}>
+          <AudioUploadCtx.Provider value={audioUploadCtx}>
+            <YouTubeInteractionCtx.Provider value={youtubeInteractionCtx}>
+              <YouTubePolicyCtx.Provider value={youtubePolicy}>
+                <Tldraw
+                  store={storeWithStatus.store}
+                  shapeUtils={customShapeUtils}
+                  tools={editorTools}
+                  overrides={editorOverrides}
+                  assetUrls={canvasAssetUrls}
+                  licenseKey={TLDRAW_LICENSE_KEY}
+                  components={components}
+                  // Belt and suspenders with SinglePageGuard: maxPages
+                  // blocks local page creation; the guard cleans up pages
+                  // that arrive via sync and re-pins the canonical page.
+                  options={CANVAS_EDITOR_OPTIONS}
+                >
+                  <LegacyCleanup />
+                  <SinglePageGuard />
+                  <YouTubeInteractionController />
+                </Tldraw>
+              </YouTubePolicyCtx.Provider>
+            </YouTubeInteractionCtx.Provider>
+          </AudioUploadCtx.Provider>
+        </CanvasMediaRefreshContext.Provider>
+      </MediaPreferencesProvider>
     </div>
   );
+}
+
+/** OBS always mirrors the one canonical page, so additional pages are removed. */
+function SinglePageGuard() {
+  const editor = useEditor();
+
+  useEffect(() => {
+    let scheduled = false;
+    let disposed = false;
+
+    const enforce = () => {
+      if (disposed || scheduled) return;
+      scheduled = true;
+      queueMicrotask(() => {
+        scheduled = false;
+        if (disposed) return;
+        const [canonicalPage, ...extraPages] = editor.getPages();
+        if (!canonicalPage) return;
+        if (editor.getCurrentPageId() !== canonicalPage.id) {
+          editor.setCurrentPage(canonicalPage.id);
+        }
+        for (const page of extraPages) editor.deletePage(page.id);
+      });
+    };
+
+    const dispose = editor.store.listen(enforce, {
+      source: "all",
+      scope: "document",
+    });
+    enforce();
+    return () => {
+      disposed = true;
+      dispose();
+    };
+  }, [editor]);
+
+  return null;
 }

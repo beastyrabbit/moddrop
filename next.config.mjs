@@ -1,6 +1,13 @@
+import { fileURLToPath } from "node:url";
+
+const projectRoot = fileURLToPath(new URL(".", import.meta.url));
+
 const nextConfig = {
   output: "standalone",
   skipTrailingSlashRedirect: true,
+  turbopack: {
+    root: projectRoot,
+  },
   typescript: {
     ignoreBuildErrors: false,
   },

@@ -1,26 +1,26 @@
 # syntax=docker/dockerfile:1.6
 
-FROM node:22-alpine AS deps
+FROM node:26.5.0-bookworm-slim AS deps
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
 
-RUN corepack enable
+RUN npm install --global pnpm@11.15.1
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/stream-canvas/package.json backend/stream-canvas/package.json
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
-FROM node:22-alpine AS builder
+FROM node:26.5.0-bookworm-slim AS builder
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
 
-RUN corepack enable
+RUN npm install --global pnpm@11.15.1
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -41,7 +41,7 @@ ENV NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
 
 RUN pnpm run build
 
-FROM node:22-alpine AS runner
+FROM node:26.5.0-bookworm-slim AS runner
 
 WORKDIR /app
 
@@ -49,15 +49,12 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --chown=nextjs:nodejs --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --chown=node:node --chmod=755 docker-entrypoint.sh /docker-entrypoint.sh
 
-USER nextjs
+USER node
 
 EXPOSE 3000
 

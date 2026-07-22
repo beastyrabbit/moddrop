@@ -44,7 +44,8 @@ const { publicKey, privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
 });
 
-process.env.DATABASE_PATH = join(tempRoot, "stream-canvas.db");
+process.env.NODE_ENV = "test";
+process.env.DATABASE_URL = "pg-mem://stream-canvas-routes";
 process.env.UPLOADS_DIR = join(tempRoot, "uploads");
 process.env.CLERK_JWT_KEY = publicKey.export({
   type: "spki",
@@ -55,16 +56,54 @@ process.env.CORS_ORIGINS = origin;
 process.env.OBS_TOKEN_SIGNING_SECRET =
   "test-signing-secret-with-at-least-32-bytes";
 
+const { db, pool } = await import("./db.ts");
+
+for (const statement of [
+  "CREATE TYPE youtube_policy AS ENUM ('disabled', 'preview_only', 'allow_on_air')",
+  `CREATE TABLE rooms (
+    id uuid PRIMARY KEY,
+    owner_clerk_id text NOT NULL UNIQUE,
+    twitch_channel text,
+    youtube_policy youtube_policy NOT NULL DEFAULT 'preview_only',
+    youtube_risk_acknowledged_at timestamptz,
+    obs_secret text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE room_members (
+    room_id uuid NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    clerk_user_id text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (room_id, clerk_user_id)
+  )`,
+  `CREATE TABLE canvas_documents (
+    room_id uuid PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
+    snapshot jsonb NOT NULL,
+    schema_version integer NOT NULL DEFAULT 1,
+    revision bigint NOT NULL DEFAULT 0,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE uploads (
+    id uuid PRIMARY KEY,
+    room_id uuid NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    filename text NOT NULL,
+    mime_type text NOT NULL,
+    size integer NOT NULL,
+    object_key text NOT NULL UNIQUE,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+]) {
+  await pool.query(statement);
+}
+
 const [
   { api },
-  { db },
-  { rooms, uploads },
+  { rooms, roomMembers, uploads },
   { generateObsSecret, hashObsSecret, isHashedObsSecret, verifyObsSecret },
   { mintCanvasWsToken, mintUploadAccessToken },
   { authenticateWebSocketUpgrade },
 ] = await Promise.all([
   import("./routes.ts"),
-  import("./db.ts"),
   import("./schema.ts"),
   import("./obs-secret.ts"),
   import("./auth.ts"),
@@ -81,7 +120,6 @@ await db.insert(rooms).values({
   ownerClerkId: ownerUserId,
   twitchChannel: "BeastyRabbit",
   obsSecret: hashObsSecret(obsSecret),
-  allowedUsers: [collaboratorUserId],
   createdAt: new Date(),
   updatedAt: new Date(),
 });
@@ -91,9 +129,13 @@ await db.insert(rooms).values({
   ownerClerkId: secondOwnerUserId,
   twitchChannel: "OtherChannel",
   obsSecret: hashObsSecret(secondObsSecret),
-  allowedUsers: [],
   createdAt: new Date(),
   updatedAt: new Date(),
+});
+
+await db.insert(roomMembers).values({
+  roomId,
+  clerkUserId: collaboratorUserId,
 });
 
 test("OBS token exchange accepts hashed room secrets", async () => {
@@ -188,10 +230,13 @@ test("authenticated WebSocket token endpoint mints an app-scoped ticket", async 
 
 test("WebSocket upgrade auth accepts app tickets and rejects raw JWTs", async () => {
   const rawJwt = makeClerkJwt(collaboratorUserId);
-  const editorTicketResponse = await api.request(`/api/rooms/${roomId}/ws-token`, {
-    method: "POST",
-    headers: authHeaders(collaboratorUserId),
-  });
+  const editorTicketResponse = await api.request(
+    `/api/rooms/${roomId}/ws-token`,
+    {
+      method: "POST",
+      headers: authHeaders(collaboratorUserId),
+    },
+  );
   const editorTicket = ((await editorTicketResponse.json()) as WsTokenResponse)
     .token;
 
@@ -207,10 +252,15 @@ test("WebSocket upgrade auth accepts app tickets and rejects raw JWTs", async ()
     body: JSON.stringify({ secret: obsSecret }),
   });
   const obsTicket = ((await obsResponse.json()) as ObsTokenResponse).token;
-  const obsAuth = await authenticateWebSocketUpgrade(wsRequest(roomId, obsTicket));
+  const obsAuth = await authenticateWebSocketUpgrade(
+    wsRequest(roomId, obsTicket),
+  );
   assert.equal(obsAuth?.role, "obs");
 
-  assert.equal(await authenticateWebSocketUpgrade(wsRequest(roomId, rawJwt)), null);
+  assert.equal(
+    await authenticateWebSocketUpgrade(wsRequest(roomId, rawJwt)),
+    null,
+  );
   assert.equal(
     await authenticateWebSocketUpgrade(wsRequest(secondRoomId, editorTicket)),
     null,
@@ -270,15 +320,23 @@ test("room creation and regeneration only reveal OBS secrets once", async () => 
     method: "POST",
     headers: authHeaders(newOwnerId),
   });
-  const repeatCreate = (await repeatCreateResponse.json()) as Record<string, unknown>;
+  const repeatCreate = (await repeatCreateResponse.json()) as Record<
+    string,
+    unknown
+  >;
   assert.equal("obsSetupSecret" in repeatCreate, false);
 
-  const revealResponse = await api.request(`/api/rooms/${created.id}/obs-secret`, {
-    headers: authHeaders(newOwnerId),
-  });
+  const revealResponse = await api.request(
+    `/api/rooms/${created.id}/obs-secret`,
+    {
+      headers: authHeaders(newOwnerId),
+    },
+  );
   assert.equal(revealResponse.status, 410);
 
-  const oldSecretExchangeBody = JSON.stringify({ secret: created.obsSetupSecret });
+  const oldSecretExchangeBody = JSON.stringify({
+    secret: created.obsSetupSecret,
+  });
   const oldSecretExchange = await api.request("/obs/token", {
     method: "POST",
     headers: {
@@ -297,7 +355,9 @@ test("room creation and regeneration only reveal OBS secrets once", async () => 
     },
   );
   assert.equal(regenerateResponse.status, 200);
-  const regenerated = (await regenerateResponse.json()) as { obsSecret: string };
+  const regenerated = (await regenerateResponse.json()) as {
+    obsSecret: string;
+  };
   assert.notEqual(regenerated.obsSecret, created.obsSetupSecret);
 
   const rejectedOldSecret = await api.request("/obs/token", {
@@ -406,7 +466,12 @@ function authHeaders(userId: string) {
 
 function makeClerkJwt(
   userId: string,
-  overrides: Partial<{ iss: string; azp: string; iat: number; exp: number }> = {},
+  overrides: Partial<{
+    iss: string;
+    azp: string;
+    iat: number;
+    exp: number;
+  }> = {},
 ): string {
   const now = Math.floor(Date.now() / 1000);
   const header = base64UrlJson({ alg: "RS256", typ: "JWT" });

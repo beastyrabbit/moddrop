@@ -1,35 +1,95 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  bigint,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
-/** One room per streamer. Canvas state lives in tldraw's own SQLite tables. */
-export const rooms = sqliteTable(
+export const youtubePolicy = pgEnum("youtube_policy", [
+  "disabled",
+  "preview_only",
+  "allow_on_air",
+]);
+
+/** One room per streamer. Clerk remains the identity authority. */
+export const rooms = pgTable(
   "rooms",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey(),
     ownerClerkId: text("owner_clerk_id").notNull().unique(),
     twitchChannel: text("twitch_channel"),
-    /** Long-lived secret stored server-side only. Used to mint short-lived OBS tokens. */
+    youtubePolicy: youtubePolicy("youtube_policy")
+      .notNull()
+      .default("preview_only"),
+    youtubeRiskAcknowledgedAt: timestamp("youtube_risk_acknowledged_at", {
+      withTimezone: true,
+    }),
+    /** Hashed long-lived credential used to mint short-lived OBS tickets. */
     obsSecret: text("obs_secret").notNull(),
-    /** JSON array of Clerk user IDs allowed to edit this canvas. */
-    allowedUsers: text("allowed_users", { mode: "json" }).$type<string[]>(),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [index("rooms_obs_secret_idx").on(table.obsSecret)],
 );
 
-/** Metadata for files uploaded to this service. Actual files stored on disk. */
-export const uploads = sqliteTable(
+/** Editors invited to a room. The owner is stored on the room itself. */
+export const roomMembers = pgTable(
+  "room_members",
+  {
+    roomId: uuid("room_id")
+      .notNull()
+      .references(() => rooms.id, { onDelete: "cascade" }),
+    clerkUserId: text("clerk_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.roomId, table.clerkUserId] }),
+    index("room_members_user_idx").on(table.clerkUserId),
+  ],
+);
+
+/** Latest authoritative tldraw sync snapshot for a room. */
+export const canvasDocuments = pgTable("canvas_documents", {
+  roomId: uuid("room_id")
+    .primaryKey()
+    .references(() => rooms.id, { onDelete: "cascade" }),
+  snapshot: jsonb("snapshot").notNull(),
+  schemaVersion: integer("schema_version").notNull().default(1),
+  revision: bigint("revision", { mode: "number" }).notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Metadata for room assets. Object bytes live in Garage or the dev adapter. */
+export const uploads = pgTable(
   "uploads",
   {
-    id: text("id").primaryKey(),
-    roomId: text("room_id")
+    id: uuid("id").primaryKey(),
+    roomId: uuid("room_id")
       .notNull()
-      .references(() => rooms.id),
+      .references(() => rooms.id, { onDelete: "cascade" }),
     filename: text("filename").notNull(),
     mimeType: text("mime_type").notNull(),
     size: integer("size").notNull(),
-    path: text("path").notNull(),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }),
+    objectKey: text("object_key").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (table) => [index("uploads_room_id_idx").on(table.roomId)],
 );
+
+export type YouTubePolicy = (typeof youtubePolicy.enumValues)[number];

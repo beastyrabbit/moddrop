@@ -6,16 +6,22 @@ Project guidelines:
 - avoid `as any` at all costs, try to infer types from functions as much as possible
 - keep Convex as the app-facing backend scaffold, but the real-time canvas backend lives in `backend/stream-canvas`
 - use `@clerk/nextjs` for frontend auth and the shared Clerk app for identity
-- use the Hono/WebSocket/SQLite backend in `backend/stream-canvas` for room, OBS, upload, and sync behavior
+- use the Hono/WebSocket/PostgreSQL backend in `backend/stream-canvas` for room, OBS, upload, and sync behavior; define schema and migrations with Drizzle
 - use tailwindcss for styling whenever possible, only resort to custom css if needed
 - after making changes to convex, run `pnpm run convex:gen` to generate the new api
 - run `pnpm run lint`, `pnpm run typecheck`, `pnpm run test`, and `pnpm run build` after frontend changes
 - run `pnpm --dir backend/stream-canvas run typecheck && pnpm --dir backend/stream-canvas run test` after backend changes
 
 <!-- convex-ai-start -->
+
 This project uses [Convex](https://convex.dev) as its backend.
 
-When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
 
-Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
 <!-- convex-ai-end -->

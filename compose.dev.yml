@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:18.4-bookworm
+    environment:
+      POSTGRES_DB: moddrop
+      POSTGRES_USER: moddrop
+      POSTGRES_PASSWORD: moddrop
+    ports:
+      - "5432:5432"
+    volumes:
+      - moddrop-postgres:/var/lib/postgresql/18/docker
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moddrop -d moddrop"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  moddrop-postgres:

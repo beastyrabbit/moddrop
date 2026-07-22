@@ -25,6 +25,7 @@ import {
   getEffectiveMediaVolume,
 } from "@/lib/stream-canvas/media-volume";
 import { rectIntersectsStreamZone } from "@/lib/stream-canvas/stream-zone";
+import { useMediaPreference } from "../../media-preferences";
 import { YouTubeInteractionCtx } from "../youtube/YouTubeEmbedShape";
 
 // ---------------------------------------------------------------------------
@@ -37,7 +38,6 @@ type AudioPlayerShapeProps = {
   url: string;
   volume: number;
   loop: boolean;
-  editorAudioEnabled?: boolean;
   isPlaying?: boolean;
   playbackPosition?: number;
   playbackUpdatedAt?: number;
@@ -64,7 +64,6 @@ export const audioPlayerShapeProps: RecordProps<AudioPlayerShape> = {
   url: T.string,
   volume: T.number,
   loop: T.boolean,
-  editorAudioEnabled: T.optional(T.boolean),
   isPlaying: T.optional(T.boolean),
   playbackPosition: T.optional(T.number),
   playbackUpdatedAt: T.optional(T.number),
@@ -143,6 +142,7 @@ function AudioPlayerComponent({
   const [mediaFailed, setMediaFailed] = useState(false);
   const mediaErrorCountRef = useRef(0);
   const uploadCtx = useContext(AudioUploadCtx);
+  const previewPreference = useMediaPreference(shape.id);
   const syncedIsPlaying = shape.props.isPlaying ?? false;
   const syncedPlaybackPosition = shape.props.playbackPosition ?? 0;
   const syncedPlaybackUpdatedAt = shape.props.playbackUpdatedAt ?? 0;
@@ -155,12 +155,12 @@ function AudioPlayerComponent({
     pageBounds && rectIntersectsStreamZone(pageBounds),
   );
   const isInteractive = isReadonly || interactiveShapeId === shape.id;
-  const editorAudioEnabled = shape.props.editorAudioEnabled ?? false;
-  const effectiveVolume = getEffectiveMediaVolume(shape.props.volume);
+  const effectiveVolume =
+    getEffectiveMediaVolume(shape.props.volume) * previewPreference.volume;
   const isVolumeMuted = effectiveVolume <= 0.001;
   const shouldOutputAudio = isReadonly
     ? isAudibleInReadonly
-    : isInteractive && editorAudioEnabled;
+    : isInteractive && previewPreference.enabled;
   const currentSyncedTime = getSyncedMediaPlaybackPosition(shape.props);
   const seekPreviewTime = scrubTime ?? displayTime;
   const maxTimelineTime = Math.max(duration, displayTime, currentSyncedTime, 0);
@@ -854,7 +854,6 @@ export class AudioPlayerShapeUtil extends BaseBoxShapeUtil<AudioPlayerShape> {
       url: "",
       volume: DEFAULT_MEDIA_VOLUME,
       loop: false,
-      editorAudioEnabled: false,
       isPlaying: false,
       playbackPosition: 0,
       playbackUpdatedAt: 0,
@@ -867,6 +866,10 @@ export class AudioPlayerShapeUtil extends BaseBoxShapeUtil<AudioPlayerShape> {
       height: shape.props.h,
       isFilled: true,
     });
+  }
+
+  override getIndicatorPath(): undefined {
+    return undefined;
   }
 
   component(shape: AudioPlayerShape) {

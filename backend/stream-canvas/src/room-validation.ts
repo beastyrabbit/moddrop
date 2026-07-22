@@ -13,6 +13,8 @@ export function isValidRoomId(roomId: string): boolean {
 export interface ValidatedRoomConfig {
   twitchChannel?: string | null;
   allowedUsers?: string[];
+  youtubePolicy?: "disabled" | "preview_only" | "allow_on_air";
+  acknowledgeYouTubeRisk?: boolean;
 }
 
 export function validateRoomConfigUpdate(
@@ -71,6 +73,37 @@ export function validateRoomConfigUpdate(
       allowedUsers.push(trimmed);
     }
     value.allowedUsers = allowedUsers;
+  }
+
+  if ("youtubePolicy" in input) {
+    if (
+      input.youtubePolicy !== "disabled" &&
+      input.youtubePolicy !== "preview_only" &&
+      input.youtubePolicy !== "allow_on_air"
+    ) {
+      return { error: "Invalid YouTube policy", ok: false };
+    }
+    value.youtubePolicy = input.youtubePolicy;
+  }
+
+  if ("acknowledgeYouTubeRisk" in input) {
+    if (typeof input.acknowledgeYouTubeRisk !== "boolean") {
+      return {
+        error: "YouTube risk acknowledgement must be boolean",
+        ok: false,
+      };
+    }
+    value.acknowledgeYouTubeRisk = input.acknowledgeYouTubeRisk;
+  }
+
+  if (
+    value.youtubePolicy === "allow_on_air" &&
+    value.acknowledgeYouTubeRisk !== true
+  ) {
+    return {
+      error: "Allowing YouTube on air requires risk acknowledgement",
+      ok: false,
+    };
   }
 
   return { ok: true, value };

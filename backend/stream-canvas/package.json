@@ -3,29 +3,37 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "portless moddrop-stream-canvas node --watch --env-file=.env --experimental-strip-types src/index.ts",
-    "start": "node --env-file=.env --experimental-strip-types src/index.ts",
+    "dev": "portless moddrop-stream-canvas node --watch --env-file-if-exists=.env src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file-if-exists=.env dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --test-force-exit --experimental-strip-types src/*.test.ts",
-    "db:push": "drizzle-kit push",
+    "test": "node --test --test-force-exit src/*.test.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "node --env-file-if-exists=.env src/migrate.ts",
+    "db:migrate:compiled": "node dist/migrate.js",
+    "import:legacy:compiled": "node dist/import-legacy-sqlite.js"
   },
   "dependencies": {
-    "@clerk/backend": "^3.2.4",
-    "@hono/node-server": "^1.19.12",
-    "@tldraw/sync-core": "^4.5.7",
-    "better-sqlite3": "^12.8.0",
+    "@clerk/backend": "^3.12.0",
+    "@hono/node-server": "^2.0.11",
+    "@tldraw/sync-core": "^5.2.5",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.11",
-    "tldraw": "^4.5.7",
-    "uuid": "^13.0.0",
-    "ws": "^8.20.0"
+    "hono": "^4.12.31",
+    "minio": "8.0.7",
+    "pg": "^8.22.0",
+    "tldraw": "^5.2.5",
+    "uuid": "^14.0.1",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/pg": "^8.20.0",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^6.0.2"
+    "pg-mem": "^3.0.14",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": "26.5.x",
+    "pnpm": "11.15.x"
   }
 }

@@ -2,6 +2,7 @@
 
 import { useAuth, useClerk } from "@clerk/nextjs";
 import {
+  AlertTriangle,
   Copy,
   Eye,
   EyeOff,
@@ -25,7 +26,7 @@ import {
   regenerateSecret,
   updateRoom,
 } from "@/lib/stream-canvas/api";
-import type { CanvasRoom } from "@/lib/stream-canvas/types";
+import type { CanvasRoom, YouTubePolicy } from "@/lib/stream-canvas/types";
 import { cn } from "@/lib/utils";
 
 const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
@@ -39,6 +40,9 @@ export default function StreamCanvasSettingsPage() {
   const [obsSecret, setObsSecret] = useState<string | null>(null);
   const [secretRevealed, setSecretRevealed] = useState(false);
   const [twitchChannel, setTwitchChannel] = useState("");
+  const [youtubePolicy, setYouTubePolicy] =
+    useState<YouTubePolicy>("preview_only");
+  const [youtubeRiskAcknowledged, setYouTubeRiskAcknowledged] = useState(false);
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [confirmingRegeneration, setConfirmingRegeneration] = useState(false);
@@ -58,6 +62,8 @@ export default function StreamCanvasSettingsPage() {
 
       setRoom(loadedRoom);
       setTwitchChannel(loadedRoom.twitchChannel ?? "");
+      setYouTubePolicy(loadedRoom.youtubePolicy);
+      setYouTubeRiskAcknowledged(loadedRoom.youtubePolicy === "allow_on_air");
       setAllowedUsers(loadedRoom.allowedUsers);
       const pendingSecret =
         loadedRoom.obsSetupSecret ?? takePendingObsSecret(loadedRoom.id);
@@ -85,7 +91,13 @@ export default function StreamCanvasSettingsPage() {
     try {
       const updated = await updateRoom(
         room.id,
-        { twitchChannel: twitchChannel.trim() || null, allowedUsers },
+        {
+          twitchChannel: twitchChannel.trim() || null,
+          allowedUsers,
+          youtubePolicy,
+          acknowledgeYouTubeRisk:
+            youtubePolicy === "allow_on_air" && youtubeRiskAcknowledged,
+        },
         getToken,
       );
       setRoom(updated);
@@ -95,7 +107,14 @@ export default function StreamCanvasSettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [room, twitchChannel, allowedUsers, getToken]);
+  }, [
+    room,
+    twitchChannel,
+    allowedUsers,
+    youtubePolicy,
+    youtubeRiskAcknowledged,
+    getToken,
+  ]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -206,6 +225,80 @@ export default function StreamCanvasSettingsPage() {
             </section>
 
             <section
+              aria-labelledby="youtube-settings-title"
+              className="rounded-xl border border-border bg-card p-5 sm:p-6"
+            >
+              <SectionHeader
+                id="youtube-settings-title"
+                title="YouTube safety"
+                description="Choose whether YouTube links can be previewed by moderators or sent to the OBS output."
+              />
+              <fieldset className="mt-5 space-y-3">
+                <legend className="sr-only">YouTube playback policy</legend>
+                <PolicyChoice
+                  checked={youtubePolicy === "disabled"}
+                  description="YouTube cannot be added or played in this room."
+                  label="Disabled"
+                  onChange={() => {
+                    setYouTubePolicy("disabled");
+                    setYouTubeRiskAcknowledged(false);
+                  }}
+                  value="disabled"
+                />
+                <PolicyChoice
+                  checked={youtubePolicy === "preview_only"}
+                  description="Moderators can preview videos for themselves, but OBS never loads them."
+                  label="Moderator preview only"
+                  onChange={() => {
+                    setYouTubePolicy("preview_only");
+                    setYouTubeRiskAcknowledged(false);
+                  }}
+                  value="preview_only"
+                />
+                <PolicyChoice
+                  checked={youtubePolicy === "allow_on_air"}
+                  description="YouTube players in the stream zone are loaded in OBS with shared playback and volume."
+                  label="Allow on air"
+                  onChange={() => setYouTubePolicy("allow_on_air")}
+                  value="allow_on_air"
+                />
+              </fieldset>
+
+              {youtubePolicy === "allow_on_air" ? (
+                <div className="mt-4 rounded-lg border border-[var(--app-ember)] bg-background p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle
+                      className="mt-0.5 size-5 shrink-0 text-[var(--app-ember)]"
+                      aria-hidden="true"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        Browser-source sign-in is not reliable
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        YouTube controls its own embedded session. ModDrop
+                        cannot copy a moderator&apos;s cookies into OBS, so ads,
+                        consent screens, or sign-in prompts may still appear on
+                        air.
+                      </p>
+                    </div>
+                  </div>
+                  <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={youtubeRiskAcknowledged}
+                      onChange={(event) =>
+                        setYouTubeRiskAcknowledged(event.target.checked)
+                      }
+                      className="mt-1 size-4 accent-primary"
+                    />
+                    I understand and want OBS to load YouTube embeds.
+                  </label>
+                </div>
+              ) : null}
+            </section>
+
+            <section
               aria-labelledby="collaborators-settings-title"
               className="rounded-xl border border-border bg-card p-5 sm:p-6"
             >
@@ -233,7 +326,10 @@ export default function StreamCanvasSettingsPage() {
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={
+                saving ||
+                (youtubePolicy === "allow_on_air" && !youtubeRiskAcknowledged)
+              }
               className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               {saving ? (
@@ -358,6 +454,48 @@ export default function StreamCanvasSettingsPage() {
         </div>
       )}
     </main>
+  );
+}
+
+function PolicyChoice({
+  checked,
+  description,
+  label,
+  onChange,
+  value,
+}: {
+  checked: boolean;
+  description: string;
+  label: string;
+  onChange: () => void;
+  value: YouTubePolicy;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors",
+        checked
+          ? "border-primary bg-[var(--app-billiard-hover)]"
+          : "border-border bg-background hover:border-primary/50",
+      )}
+    >
+      <input
+        type="radio"
+        name="youtube-policy"
+        value={value}
+        checked={checked}
+        onChange={onChange}
+        className="mt-1 size-4 accent-primary"
+      />
+      <span>
+        <span className="block text-sm font-semibold text-foreground">
+          {label}
+        </span>
+        <span className="mt-0.5 block text-sm leading-6 text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </label>
   );
 }
 

@@ -1,4 +1,4 @@
-import type { AccessibleRoom, CanvasRoom } from "./types";
+import type { AccessibleRoom, CanvasRoom, YouTubePolicy } from "./types";
 
 /** Canvas backend base URL. Use `/canvas-api` in production (same-origin, no CORS). */
 const configuredCanvasApi = normalizeConfiguredCanvasApi(
@@ -108,7 +108,12 @@ export function getAccessibleRooms(
 /** Update room config. */
 export function updateRoom(
   roomId: string,
-  data: { twitchChannel?: string | null; allowedUsers?: string[] },
+  data: {
+    twitchChannel?: string | null;
+    allowedUsers?: string[];
+    youtubePolicy?: YouTubePolicy;
+    acknowledgeYouTubeRisk?: boolean;
+  },
   getToken: ClerkTokenGetter,
 ): Promise<CanvasRoom> {
   return fetchApi(`/api/rooms/${roomId}`, getToken, {
@@ -154,6 +159,7 @@ export async function exchangeObsToken(secret: string): Promise<{
   token: string;
   roomId: string;
   twitchChannel: string | null;
+  youtubePolicy: YouTubePolicy;
   expiresIn: number;
 }> {
   const res = await fetch(`${CANVAS_API}/obs/token`, {

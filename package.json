@@ -3,16 +3,13 @@
   "private": true,
   "version": "0.5.0",
   "type": "module",
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.15.1+sha512.81350b07e53c9538a02f1f2303b4290fa2d7be04e56e2a970c4cc4b417dc761de196edabd49d55c7dc9580db81007c44143e4e3d7e462b3000d23c255122d065",
   "scripts": {
-    "predev": "pnpm env:check",
-    "dev": "concurrently --kill-others --success first -n moddrop,convex,canvas -c blue,magenta,yellow \"pnpm dev:frontend\" \"pnpm dev:convex\" \"pnpm dev:canvas\"",
+    "dev": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=dev --path=/ -- node --env-file-if-exists=.env.local scripts/dev.ts",
+    "dev:apps": "concurrently --kill-others --success first -n moddrop,convex,canvas -c blue,magenta,yellow \"pnpm dev:frontend\" \"pnpm dev:convex\" \"pnpm dev:canvas\"",
     "dev:frontend": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=dev --path=/ -- portless moddrop next dev",
     "dev:convex": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=dev --path=/ -- pnpm exec convex dev",
     "dev:canvas": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=dev --path=/stream-canvas -- pnpm --dir backend/stream-canvas run dev",
-    "env:check": "pnpm env:check:app && pnpm env:check:canvas",
-    "env:check:app": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=dev --path=/ -- node scripts/check-required-env.mjs CONVEX_DEPLOYMENT NEXT_PUBLIC_CONVEX_URL NEXT_PUBLIC_CONVEX_SITE_URL NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY NEXT_PUBLIC_CANVAS_API_URL NEXT_PUBLIC_TLDRAW_LICENSE_KEY",
-    "env:check:canvas": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=dev --path=/stream-canvas -- node scripts/check-required-env.mjs CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY OBS_TOKEN_SIGNING_SECRET",
     "build": "next build",
     "build:local": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=prod --path=/ -- next build",
     "start": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=prod --path=/ -- next start",
@@ -24,28 +21,32 @@
     "prepare": "CONVEX_AGENT_MODE=anonymous pnpm exec convex codegen"
   },
   "dependencies": {
-    "@clerk/nextjs": "^7.0.8",
+    "@clerk/nextjs": "^7.5.21",
     "@clerk/themes": "^2.4.57",
-    "@tldraw/sync": "^4.5.7",
+    "@tldraw/sync": "^5.2.5",
     "clsx": "^2.1.1",
-    "convex": "^1.34.1",
-    "lucide-react": "^1.7.0",
-    "next": "16.2.2",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "convex": "^1.42.3",
+    "lucide-react": "^1.25.0",
+    "next": "16.2.10",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "sonner": "^2.0.7",
-    "tailwind-merge": "^3.5.0",
-    "tldraw": "^4.5.7"
+    "tailwind-merge": "^3.6.0",
+    "tldraw": "^5.2.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.10",
-    "@tailwindcss/postcss": "4.2.2",
-    "@types/node": "^25.5.2",
-    "@types/react": "^19.2.14",
+    "@biomejs/biome": "^2.5.5",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "concurrently": "^9.2.1",
-    "tailwindcss": "4.2.2",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "concurrently": "^10.0.3",
+    "tailwindcss": "4.3.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": "26.5.x",
+    "pnpm": "11.15.x"
   }
 }

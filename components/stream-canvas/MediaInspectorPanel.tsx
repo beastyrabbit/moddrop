@@ -27,6 +27,7 @@ import {
   type YouTubeEmbedShape,
   YouTubeInteractionCtx,
 } from "./shapes/youtube/YouTubeEmbedShape";
+import { useMediaPreference } from "./media-preferences";
 
 /**
  * StylePanel override: when a single media element (YouTube embed or audio
@@ -354,6 +355,7 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
     YouTubeInteractionCtx,
   );
   const [urlError, setUrlError] = useState<string | null>(null);
+  const previewPreference = useMediaPreference(shape.id);
 
   const hasVideo = Boolean(extractYouTubeId(shape.props.url));
   const isPlaying = shape.props.isPlaying ?? false;
@@ -416,15 +418,12 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
               volume={shape.props.volume ?? DEFAULT_MEDIA_VOLUME}
               onChange={(volume) => updateProps({ volume })}
             />
+            {/* Local, per-user monitoring preference — not synced state. */}
             <ToggleRow
-              label="Editor audio"
-              checked={shape.props.editorAudioEnabled ?? false}
+              label="Preview audio"
+              checked={previewPreference.enabled}
               onToggle={() =>
-                updateProps({
-                  editorAudioEnabled: !(
-                    shape.props.editorAudioEnabled ?? false
-                  ),
-                })
+                previewPreference.setEnabled(!previewPreference.enabled)
               }
             />
           </InspectorSection>
@@ -454,6 +453,20 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
                 editor.setCurrentTool("select");
               }}
             />
+            <InspectorHint>
+              <a
+                href="https://www.youtube.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: "inherit",
+                  textDecoration: "underline",
+                  textUnderlineOffset: 3,
+                }}
+              >
+                Open YouTube sign-in
+              </a>
+            </InspectorHint>
           </InspectorSection>
         </>
       )}
@@ -490,6 +503,7 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
     YouTubeInteractionCtx,
   );
   const uploadCtx = useContext(AudioUploadCtx);
+  const previewPreference = useMediaPreference(shape.id);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [trackedUpload, setTrackedUpload] = useState<PendingUpload | null>(
     () => pendingUploads.get(shape.id) ?? null,
@@ -658,15 +672,12 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
               volume={shape.props.volume}
               onChange={(volume) => updateProps({ volume })}
             />
+            {/* Local, per-user monitoring preference — not synced state. */}
             <ToggleRow
-              label="Editor audio"
-              checked={shape.props.editorAudioEnabled ?? false}
+              label="Preview audio"
+              checked={previewPreference.enabled}
               onToggle={() =>
-                updateProps({
-                  editorAudioEnabled: !(
-                    shape.props.editorAudioEnabled ?? false
-                  ),
-                })
+                previewPreference.setEnabled(!previewPreference.enabled)
               }
             />
             <ToggleRow
