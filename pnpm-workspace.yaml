@@ -1,5 +1,9 @@
 packages:
   - backend/stream-canvas
+allowBuilds:
+  '@clerk/shared': true
+  esbuild: true
+  sharp: true
 overrides:
   baseline-browser-mapping: 2.11.0
   postcss: 8.5.21
