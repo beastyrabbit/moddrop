@@ -46,6 +46,7 @@ import {
   TextToolbarItem,
   type TLAssetStore,
   type TLComponents,
+  type TLShape,
   type TLUiAssetUrlOverrides,
   type TLUiContextMenuProps,
   type TLUiOverrides,
@@ -68,14 +69,15 @@ import {
   resolveEditorUploadUrl,
   uploadFile,
 } from "@/lib/stream-canvas/api";
+import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
 import {
   getStreamZoneViewportPlacement,
   STREAM_ZONE,
 } from "@/lib/stream-canvas/stream-zone";
 import { CanvasStylePanel } from "./MediaInspectorPanel";
 import {
+  type AudioPlayerShape,
   AudioUploadCtx,
-  getAudioSyncedPlaybackPosition,
 } from "./shapes/audio/AudioPlayerShape";
 import {
   CanvasMediaRefreshContext,
@@ -84,7 +86,7 @@ import {
   syncShapeUtils,
 } from "./shapes/shared";
 import {
-  getSyncedPlaybackPosition,
+  type YouTubeEmbedShape,
   YouTubeInteractionCtx,
 } from "./shapes/youtube/YouTubeEmbedShape";
 
@@ -467,7 +469,8 @@ function CanvasToolbar() {
 }
 
 /**
- * Default main menu minus the extras group (insert embed / upload media),
+ * Default main menu (as of tldraw 4.x) minus the extras group (insert
+ * embed / upload media),
  * which duplicates toolbar buttons.
  */
 function CanvasMainMenu() {
@@ -484,12 +487,8 @@ function CanvasMainMenu() {
 }
 
 function isMediaShape(
-  shape: ReturnType<typeof useEditor>["getOnlySelectedShape"] extends (
-    ...args: never[]
-  ) => infer T
-    ? T
-    : never,
-) {
+  shape: TLShape | null | undefined,
+): shape is YouTubeEmbedShape | AudioPlayerShape {
   return shape?.type === "youtube-embed" || shape?.type === "audio-player";
 }
 
@@ -569,7 +568,7 @@ function MediaShapeContextMenuContent() {
               label="Resync player"
               onSelect={() => {
                 if (isYouTubeShape) {
-                  const playbackPosition = getSyncedPlaybackPosition(
+                  const playbackPosition = getSyncedMediaPlaybackPosition(
                     selectedShape.props,
                   );
                   editor.updateShape({
@@ -583,7 +582,7 @@ function MediaShapeContextMenuContent() {
                 }
 
                 if (isAudioShape) {
-                  const playbackPosition = getAudioSyncedPlaybackPosition(
+                  const playbackPosition = getSyncedMediaPlaybackPosition(
                     selectedShape.props,
                   );
                   editor.updateShape({
@@ -716,7 +715,7 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
       MainMenu: CanvasMainMenu,
       StylePanel: CanvasStylePanel,
       // Rooms are single-canvas; multiple pages would also break the OBS
-      // mirror, which always renders the current page's stream zone.
+      // mirror, which always renders its own current page's stream zone.
       PageMenu: null,
       Minimap: null,
     }),

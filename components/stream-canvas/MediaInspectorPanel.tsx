@@ -3,6 +3,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import {
   DefaultStylePanel,
+  type TLShapeId,
   type TLUiStylePanelProps,
   TldrawUiButton,
   TldrawUiButtonLabel,
@@ -14,15 +15,15 @@ import {
   useValue,
 } from "tldraw";
 import { uploadFile } from "@/lib/stream-canvas/api";
+import { mediaFilenameFromUrl } from "@/lib/stream-canvas/media-filename";
+import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
 import { DEFAULT_MEDIA_VOLUME } from "@/lib/stream-canvas/media-volume";
 import {
   type AudioPlayerShape,
   AudioUploadCtx,
-  getAudioSyncedPlaybackPosition,
 } from "./shapes/audio/AudioPlayerShape";
 import {
   extractYouTubeId,
-  getSyncedPlaybackPosition,
   type YouTubeEmbedShape,
   YouTubeInteractionCtx,
 } from "./shapes/youtube/YouTubeEmbedShape";
@@ -32,27 +33,30 @@ import {
  * player) is selected with the select tool, the top-right panel becomes its
  * inspector — URL, volume, and playback settings live here instead of inside
  * the shape, so the element itself stays draggable and uncluttered. Any other
- * selection (or an active drawing tool) falls back to the default style panel.
+ * selection (or an active non-select tool) falls back to the default style
+ * panel.
  */
 export function CanvasStylePanel(props: TLUiStylePanelProps) {
   const editor = useEditor();
   const mediaShape = useValue("inspected media shape", () => {
-    // While a drawing tool is active the user needs pen styles, not the
-    // media inspector, even if a media shape is still selected.
+    // While any non-select tool is active the user needs that tool's
+    // styles, not the media inspector, even if a media shape is still
+    // selected.
     if (editor.getCurrentToolId() !== "select") return null;
     const shape = editor.getOnlySelectedShape();
     if (!shape) return null;
     if (shape.type !== "youtube-embed" && shape.type !== "audio-player") {
       return null;
     }
-    return shape as YouTubeEmbedShape | AudioPlayerShape;
+    return shape;
   }, [editor]);
 
   if (!mediaShape) {
     return <DefaultStylePanel {...props} />;
   }
 
-  // Key by id so per-shape draft state (URL input) resets on reselection.
+  // Key by id so per-shape panel state (upload notices, URL drafts) is
+  // isolated when switching directly between two media shapes.
   return (
     <MediaInspectorPanel
       key={mediaShape.id}
@@ -113,6 +117,16 @@ function MediaInspectorPanel({
 // ---------------------------------------------------------------------------
 // Shared building blocks
 // ---------------------------------------------------------------------------
+
+/** Props payload for pointing a media shape at a new URL: playback resets. */
+function freshMediaUrlProps(url: string) {
+  return {
+    url,
+    isPlaying: false,
+    playbackPosition: 0,
+    playbackUpdatedAt: Date.now(),
+  };
+}
 
 function InspectorSection({
   divider = true,
@@ -277,14 +291,57 @@ function VolumeSlider({
   );
 }
 
-/** Filename display for an uploaded media URL; tolerant of malformed escapes. */
-function mediaFilename(url: string) {
-  const last = url.split("/").pop() ?? "audio";
-  try {
-    return decodeURIComponent(last);
-  } catch {
-    return last;
-  }
+function PlaybackControls({
+  isPlaying,
+  onTogglePlay,
+  onResync,
+}: {
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+  onResync: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      <TldrawUiButton
+        type="normal"
+        style={{ flexGrow: 1 }}
+        onClick={onTogglePlay}
+      >
+        <TldrawUiButtonLabel>
+          {isPlaying ? "Pause" : "Play"}
+        </TldrawUiButtonLabel>
+      </TldrawUiButton>
+      <TldrawUiButton type="normal" style={{ flexGrow: 1 }} onClick={onResync}>
+        <TldrawUiButtonLabel>Resync</TldrawUiButtonLabel>
+      </TldrawUiButton>
+    </div>
+  );
+}
+
+function InteractToggleButton({
+  isInteractive,
+  enterLabel,
+  exitLabel,
+  onToggle,
+}: {
+  isInteractive: boolean;
+  enterLabel: string;
+  exitLabel: string;
+  onToggle: () => void;
+}) {
+  return (
+    <TldrawUiButton
+      type="normal"
+      onClick={onToggle}
+      style={{
+        color: isInteractive ? "var(--tl-color-selected)" : undefined,
+      }}
+    >
+      <TldrawUiButtonLabel>
+        {isInteractive ? exitLabel : enterLabel}
+      </TldrawUiButtonLabel>
+    </TldrawUiButton>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +353,7 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
   const { interactiveShapeId, setInteractiveShapeId } = useContext(
     YouTubeInteractionCtx,
   );
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   const hasVideo = Boolean(extractYouTubeId(shape.props.url));
   const isPlaying = shape.props.isPlaying ?? false;
@@ -312,15 +370,17 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
   const commitUrl = (value: string) => {
     const url = value.trim();
     if (url === shape.props.url) return;
-    updateProps({
-      url,
-      isPlaying: false,
-      playbackPosition: 0,
-      playbackUpdatedAt: Date.now(),
-    });
+    // Keep the previous (working) video instead of committing a URL that
+    // can't be embedded. An empty value intentionally clears the video.
+    if (url && !extractYouTubeId(url)) {
+      setUrlError("Not a recognized YouTube URL.");
+      return;
+    }
+    setUrlError(null);
+    updateProps(freshMediaUrlProps(url));
   };
 
-  const syncedPosition = () => getSyncedPlaybackPosition(shape.props);
+  const syncedPosition = () => getSyncedMediaPlaybackPosition(shape.props);
 
   return (
     <>
@@ -339,8 +399,14 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
           onComplete={commitUrl}
           onBlur={commitUrl}
         />
-        {!hasVideo && (
-          <InspectorHint>Paste a YouTube link to load the video.</InspectorHint>
+        {urlError ? (
+          <InspectorHint tone="error">{urlError}</InspectorHint>
+        ) : (
+          !hasVideo && (
+            <InspectorHint>
+              Paste a YouTube link to load the video.
+            </InspectorHint>
+          )
         )}
       </InspectorSection>
       {hasVideo && (
@@ -363,49 +429,31 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
             />
           </InspectorSection>
           <InspectorSection>
-            <div style={{ display: "flex", gap: 4 }}>
-              <TldrawUiButton
-                type="normal"
-                style={{ flexGrow: 1 }}
-                onClick={() =>
-                  updateProps({
-                    isPlaying: !isPlaying,
-                    playbackPosition: syncedPosition(),
-                    playbackUpdatedAt: Date.now(),
-                  })
-                }
-              >
-                <TldrawUiButtonLabel>
-                  {isPlaying ? "Pause" : "Play"}
-                </TldrawUiButtonLabel>
-              </TldrawUiButton>
-              <TldrawUiButton
-                type="normal"
-                style={{ flexGrow: 1 }}
-                onClick={() =>
-                  updateProps({
-                    playbackPosition: syncedPosition(),
-                    playbackUpdatedAt: Date.now(),
-                  })
-                }
-              >
-                <TldrawUiButtonLabel>Resync</TldrawUiButtonLabel>
-              </TldrawUiButton>
-            </div>
-            <TldrawUiButton
-              type="normal"
-              onClick={() => {
+            <PlaybackControls
+              isPlaying={isPlaying}
+              onTogglePlay={() =>
+                updateProps({
+                  isPlaying: !isPlaying,
+                  playbackPosition: syncedPosition(),
+                  playbackUpdatedAt: Date.now(),
+                })
+              }
+              onResync={() =>
+                updateProps({
+                  playbackPosition: syncedPosition(),
+                  playbackUpdatedAt: Date.now(),
+                })
+              }
+            />
+            <InteractToggleButton
+              isInteractive={isInteractive}
+              enterLabel="Interact with video"
+              exitLabel="Exit interact mode"
+              onToggle={() => {
                 setInteractiveShapeId(isInteractive ? null : shape.id);
                 editor.setCurrentTool("select");
               }}
-              style={{
-                color: isInteractive ? "var(--tl-color-selected)" : undefined,
-              }}
-            >
-              <TldrawUiButtonLabel>
-                {isInteractive ? "Exit interact mode" : "Interact with video"}
-              </TldrawUiButtonLabel>
-            </TldrawUiButton>
+            />
           </InspectorSection>
         </>
       )}
@@ -417,21 +465,24 @@ function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
 // Audio inspector
 // ---------------------------------------------------------------------------
 
-interface UploadOutcome {
-  notice: string | null;
-  error: string | null;
-}
+type UploadOutcome =
+  | { ok: true; notice: string }
+  | { ok: false; error: string };
 
 interface PendingUpload {
   filename: string;
+  token: object;
   promise: Promise<UploadOutcome | null>;
 }
 
 // In-flight uploads outlive the (keyed, selection-dependent) panel instance:
 // deselecting mid-upload unmounts the inspector, so track uploads per shape
 // here. A newer upload for the same shape supersedes an older one — the loser
-// drops its result instead of overwriting the shape.
-const pendingUploads = new Map<string, PendingUpload>();
+// drops its result instead of overwriting the shape. Settled outcomes are
+// kept in uploadOutcomes so a failure that lands while the panel is unmounted
+// is still shown on the next mount.
+const pendingUploads = new Map<TLShapeId, PendingUpload>();
+const uploadOutcomes = new Map<TLShapeId, UploadOutcome>();
 
 function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
   const editor = useEditor();
@@ -443,24 +494,31 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
   const [trackedUpload, setTrackedUpload] = useState<PendingUpload | null>(
     () => pendingUploads.get(shape.id) ?? null,
   );
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<UploadOutcome | null>(
+    () => uploadOutcomes.get(shape.id) ?? null,
+  );
 
   // Show the outcome of the tracked upload once it settles — including
   // uploads adopted from a previous panel instance of the same shape.
   useEffect(() => {
     if (!trackedUpload) return;
     let alive = true;
-    void trackedUpload.promise.then((outcome) => {
-      if (!alive) return;
-      setTrackedUpload((current) =>
-        current === trackedUpload ? null : current,
-      );
-      if (outcome) {
-        setUploadNotice(outcome.notice);
-        setUploadError(outcome.error);
-      }
-    });
+    trackedUpload.promise
+      .then((settled) => {
+        if (!alive) return;
+        setTrackedUpload((current) =>
+          current === trackedUpload ? null : current,
+        );
+        if (settled) setOutcome(settled);
+      })
+      .catch(() => {
+        // The upload chain handles its own errors; this is a guard so a
+        // future refactor can never strand the panel on "Uploading...".
+        if (!alive) return;
+        setTrackedUpload((current) =>
+          current === trackedUpload ? null : current,
+        );
+      });
     return () => {
       alive = false;
     };
@@ -470,7 +528,7 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
   const hasAudio = Boolean(shape.props.url);
   const isPlaying = shape.props.isPlaying ?? false;
   const isInteractive = interactiveShapeId === shape.id;
-  const filename = shape.props.url ? mediaFilename(shape.props.url) : "";
+  const filename = shape.props.url ? mediaFilenameFromUrl(shape.props.url) : "";
 
   const updateProps = (props: Partial<AudioPlayerShape["props"]>) => {
     editor.updateShape<AudioPlayerShape>({
@@ -481,17 +539,13 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
   };
 
   const setUrl = (url: string) => {
-    // A manual URL change supersedes any in-flight upload.
+    // A manual URL change supersedes any in-flight upload and clears any
+    // previous outcome message.
     pendingUploads.delete(shape.id);
+    uploadOutcomes.delete(shape.id);
     setTrackedUpload(null);
-    setUploadNotice(null);
-    setUploadError(null);
-    updateProps({
-      url,
-      isPlaying: false,
-      playbackPosition: 0,
-      playbackUpdatedAt: Date.now(),
-    });
+    setOutcome(null);
+    updateProps(freshMediaUrlProps(url));
   };
 
   const commitUrl = (value: string) => {
@@ -501,42 +555,47 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
   };
 
   const handleFileUpload = (file: File) => {
-    if (!uploadCtx) return;
+    if (!uploadCtx) {
+      console.warn("[audio-player] upload requested without an upload context");
+      return;
+    }
     const shapeId = shape.id;
     const { roomId, getToken } = uploadCtx;
-    setUploadNotice(null);
-    setUploadError(null);
+    setOutcome(null);
+    uploadOutcomes.delete(shapeId);
 
-    let entry!: PendingUpload;
+    const token = {};
     const promise = (async (): Promise<UploadOutcome | null> => {
       try {
         const result = await uploadFile(roomId, file, getToken);
-        if (pendingUploads.get(shapeId) !== entry) return null;
+        if (pendingUploads.get(shapeId)?.token !== token) return null;
         editor.updateShape<AudioPlayerShape>({
           id: shapeId,
           type: "audio-player",
-          props: {
-            url: result.url,
-            isPlaying: false,
-            playbackPosition: 0,
-            playbackUpdatedAt: Date.now(),
-          },
+          props: freshMediaUrlProps(result.url),
         });
-        return { notice: `Uploaded ${result.filename}`, error: null };
+        const settled: UploadOutcome = {
+          ok: true,
+          notice: `Uploaded ${result.filename}`,
+        };
+        uploadOutcomes.set(shapeId, settled);
+        return settled;
       } catch (err) {
         console.error("[audio-player] Upload failed:", err);
-        if (pendingUploads.get(shapeId) !== entry) return null;
-        return {
-          notice: null,
+        if (pendingUploads.get(shapeId)?.token !== token) return null;
+        const settled: UploadOutcome = {
+          ok: false,
           error: err instanceof Error ? err.message : "Upload failed",
         };
+        uploadOutcomes.set(shapeId, settled);
+        return settled;
       } finally {
-        if (pendingUploads.get(shapeId) === entry) {
+        if (pendingUploads.get(shapeId)?.token === token) {
           pendingUploads.delete(shapeId);
         }
       }
     })();
-    entry = { filename: file.name, promise };
+    const entry: PendingUpload = { filename: file.name, token, promise };
     pendingUploads.set(shapeId, entry);
     setTrackedUpload(entry);
   };
@@ -582,10 +641,10 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
           onComplete={commitUrl}
           onBlur={commitUrl}
         />
-        {uploadError ? (
-          <InspectorHint tone="error">{uploadError}</InspectorHint>
-        ) : uploadNotice ? (
-          <InspectorHint tone="success">{uploadNotice}</InspectorHint>
+        {outcome && !outcome.ok ? (
+          <InspectorHint tone="error">{outcome.error}</InspectorHint>
+        ) : outcome?.ok ? (
+          <InspectorHint tone="success">{outcome.notice}</InspectorHint>
         ) : hasAudio ? (
           <InspectorHint>Current file: {filename}</InspectorHint>
         ) : (
@@ -617,64 +676,40 @@ function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
             />
           </InspectorSection>
           <InspectorSection>
-            <div style={{ display: "flex", gap: 4 }}>
-              <TldrawUiButton
-                type="normal"
-                style={{ flexGrow: 1 }}
-                onClick={() => {
-                  const startPlayback = !isPlaying;
-                  // Starting playback also opens the in-element player
-                  // controls: the local <audio> element only plays (and
-                  // progress only advances) in interact mode, so without
-                  // this the panel's Play would be silent and look frozen.
-                  if (startPlayback && !isInteractive) {
-                    setInteractiveShapeId(shape.id);
-                    editor.setCurrentTool("select");
-                  }
-                  updateProps({
-                    isPlaying: startPlayback,
-                    playbackPosition: getAudioSyncedPlaybackPosition(
-                      shape.props,
-                    ),
-                    playbackUpdatedAt: Date.now(),
-                  });
-                }}
-              >
-                <TldrawUiButtonLabel>
-                  {isPlaying ? "Pause" : "Play"}
-                </TldrawUiButtonLabel>
-              </TldrawUiButton>
-              <TldrawUiButton
-                type="normal"
-                style={{ flexGrow: 1 }}
-                onClick={() =>
-                  updateProps({
-                    playbackPosition: getAudioSyncedPlaybackPosition(
-                      shape.props,
-                    ),
-                    playbackUpdatedAt: Date.now(),
-                  })
+            <PlaybackControls
+              isPlaying={isPlaying}
+              onTogglePlay={() => {
+                const startPlayback = !isPlaying;
+                // Starting playback also opens the in-element player
+                // controls: the local <audio> element only plays (and
+                // progress only advances) in interact mode, so without this
+                // the panel's Play would be silent and look frozen.
+                if (startPlayback && !isInteractive) {
+                  setInteractiveShapeId(shape.id);
+                  editor.setCurrentTool("select");
                 }
-              >
-                <TldrawUiButtonLabel>Resync</TldrawUiButtonLabel>
-              </TldrawUiButton>
-            </div>
-            <TldrawUiButton
-              type="normal"
-              onClick={() => {
+                updateProps({
+                  isPlaying: startPlayback,
+                  playbackPosition: getSyncedMediaPlaybackPosition(shape.props),
+                  playbackUpdatedAt: Date.now(),
+                });
+              }}
+              onResync={() =>
+                updateProps({
+                  playbackPosition: getSyncedMediaPlaybackPosition(shape.props),
+                  playbackUpdatedAt: Date.now(),
+                })
+              }
+            />
+            <InteractToggleButton
+              isInteractive={isInteractive}
+              enterLabel="Open player controls"
+              exitLabel="Exit player controls"
+              onToggle={() => {
                 setInteractiveShapeId(isInteractive ? null : shape.id);
                 editor.setCurrentTool("select");
               }}
-              style={{
-                color: isInteractive ? "var(--tl-color-selected)" : undefined,
-              }}
-            >
-              <TldrawUiButtonLabel>
-                {isInteractive
-                  ? "Exit player controls"
-                  : "Open player controls"}
-              </TldrawUiButtonLabel>
-            </TldrawUiButton>
+            />
             <TldrawUiButton
               type="normal"
               onClick={() => {

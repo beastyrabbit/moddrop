@@ -18,6 +18,8 @@ import {
   type TLResizeInfo,
   useValue,
 } from "tldraw";
+import { mediaFilenameFromUrl } from "@/lib/stream-canvas/media-filename";
+import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
 import {
   DEFAULT_MEDIA_VOLUME,
   getEffectiveMediaVolume,
@@ -111,35 +113,8 @@ function formatPlaybackTime(seconds: number): string {
 // Audio player component (used inside the shape)
 // ---------------------------------------------------------------------------
 
-export function getAudioSyncedPlaybackPosition(
-  props: Pick<
-    AudioPlayerShapeProps,
-    "isPlaying" | "playbackPosition" | "playbackUpdatedAt"
-  >,
-) {
-  const playbackPosition = props.playbackPosition ?? 0;
-
-  if (!props.isPlaying) {
-    return playbackPosition;
-  }
-
-  return (
-    playbackPosition +
-    Math.max(0, Date.now() - (props.playbackUpdatedAt ?? 0)) / 1000
-  );
-}
-
 function stopPropagation(event: EventWithStopPropagation) {
   event.stopPropagation();
-}
-
-/** Decode a URL path segment for display; tolerant of malformed escapes. */
-function safeDecodeFilename(segment: string) {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
 }
 
 function AudioPlayerComponent({
@@ -165,6 +140,8 @@ function AudioPlayerComponent({
   );
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
+  const [mediaFailed, setMediaFailed] = useState(false);
+  const mediaErrorCountRef = useRef(0);
   const uploadCtx = useContext(AudioUploadCtx);
   const syncedIsPlaying = shape.props.isPlaying ?? false;
   const syncedPlaybackPosition = shape.props.playbackPosition ?? 0;
@@ -184,16 +161,18 @@ function AudioPlayerComponent({
   const shouldOutputAudio = isReadonly
     ? isAudibleInReadonly
     : isInteractive && editorAudioEnabled;
-  const currentSyncedTime = getAudioSyncedPlaybackPosition(shape.props);
+  const currentSyncedTime = getSyncedMediaPlaybackPosition(shape.props);
   const seekPreviewTime = scrubTime ?? displayTime;
   const maxTimelineTime = Math.max(duration, displayTime, currentSyncedTime, 0);
   const passiveProgressRatio =
     maxTimelineTime > 0 ? Math.min(displayTime / maxTimelineTime, 1) : 0;
 
-  // Reset any in-progress scrub when the audio source changes.
+  // Reset scrub and error state when the audio source changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: shape.props.url is the intentional trigger
   useEffect(() => {
     setScrubTime(null);
+    setMediaFailed(false);
+    mediaErrorCountRef.current = 0;
   }, [shape.props.url]);
 
   const resolveMediaUrl = useCallback(
@@ -257,7 +236,7 @@ function AudioPlayerComponent({
       return;
     }
 
-    const nextDisplayTime = getAudioSyncedPlaybackPosition({
+    const nextDisplayTime = getSyncedMediaPlaybackPosition({
       isPlaying: syncedIsPlaying,
       playbackPosition: syncedPlaybackPosition,
       playbackUpdatedAt: syncedPlaybackUpdatedAt,
@@ -324,9 +303,7 @@ function AudioPlayerComponent({
     syncedPlaybackUpdatedAt,
   ]);
 
-  const filename = shape.props.url
-    ? safeDecodeFilename(shape.props.url.split("/").pop() ?? "audio")
-    : "";
+  const filename = shape.props.url ? mediaFilenameFromUrl(shape.props.url) : "";
 
   const syncPlayback = (
     nextIsPlaying: boolean,
@@ -392,7 +369,7 @@ function AudioPlayerComponent({
 
   const cancelScrubPosition = () => {
     setScrubTime(null);
-    const restoredPosition = getAudioSyncedPlaybackPosition(shape.props);
+    const restoredPosition = getSyncedMediaPlaybackPosition(shape.props);
     setDisplayTime(restoredPosition);
 
     if (audioRef.current) {
@@ -405,6 +382,8 @@ function AudioPlayerComponent({
 
   const handleLoadedMetadata = () => {
     if (!audioRef.current) return;
+    mediaErrorCountRef.current = 0;
+    setMediaFailed(false);
     setDuration(
       Number.isFinite(audioRef.current.duration)
         ? audioRef.current.duration
@@ -464,7 +443,14 @@ function AudioPlayerComponent({
       url: shape.props.url,
       resolved: Boolean(resolvedMediaUrl),
     });
-    refreshResolvedMediaUrl();
+    // Retry with a freshly minted access URL a bounded number of times, then
+    // surface the failure instead of refresh-looping forever.
+    mediaErrorCountRef.current += 1;
+    if (mediaErrorCountRef.current <= 2) {
+      refreshResolvedMediaUrl();
+    } else {
+      setMediaFailed(true);
+    }
   };
 
   const sharedAudioElement = shape.props.url ? (
@@ -651,112 +637,110 @@ function AudioPlayerComponent({
           >
             {filename}
           </div>
-          {!!shape.props.url && (
-            <>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  width: "100%",
-                  pointerEvents: "all",
-                }}
-                onPointerDownCapture={stopPropagation}
-                onPointerUpCapture={stopPropagation}
-                onPointerMoveCapture={stopPropagation}
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePlayback();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" && e.key !== " ") return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    togglePlayback();
-                  }}
-                  style={{
-                    width: 48,
-                    height: 48,
-                    flexShrink: 0,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "rgba(255,255,255,0.18)",
-                    border: "1px solid rgba(255,255,255,0.18)",
-                    borderRadius: 999,
-                    color: "#fff",
-                    cursor: "pointer",
-                    padding: 0,
-                    fontSize: 24,
-                    lineHeight: 1,
-                  }}
-                  title={syncedIsPlaying ? "Pause" : "Play"}
-                >
-                  {syncedIsPlaying ? "⏸" : "▶"}
-                </button>
-                <span
-                  style={{
-                    flex: 1,
-                    fontSize: 11,
-                    opacity: 0.72,
-                    textAlign: "right",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {formatPlaybackTime(seekPreviewTime)} /{" "}
-                  {formatPlaybackTime(maxTimelineTime)}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  width: "100%",
-                  pointerEvents: "all",
-                }}
-                onPointerDownCapture={stopPropagation}
-                onPointerUpCapture={stopPropagation}
-                onPointerMoveCapture={stopPropagation}
-              >
-                <input
-                  type="range"
-                  min={0}
-                  max={Math.max(maxTimelineTime, 1)}
-                  step={0.1}
-                  value={Math.min(
-                    seekPreviewTime,
-                    Math.max(maxTimelineTime, 1),
-                  )}
-                  onPointerDown={() => {
-                    setScrubTime(seekPreviewTime);
-                  }}
-                  onPointerCancel={() => {
-                    cancelScrubPosition();
-                  }}
-                  onInput={(e) => {
-                    updateScrubPosition(
-                      Number.parseFloat((e.target as HTMLInputElement).value),
-                    );
-                  }}
-                  onChange={(e) => {
-                    commitScrubPosition(Number.parseFloat(e.target.value));
-                  }}
-                  style={{
-                    flex: 1,
-                    accentColor: "#60a5fa",
-                    height: 4,
-                    cursor: "pointer",
-                  }}
-                  title="Seek"
-                />
-              </div>
-            </>
+          {mediaFailed && (
+            <div style={{ fontSize: 11, color: "#fca5a5" }}>
+              Audio failed to load — check the file in the panel
+            </div>
           )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              width: "100%",
+              pointerEvents: "all",
+            }}
+            onPointerDownCapture={stopPropagation}
+            onPointerUpCapture={stopPropagation}
+            onPointerMoveCapture={stopPropagation}
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayback();
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                e.stopPropagation();
+                togglePlayback();
+              }}
+              style={{
+                width: 48,
+                height: 48,
+                flexShrink: 0,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.18)",
+                border: "1px solid rgba(255,255,255,0.18)",
+                borderRadius: 999,
+                color: "#fff",
+                cursor: "pointer",
+                padding: 0,
+                fontSize: 24,
+                lineHeight: 1,
+              }}
+              title={syncedIsPlaying ? "Pause" : "Play"}
+            >
+              {syncedIsPlaying ? "⏸" : "▶"}
+            </button>
+            <span
+              style={{
+                flex: 1,
+                fontSize: 11,
+                opacity: 0.72,
+                textAlign: "right",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {formatPlaybackTime(seekPreviewTime)} /{" "}
+              {formatPlaybackTime(maxTimelineTime)}
+            </span>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              pointerEvents: "all",
+            }}
+            onPointerDownCapture={stopPropagation}
+            onPointerUpCapture={stopPropagation}
+            onPointerMoveCapture={stopPropagation}
+          >
+            <input
+              type="range"
+              min={0}
+              max={Math.max(maxTimelineTime, 1)}
+              step={0.1}
+              value={Math.min(seekPreviewTime, Math.max(maxTimelineTime, 1))}
+              onPointerDown={() => {
+                setScrubTime(seekPreviewTime);
+              }}
+              onPointerCancel={() => {
+                cancelScrubPosition();
+              }}
+              onInput={(e) => {
+                updateScrubPosition(
+                  Number.parseFloat((e.target as HTMLInputElement).value),
+                );
+              }}
+              onChange={(e) => {
+                commitScrubPosition(Number.parseFloat(e.target.value));
+              }}
+              style={{
+                flex: 1,
+                accentColor: "#60a5fa",
+                height: 4,
+                cursor: "pointer",
+              }}
+              title="Seek"
+            />
+          </div>
         </div>
       </>
     );
@@ -782,25 +766,14 @@ function AudioPlayerComponent({
           padding: "8px 14px",
           border: "none",
           textAlign: "left",
-          cursor:
-            isReadonly || !shape.props.url || isInteractive
-              ? "default"
-              : "pointer",
+          cursor: "pointer",
         }}
         onDoubleClick={(e) => {
-          if (isReadonly || !shape.props.url || isInteractive) {
-            return;
-          }
-
           e.stopPropagation();
           setInteractiveShapeId(shape.id);
           editor.setCurrentTool("select");
         }}
         onKeyDown={(e) => {
-          if (isReadonly || !shape.props.url || isInteractive) {
-            return;
-          }
-
           if (e.key !== "Enter" && e.key !== " ") {
             return;
           }
@@ -821,7 +794,13 @@ function AudioPlayerComponent({
           }}
           title={filename}
         >
-          {filename}
+          {mediaFailed ? (
+            <span style={{ color: "#fca5a5", opacity: 1 }}>
+              Audio failed to load — {filename}
+            </span>
+          ) : (
+            filename
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div

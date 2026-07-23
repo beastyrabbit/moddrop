@@ -17,6 +17,7 @@ import {
   type TLResizeInfo,
   useValue,
 } from "tldraw";
+import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
 import {
   DEFAULT_MEDIA_VOLUME,
   getEffectiveMediaVolume,
@@ -193,7 +194,21 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
       reject(new Error("YouTube iframe API failed to initialize"));
     };
 
+    // Backstop for the hang cases: an existing script tag that already
+    // failed (its onerror belonged to the first attempt), or a script that
+    // loads but never initializes. Reject and clear the cache so a later
+    // embed can retry.
+    const timeoutId = window.setTimeout(() => {
+      if (window.YT?.Player) {
+        finish();
+        return;
+      }
+      youtubeIframeApiPromise = null;
+      reject(new Error("Timed out loading the YouTube iframe API"));
+    }, 15_000);
+
     window.onYouTubeIframeAPIReady = () => {
+      window.clearTimeout(timeoutId);
       previousReady?.();
       finish();
     };
@@ -201,6 +216,7 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
     if (existingScript) {
       window.setTimeout(() => {
         if (window.YT?.Player) {
+          window.clearTimeout(timeoutId);
           finish();
         }
       }, 0);
@@ -212,6 +228,7 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
     script.src = "https://www.youtube.com/iframe_api";
     script.async = true;
     script.onerror = () => {
+      window.clearTimeout(timeoutId);
       youtubeIframeApiPromise = null;
       reject(new Error("Failed to load YouTube iframe API"));
     };
@@ -219,24 +236,6 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
   });
 
   return youtubeIframeApiPromise;
-}
-
-export function getSyncedPlaybackPosition(
-  props: Pick<
-    YouTubeEmbedShapeProps,
-    "isPlaying" | "playbackPosition" | "playbackUpdatedAt"
-  >,
-) {
-  const playbackPosition = props.playbackPosition ?? 0;
-
-  if (!props.isPlaying) {
-    return playbackPosition;
-  }
-
-  return (
-    playbackPosition +
-    Math.max(0, Date.now() - (props.playbackUpdatedAt ?? 0)) / 1000
-  );
 }
 
 function YouTubeEmbedPlayer({
@@ -315,7 +314,7 @@ function YouTubeEmbedPlayer({
       return;
     }
 
-    const desiredPlaybackPosition = getSyncedPlaybackPosition(
+    const desiredPlaybackPosition = getSyncedMediaPlaybackPosition(
       syncedStateRef.current,
     );
     const currentPlaybackPosition = player.getCurrentTime?.() ?? 0;
@@ -527,7 +526,7 @@ function YouTubeEmbedPlayer({
       const localIsPlaying =
         playerState === window.YT?.PlayerState.PLAYING ||
         playerState === window.YT?.PlayerState.BUFFERING;
-      const desiredPlaybackPosition = getSyncedPlaybackPosition(
+      const desiredPlaybackPosition = getSyncedMediaPlaybackPosition(
         syncedStateRef.current,
       );
       const syncThreshold = localIsPlaying
