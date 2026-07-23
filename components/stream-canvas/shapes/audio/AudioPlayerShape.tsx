@@ -18,7 +18,6 @@ import {
   type TLResizeInfo,
   useValue,
 } from "tldraw";
-import { uploadFile } from "@/lib/stream-canvas/api";
 import {
   DEFAULT_MEDIA_VOLUME,
   getEffectiveMediaVolume,
@@ -42,7 +41,10 @@ type AudioPlayerShapeProps = {
   playbackUpdatedAt?: number;
 };
 
-type AudioPlayerShape = TLBaseShape<"audio-player", AudioPlayerShapeProps>;
+export type AudioPlayerShape = TLBaseShape<
+  "audio-player",
+  AudioPlayerShapeProps
+>;
 
 declare module "tldraw" {
   interface TLGlobalShapePropsMap {
@@ -131,6 +133,15 @@ function stopPropagation(event: EventWithStopPropagation) {
   event.stopPropagation();
 }
 
+/** Decode a URL path segment for display; tolerant of malformed escapes. */
+function safeDecodeFilename(segment: string) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 function AudioPlayerComponent({
   editor,
   shape,
@@ -146,16 +157,8 @@ function AudioPlayerComponent({
     YouTubeInteractionCtx,
   );
   const audioRef = useRef<HTMLAudioElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastSharedPlaybackRef = useRef(0);
   const lastObservedPlaybackRef = useRef(0);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadingFilename, setUploadingFilename] = useState<string | null>(
-    null,
-  );
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
-  const [draftUrl, setDraftUrl] = useState(shape.props.url);
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState(shape.props.url);
   const [displayTime, setDisplayTime] = useState(
     shape.props.playbackPosition ?? 0,
@@ -175,7 +178,6 @@ function AudioPlayerComponent({
     pageBounds && rectIntersectsStreamZone(pageBounds),
   );
   const isInteractive = isReadonly || interactiveShapeId === shape.id;
-  const showControls = !shape.props.url || isInteractive;
   const editorAudioEnabled = shape.props.editorAudioEnabled ?? false;
   const effectiveVolume = getEffectiveMediaVolume(shape.props.volume);
   const isVolumeMuted = effectiveVolume <= 0.001;
@@ -188,8 +190,9 @@ function AudioPlayerComponent({
   const passiveProgressRatio =
     maxTimelineTime > 0 ? Math.min(displayTime / maxTimelineTime, 1) : 0;
 
+  // Reset any in-progress scrub when the audio source changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: shape.props.url is the intentional trigger
   useEffect(() => {
-    setDraftUrl(shape.props.url);
     setScrubTime(null);
   }, [shape.props.url]);
 
@@ -321,62 +324,9 @@ function AudioPlayerComponent({
     syncedPlaybackUpdatedAt,
   ]);
 
-  const handleFileUpload = async (file: File) => {
-    if (!uploadCtx) return;
-    setUploading(true);
-    setUploadingFilename(file.name);
-    setUploadError(null);
-    setUploadNotice(null);
-    try {
-      const result = await uploadFile(
-        uploadCtx.roomId,
-        file,
-        uploadCtx.getToken,
-      );
-      const nextUrl = result.url;
-      setDraftUrl(nextUrl);
-      setUploadNotice(`Uploaded ${result.filename}`);
-      onUpdateProps({
-        url: nextUrl,
-        isPlaying: false,
-        playbackPosition: 0,
-        playbackUpdatedAt: Date.now(),
-      });
-    } catch (err) {
-      console.error("[audio-player] Upload failed:", err);
-      setUploadNotice(null);
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploading(false);
-      setUploadingFilename(null);
-    }
-  };
-
   const filename = shape.props.url
-    ? decodeURIComponent(shape.props.url.split("/").pop() ?? "audio")
+    ? safeDecodeFilename(shape.props.url.split("/").pop() ?? "audio")
     : "";
-
-  const commitDraftUrl = () => {
-    const value = draftUrl.trim();
-    if (value === shape.props.url) {
-      return false;
-    }
-
-    setUploadNotice(null);
-    onUpdateProps({
-      url: value,
-      isPlaying: false,
-      playbackPosition: 0,
-      playbackUpdatedAt: Date.now(),
-    });
-
-    return true;
-  };
-
-  const openFilePicker = () => {
-    if (uploading) return;
-    fileInputRef.current?.click();
-  };
 
   const syncPlayback = (
     nextIsPlaying: boolean,
@@ -610,7 +560,58 @@ function AudioPlayerComponent({
     );
   }
 
-  if (showControls) {
+  if (!shape.props.url) {
+    // Passive placeholder — no pointer handling, so the empty element can be
+    // selected and dragged like any other shape. Audio is added via the
+    // media inspector panel.
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          background: "rgba(30,30,30,0.95)",
+          borderRadius: 8,
+          color: "#fff",
+          fontFamily: "sans-serif",
+          padding: 12,
+        }}
+      >
+        <svg
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ opacity: 0.6 }}
+        >
+          <title>Audio player placeholder</title>
+          <path d="M9 18V5l12-2v13" />
+          <circle cx="6" cy="18" r="3" />
+          <circle cx="18" cy="16" r="3" />
+        </svg>
+        <span
+          style={{
+            fontSize: 12,
+            opacity: 0.65,
+            textAlign: "center",
+            maxWidth: 220,
+          }}
+        >
+          Select this element and add audio in the panel
+        </span>
+      </div>
+    );
+  }
+
+  if (isInteractive) {
     return (
       <>
         {sharedAudioElement}
@@ -637,185 +638,18 @@ function AudioPlayerComponent({
           onPointerUpCapture={stopPropagation}
           onPointerMoveCapture={stopPropagation}
         >
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ opacity: 0.6 }}
-          >
-            <title>Audio player placeholder</title>
-            <path d="M9 18V5l12-2v13" />
-            <circle cx="6" cy="18" r="3" />
-            <circle cx="18" cy="16" r="3" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Paste audio URL..."
-            value={draftUrl}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => setDraftUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                commitDraftUrl();
-              }
-              e.stopPropagation();
-            }}
-            onBlur={() => {
-              commitDraftUrl();
-            }}
-            onContextMenu={(e) => e.stopPropagation()}
-            style={{
-              width: "85%",
-              padding: "6px 10px",
-              borderRadius: 6,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.1)",
-              color: "#fff",
-              fontSize: 12,
-              outline: "none",
-              pointerEvents: "all",
-            }}
-          />
           <div
             style={{
-              width: "85%",
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              alignItems: "center",
-              textAlign: "center",
+              fontSize: 11,
+              color: "rgba(255,255,255,0.72)",
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
+            title={filename}
           >
-            {uploading ? (
-              <div style={{ fontSize: 11, color: "#fbbf24" }}>
-                Uploading {uploadingFilename ?? "audio file"}...
-              </div>
-            ) : uploadNotice ? (
-              <div style={{ fontSize: 11, color: "#86efac" }}>
-                {uploadNotice}
-              </div>
-            ) : shape.props.url ? (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "rgba(255,255,255,0.72)",
-                  maxWidth: "100%",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={filename}
-              >
-                Current file: {filename}
-              </div>
-            ) : (
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
-                No audio file selected
-              </div>
-            )}
-            {uploadError && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#fca5a5",
-                  maxWidth: "100%",
-                }}
-              >
-                {uploadError}
-              </div>
-            )}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              justifyContent: "center",
-            }}
-            onPointerDownCapture={stopPropagation}
-            onPointerUpCapture={stopPropagation}
-          >
-            {uploadCtx ? (
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openFilePicker();
-                }}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.88)",
-                  cursor: uploading ? "wait" : "pointer",
-                  fontSize: 12,
-                }}
-                disabled={uploading}
-              >
-                {uploading
-                  ? `Uploading ${uploadingFilename ?? "audio"}...`
-                  : "Upload audio file"}
-              </button>
-            ) : null}
-            {!!shape.props.url && (
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (audioRef.current) {
-                    audioRef.current.pause();
-                  }
-                  setDraftUrl("");
-                  setUploadNotice(null);
-                  setDisplayTime(0);
-                  onUpdateProps({
-                    url: "",
-                    isPlaying: false,
-                    playbackPosition: 0,
-                    playbackUpdatedAt: Date.now(),
-                  });
-                  setInteractiveShapeId(null);
-                }}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.78)",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                Remove audio
-              </button>
-            )}
-            {uploadCtx ? (
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="audio/*"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                  e.target.value = "";
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                disabled={uploading}
-              />
-            ) : null}
+            {filename}
           </div>
           {!!shape.props.url && (
             <>
@@ -863,53 +697,11 @@ function AudioPlayerComponent({
                 >
                   {syncedIsPlaying ? "⏸" : "▶"}
                 </button>
-                <div
-                  style={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      fontSize: 11,
-                      opacity: 0.74,
-                    }}
-                  >
-                    <span>Volume</span>
-                    <span>{Math.round(shape.props.volume * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={shape.props.volume}
-                    onChange={(e) => {
-                      const vol = Number.parseFloat(e.target.value);
-                      if (audioRef.current) {
-                        audioRef.current.volume = getEffectiveMediaVolume(vol);
-                      }
-                      onUpdateProps({ volume: vol });
-                    }}
-                    style={{
-                      flex: 1,
-                      accentColor: "#3b82f6",
-                      height: 4,
-                      cursor: "pointer",
-                    }}
-                    title={`Volume: ${Math.round(shape.props.volume * 100)}%`}
-                  />
-                </div>
                 <span
                   style={{
+                    flex: 1,
                     fontSize: 11,
                     opacity: 0.72,
-                    minWidth: 72,
                     textAlign: "right",
                     fontVariantNumeric: "tabular-nums",
                   }}
@@ -917,27 +709,6 @@ function AudioPlayerComponent({
                   {formatPlaybackTime(seekPreviewTime)} /{" "}
                   {formatPlaybackTime(maxTimelineTime)}
                 </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateProps({ loop: !shape.props.loop });
-                  }}
-                  style={{
-                    background: shape.props.loop
-                      ? "rgba(59,130,246,0.4)"
-                      : "rgba(255,255,255,0.1)",
-                    border: "none",
-                    borderRadius: 4,
-                    color: "#fff",
-                    cursor: "pointer",
-                    padding: "4px 6px",
-                    fontSize: 11,
-                  }}
-                  title={shape.props.loop ? "Loop: ON" : "Loop: OFF"}
-                >
-                  🔁
-                </button>
               </div>
 
               <div

@@ -2,10 +2,10 @@ import {
   createContext,
   createElement,
   Fragment,
+  type ReactNode,
   useContext,
   useEffect,
   useState,
-  type ReactNode,
 } from "react";
 import {
   defaultShapeUtils,
@@ -66,16 +66,12 @@ function RefreshingTldrawMedia({
   const editor = useEditor();
   const refreshController = useContext(CanvasMediaRefreshContext);
   const [refreshKey, setRefreshKey] = useState(0);
-  const src = useValue(
-    "refreshing media asset src",
-    () => {
-      const asset = shape.props.assetId
-        ? editor.getAsset(shape.props.assetId)
-        : undefined;
-      return asset && "src" in asset.props ? asset.props.src : null;
-    },
-    [editor, shape.props.assetId],
-  );
+  const src = useValue("refreshing media asset src", () => {
+    const asset = shape.props.assetId
+      ? editor.getAsset(shape.props.assetId)
+      : undefined;
+    return asset && "src" in asset.props ? asset.props.src : null;
+  }, [editor, shape.props.assetId]);
 
   useEffect(() => {
     if (!src || !refreshController) return;

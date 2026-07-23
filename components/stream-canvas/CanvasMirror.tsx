@@ -118,10 +118,12 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
       },
       resolve(asset) {
         if (!asset.props.src) return null;
-        return resolveObsUploadUrl(asset.props.src, obsSecret).catch((error) => {
-          console.error("[obs-mirror] asset URL resolution failed:", error);
-          return null;
-        });
+        return resolveObsUploadUrl(asset.props.src, obsSecret).catch(
+          (error) => {
+            console.error("[obs-mirror] asset URL resolution failed:", error);
+            return null;
+          },
+        );
       },
     }),
     [obsSecret],
