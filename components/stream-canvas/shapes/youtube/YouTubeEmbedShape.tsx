@@ -4,6 +4,7 @@ import {
   useEffect,
   useEffectEvent,
   useRef,
+  useState,
 } from "react";
 import {
   BaseBoxShapeUtil,
@@ -205,7 +206,7 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
       }
       youtubeIframeApiPromise = null;
       reject(new Error("Timed out loading the YouTube iframe API"));
-    }, 15_000);
+    }, 30_000);
 
     window.onYouTubeIframeAPIReady = () => {
       window.clearTimeout(timeoutId);
@@ -257,6 +258,7 @@ function YouTubeEmbedPlayer({
   const playerHostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
   const playerReadyRef = useRef(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const commandHoldUntilRef = useRef(0);
   const interactiveRef = useRef(false);
   const readonlyRef = useRef(isReadonly);
@@ -394,6 +396,13 @@ function YouTubeEmbedPlayer({
     syncedEditorAudioEnabled,
   ]);
 
+  // Reset load attempts when the video changes so a new URL always gets a
+  // fresh set of retries.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: videoId is the intentional trigger
+  useEffect(() => {
+    setLoadAttempt(0);
+  }, [videoId]);
+
   useEffect(() => {
     const host = playerHostRef.current;
     if (!host || !videoId) {
@@ -401,6 +410,7 @@ function YouTubeEmbedPlayer({
     }
 
     let cancelled = false;
+    let retryTimeoutId: number | undefined;
     playerReadyRef.current = false;
     host.innerHTML = "";
 
@@ -495,16 +505,27 @@ function YouTubeEmbedPlayer({
       })
       .catch((error) => {
         console.error("[youtube-embed] Failed to initialize player", error);
+        // The loader clears its cached promise on failure, so retrying can
+        // succeed once the API loads late (slow network, brief outage).
+        // Without this, an already-mounted player would stay blank forever.
+        if (!cancelled && loadAttempt < 3) {
+          retryTimeoutId = window.setTimeout(() => {
+            setLoadAttempt((attempt) => attempt + 1);
+          }, 10_000);
+        }
       });
 
     return () => {
       cancelled = true;
+      if (retryTimeoutId !== undefined) {
+        window.clearTimeout(retryTimeoutId);
+      }
       playerReadyRef.current = false;
       playerRef.current?.destroy();
       playerRef.current = null;
       host.innerHTML = "";
     };
-  }, [videoId, isReadonly]);
+  }, [videoId, isReadonly, loadAttempt]);
 
   useEffect(() => {
     if (isReadonly || !isInteractive) {

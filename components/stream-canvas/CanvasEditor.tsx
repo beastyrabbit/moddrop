@@ -92,6 +92,8 @@ import {
 
 const TLDRAW_LICENSE_KEY = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
+const CANVAS_EDITOR_OPTIONS = { maxPages: 1 } as const;
+
 interface CanvasEditorProps {
   roomId: string;
   twitchChannel?: string | null;
@@ -781,6 +783,10 @@ export function CanvasEditor({ roomId, twitchChannel }: CanvasEditorProps) {
               assetUrls={canvasAssetUrls}
               licenseKey={TLDRAW_LICENSE_KEY}
               components={components}
+              // Rooms are single-canvas (hiding PageMenu alone would still
+              // allow page creation via keyboard shortcuts, stranding
+              // overlays on pages the OBS mirror never shows).
+              options={CANVAS_EDITOR_OPTIONS}
             >
               <LegacyCleanup />
               <YouTubeInteractionController />
