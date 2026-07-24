@@ -5,7 +5,7 @@ ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
 
-RUN npm install --global pnpm@11.15.1
+RUN npm install --global pnpm@11.17.0
 
 FROM base AS build
 

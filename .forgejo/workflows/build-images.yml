@@ -44,7 +44,7 @@ jobs:
       convex: ${{ steps.filter.outputs.convex }}
       stream_canvas: ${{ steps.filter.outputs.stream_canvas }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Detect changed paths
@@ -87,7 +87,7 @@ jobs:
     outputs:
       convex: ${{ steps.diff.outputs.convex }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: diff
@@ -124,11 +124,11 @@ jobs:
        github.event.inputs.deploy_convex == 'true')
     runs-on: personal
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           run_install: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 26.5.0
           cache: pnpm
@@ -148,7 +148,7 @@ jobs:
 
           export npm_config_prefix="$RUNNER_TEMP/npm-global"
           mkdir -p "$npm_config_prefix"
-          npm install --global @infisical/cli@0.43.91
+          npm install --global @infisical/cli@0.43.113
           export PATH="$npm_config_prefix/bin:$PATH"
 
           oidc_response="$(curl -fsS \
@@ -200,7 +200,7 @@ jobs:
        github.event.inputs.build_frontend == 'true')
     runs-on: personal
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Docker CLI
         run: |
@@ -242,7 +242,7 @@ jobs:
 
           export npm_config_prefix="$RUNNER_TEMP/npm-global"
           mkdir -p "$npm_config_prefix"
-          npm install --global @infisical/cli@0.43.91
+          npm install --global @infisical/cli@0.43.113
           export PATH="$npm_config_prefix/bin:$PATH"
 
           oidc_response="$(curl -fsS \
@@ -298,7 +298,7 @@ jobs:
        github.event.inputs.build_stream_canvas == 'true')
     runs-on: personal
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Docker CLI
         run: |

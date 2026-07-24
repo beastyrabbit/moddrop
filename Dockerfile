@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.6
+# syntax=docker/dockerfile:1.25.0
 
 FROM node:26.5.0-bookworm-slim AS deps
 
@@ -7,7 +7,7 @@ ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
 
-RUN npm install --global pnpm@11.15.1
+RUN npm install --global pnpm@11.17.0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/stream-canvas/package.json backend/stream-canvas/package.json
@@ -20,7 +20,7 @@ ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
 
-RUN npm install --global pnpm@11.15.1
+RUN npm install --global pnpm@11.17.0
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
