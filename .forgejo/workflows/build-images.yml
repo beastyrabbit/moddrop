@@ -127,7 +127,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with:
-          version: 11.15.1
           run_install: false
       - uses: actions/setup-node@v5
         with:
@@ -291,7 +290,7 @@ jobs:
             NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${{ steps.ci-secrets.outputs.NEXT_PUBLIC_TLDRAW_LICENSE_KEY }}
 
   build-stream-canvas:
-    needs: changes
+    needs: [changes, build-frontend]
     if: |
       always() &&
       (startsWith(github.ref, 'refs/tags/v') ||
