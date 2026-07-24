@@ -23,7 +23,9 @@ interface CachedUploadAccessUrl {
 const UPLOAD_ACCESS_CACHE_SKEW_MS = 30_000;
 const uploadAccessUrlCache = new Map<string, CachedUploadAccessUrl>();
 
-function normalizeConfiguredCanvasApi(value: string | undefined): string | undefined {
+function normalizeConfiguredCanvasApi(
+  value: string | undefined,
+): string | undefined {
   if (
     !value ||
     value === "http://placeholder.canvas.local" ||
@@ -141,7 +143,10 @@ export function getUploadAccessUrl(
   uploadId: string,
   getToken: ClerkTokenGetter,
 ): Promise<{ url: string; expiresIn: number }> {
-  return fetchApi(`/api/rooms/${roomId}/uploads/${uploadId}/access-url`, getToken);
+  return fetchApi(
+    `/api/rooms/${roomId}/uploads/${uploadId}/access-url`,
+    getToken,
+  );
 }
 
 /** Exchange an OBS bootstrap secret for a short-lived WS token (unauthenticated). */
@@ -311,7 +316,10 @@ function getCachedUploadUrlRefreshDelayMs(
 ): Exclude<UploadUrlRefreshDelayMs, undefined> {
   const cached = uploadAccessUrlCache.get(cacheKey);
   if (!cached || cached.pending) return null;
-  return Math.max(0, cached.expiresAt - Date.now() - UPLOAD_ACCESS_CACHE_SKEW_MS);
+  return Math.max(
+    0,
+    cached.expiresAt - Date.now() - UPLOAD_ACCESS_CACHE_SKEW_MS,
+  );
 }
 
 export function absoluteCanvasUrl(pathOrUrl: string): string {
@@ -344,7 +352,9 @@ function extractCanvasUploadId(src: string): string | null {
 
 function isCanvasApiOrigin(url: URL): boolean {
   if (CANVAS_API.startsWith("/")) {
-    return typeof window !== "undefined" && url.origin === window.location.origin;
+    return (
+      typeof window !== "undefined" && url.origin === window.location.origin
+    );
   }
 
   try {

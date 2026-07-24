@@ -1,0 +1,6 @@
+{
+  "workspaceId": "b474ca10-dd7c-48d7-823c-ff9b92c6ccc1",
+  "defaultEnvironment": "dev",
+  "gitBranchToEnvironmentMapping": null,
+  "domain": "http://192.168.60.11:8080"
+}

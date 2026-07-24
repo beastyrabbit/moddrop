@@ -1,6 +1,7 @@
 import { dark, shadcn } from "@clerk/themes";
 
-export const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+export const clerkPublishableKey =
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export type ClerkScriptProps = {
   __internal_clerkJSUrl?: string;

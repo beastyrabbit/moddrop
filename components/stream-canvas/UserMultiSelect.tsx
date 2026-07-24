@@ -152,6 +152,15 @@ export function UserMultiSelect({
               if (event.key === "Escape") {
                 setOpen(false);
               }
+              // Enter selects the top search result. Without preventDefault
+              // it would implicitly submit the surrounding settings form,
+              // saving without the user the owner was about to add.
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (showResults && filteredResults.length > 0) {
+                  handleSelect(filteredResults[0]);
+                }
+              }
             }}
             placeholder={
               value.length === 0 ? "Search for a username…" : "Add another…"

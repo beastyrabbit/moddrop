@@ -18,6 +18,7 @@ import {
   type TLResizeInfo,
   useValue,
 } from "tldraw";
+import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
 import {
   DEFAULT_MEDIA_VOLUME,
   getEffectiveMediaVolume,
@@ -39,7 +40,10 @@ type YouTubeEmbedShapeProps = {
   playbackUpdatedAt?: number;
 };
 
-type YouTubeEmbedShape = TLBaseShape<"youtube-embed", YouTubeEmbedShapeProps>;
+export type YouTubeEmbedShape = TLBaseShape<
+  "youtube-embed",
+  YouTubeEmbedShapeProps
+>;
 
 declare module "tldraw" {
   interface TLGlobalShapePropsMap {
@@ -64,22 +68,14 @@ export const youtubeEmbedShapeProps: RecordProps<YouTubeEmbedShape> = {
 
 export interface YouTubeInteractionContextValue {
   interactiveShapeId: string | null;
-  settingsShapeId: string | null;
   setInteractiveShapeId: (shapeId: string | null) => void;
-  setSettingsShapeId: (shapeId: string | null) => void;
 }
 
 export const YouTubeInteractionCtx =
   createContext<YouTubeInteractionContextValue>({
     interactiveShapeId: null,
-    settingsShapeId: null,
     setInteractiveShapeId: () => {},
-    setSettingsShapeId: () => {},
   });
-
-type EventWithStopPropagation = {
-  stopPropagation(): void;
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -110,10 +106,6 @@ export function extractYouTubeId(raw: string): string | null {
   if (longMatch) return longMatch[1];
 
   return null;
-}
-
-function stopPropagation(event: EventWithStopPropagation) {
-  event.stopPropagation();
 }
 
 const YOUTUBE_SYNC_THRESHOLD_PLAYING = 1.5;
@@ -203,7 +195,21 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
       reject(new Error("YouTube iframe API failed to initialize"));
     };
 
+    // Backstop for the hang cases: an existing script tag that already
+    // failed (its onerror belonged to the first attempt), or a script that
+    // loads but never initializes. Reject and clear the cache so a later
+    // embed can retry.
+    const timeoutId = window.setTimeout(() => {
+      if (window.YT?.Player) {
+        finish();
+        return;
+      }
+      youtubeIframeApiPromise = null;
+      reject(new Error("Timed out loading the YouTube iframe API"));
+    }, 30_000);
+
     window.onYouTubeIframeAPIReady = () => {
+      window.clearTimeout(timeoutId);
       previousReady?.();
       finish();
     };
@@ -211,6 +217,7 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
     if (existingScript) {
       window.setTimeout(() => {
         if (window.YT?.Player) {
+          window.clearTimeout(timeoutId);
           finish();
         }
       }, 0);
@@ -222,6 +229,7 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
     script.src = "https://www.youtube.com/iframe_api";
     script.async = true;
     script.onerror = () => {
+      window.clearTimeout(timeoutId);
       youtubeIframeApiPromise = null;
       reject(new Error("Failed to load YouTube iframe API"));
     };
@@ -229,24 +237,6 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
   });
 
   return youtubeIframeApiPromise;
-}
-
-export function getSyncedPlaybackPosition(
-  props: Pick<
-    YouTubeEmbedShapeProps,
-    "isPlaying" | "playbackPosition" | "playbackUpdatedAt"
-  >,
-) {
-  const playbackPosition = props.playbackPosition ?? 0;
-
-  if (!props.isPlaying) {
-    return playbackPosition;
-  }
-
-  return (
-    playbackPosition +
-    Math.max(0, Date.now() - (props.playbackUpdatedAt ?? 0)) / 1000
-  );
 }
 
 function YouTubeEmbedPlayer({
@@ -268,6 +258,7 @@ function YouTubeEmbedPlayer({
   const playerHostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
   const playerReadyRef = useRef(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const commandHoldUntilRef = useRef(0);
   const interactiveRef = useRef(false);
   const readonlyRef = useRef(isReadonly);
@@ -325,7 +316,7 @@ function YouTubeEmbedPlayer({
       return;
     }
 
-    const desiredPlaybackPosition = getSyncedPlaybackPosition(
+    const desiredPlaybackPosition = getSyncedMediaPlaybackPosition(
       syncedStateRef.current,
     );
     const currentPlaybackPosition = player.getCurrentTime?.() ?? 0;
@@ -405,6 +396,13 @@ function YouTubeEmbedPlayer({
     syncedEditorAudioEnabled,
   ]);
 
+  // Reset load attempts when the video changes so a new URL always gets a
+  // fresh set of retries.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: videoId is the intentional trigger
+  useEffect(() => {
+    setLoadAttempt(0);
+  }, [videoId]);
+
   useEffect(() => {
     const host = playerHostRef.current;
     if (!host || !videoId) {
@@ -412,6 +410,7 @@ function YouTubeEmbedPlayer({
     }
 
     let cancelled = false;
+    let retryTimeoutId: number | undefined;
     playerReadyRef.current = false;
     host.innerHTML = "";
 
@@ -506,16 +505,27 @@ function YouTubeEmbedPlayer({
       })
       .catch((error) => {
         console.error("[youtube-embed] Failed to initialize player", error);
+        // The loader clears its cached promise on failure, so retrying can
+        // succeed once the API loads late (slow network, brief outage).
+        // Without this, an already-mounted player would stay blank forever.
+        if (!cancelled && loadAttempt < 3) {
+          retryTimeoutId = window.setTimeout(() => {
+            setLoadAttempt((attempt) => attempt + 1);
+          }, 10_000);
+        }
       });
 
     return () => {
       cancelled = true;
+      if (retryTimeoutId !== undefined) {
+        window.clearTimeout(retryTimeoutId);
+      }
       playerReadyRef.current = false;
       playerRef.current?.destroy();
       playerRef.current = null;
       host.innerHTML = "";
     };
-  }, [videoId, isReadonly]);
+  }, [videoId, isReadonly, loadAttempt]);
 
   useEffect(() => {
     if (isReadonly || !isInteractive) {
@@ -537,7 +547,7 @@ function YouTubeEmbedPlayer({
       const localIsPlaying =
         playerState === window.YT?.PlayerState.PLAYING ||
         playerState === window.YT?.PlayerState.BUFFERING;
-      const desiredPlaybackPosition = getSyncedPlaybackPosition(
+      const desiredPlaybackPosition = getSyncedMediaPlaybackPosition(
         syncedStateRef.current,
       );
       const syncThreshold = localIsPlaying
@@ -664,16 +674,12 @@ function YouTubeEmbedShapeComponent({
   editor: Editor;
   shape: YouTubeEmbedShape;
 }) {
-  const { settingsShapeId, setSettingsShapeId } = useContext(
-    YouTubeInteractionCtx,
-  );
   const videoId = extractYouTubeId(shape.props.url);
   const isReadonly = useValue(
     "youtube readonly state",
     () => editor.getInstanceState().isReadonly,
     [editor],
   );
-  const isSettingsOpen = settingsShapeId === shape.id;
   const pageBounds = useValue(
     "youtube page bounds",
     () => editor.getShapePageBounds(shape),
@@ -682,49 +688,6 @@ function YouTubeEmbedShapeComponent({
   const isAudibleInReadonly = Boolean(
     pageBounds && rectIntersectsStreamZone(pageBounds),
   );
-  const [draftUrl, setDraftUrl] = useState(shape.props.url);
-
-  useEffect(() => {
-    setDraftUrl(shape.props.url);
-  }, [shape.props.url]);
-
-  const commitDraftUrl = () => {
-    const value = draftUrl.trim();
-    if (value === shape.props.url) {
-      return false;
-    }
-
-    editor.updateShape<YouTubeEmbedShape>({
-      id: shape.id,
-      type: "youtube-embed",
-      props: {
-        url: value,
-        isPlaying: false,
-        playbackPosition: 0,
-        playbackUpdatedAt: Date.now(),
-      },
-    });
-
-    return true;
-  };
-
-  const closeSettings = () => {
-    const didChangeUrl = commitDraftUrl();
-
-    if (!didChangeUrl && shape.props.url.trim()) {
-      editor.updateShape<YouTubeEmbedShape>({
-        id: shape.id,
-        type: "youtube-embed",
-        props: {
-          playbackPosition: getSyncedPlaybackPosition(shape.props),
-          playbackUpdatedAt: Date.now(),
-        },
-      });
-    }
-
-    setSettingsShapeId(null);
-    editor.setCurrentTool("select");
-  };
 
   return (
     <HTMLContainer
@@ -737,7 +700,7 @@ function YouTubeEmbedShapeComponent({
         background: "#000",
       }}
     >
-      {videoId && !isSettingsOpen ? (
+      {videoId ? (
         <YouTubeEmbedPlayer
           editor={editor}
           shape={shape}
@@ -752,6 +715,9 @@ function YouTubeEmbedShapeComponent({
           }}
         />
       ) : (
+        // Passive placeholder — no pointer handling, so the empty element
+        // can be selected and dragged like any other shape. The URL is set
+        // via the media inspector panel.
         <div
           style={{
             width: "100%",
@@ -760,21 +726,12 @@ function YouTubeEmbedShapeComponent({
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            gap: 12,
+            gap: 10,
             background: "rgba(0,0,0,0.9)",
             color: "#fff",
             fontFamily: "sans-serif",
             padding: 16,
-            position: "relative",
-            pointerEvents: "all",
-            zIndex: 1,
-            userSelect: "text",
           }}
-          onPointerDownCapture={stopPropagation}
-          onPointerUpCapture={stopPropagation}
-          onPointerMoveCapture={stopPropagation}
-          onMouseDownCapture={stopPropagation}
-          onMouseUpCapture={stopPropagation}
         >
           <svg
             width="48"
@@ -792,136 +749,16 @@ function YouTubeEmbedShapeComponent({
             <path d="m10 15 5-3-5-3z" />
           </svg>
           {!isReadonly && (
-            <>
-              <span style={{ fontSize: 13, opacity: 0.7 }}>
-                Paste a YouTube URL
-              </span>
-              <input
-                type="text"
-                ref={(element) => {
-                  if (
-                    element &&
-                    isSettingsOpen &&
-                    document.activeElement !== element
-                  ) {
-                    element.focus();
-                  }
-                }}
-                placeholder="https://youtube.com/watch?v=..."
-                value={draftUrl}
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setDraftUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    closeSettings();
-                  }
-                  e.stopPropagation();
-                }}
-                onBlur={() => {
-                  commitDraftUrl();
-                }}
-                onContextMenu={(e) => e.stopPropagation()}
-                style={{
-                  width: "80%",
-                  maxWidth: 320,
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.1)",
-                  color: "#fff",
-                  fontSize: 13,
-                  outline: "none",
-                  pointerEvents: "all",
-                }}
-              />
-              <div
-                style={{
-                  width: "80%",
-                  maxWidth: 320,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-                onPointerDownCapture={stopPropagation}
-                onPointerUpCapture={stopPropagation}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    fontSize: 12,
-                    opacity: 0.78,
-                  }}
-                >
-                  <span>OBS volume</span>
-                  <span>
-                    {Math.round(
-                      (shape.props.volume ?? DEFAULT_MEDIA_VOLUME) * 100,
-                    )}
-                    %
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={shape.props.volume ?? DEFAULT_MEDIA_VOLUME}
-                  onChange={(e) => {
-                    const volume = Number.parseFloat(e.target.value);
-                    editor.updateShape<YouTubeEmbedShape>({
-                      id: shape.id,
-                      type: "youtube-embed",
-                      props: { volume },
-                    });
-                  }}
-                  onInput={(e) => {
-                    const volume = Number.parseFloat(
-                      (e.target as HTMLInputElement).value,
-                    );
-                    editor.updateShape<YouTubeEmbedShape>({
-                      id: shape.id,
-                      type: "youtube-embed",
-                      props: { volume },
-                    });
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onPointerUp={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                  onContextMenu={(e) => e.stopPropagation()}
-                  style={{
-                    width: "100%",
-                    accentColor: "#60a5fa",
-                    height: 4,
-                    pointerEvents: "all",
-                    cursor: "pointer",
-                  }}
-                />
-              </div>
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeSettings();
-                }}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.12)",
-                  color: "#fff",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                Done
-              </button>
-            </>
+            <span
+              style={{
+                fontSize: 13,
+                opacity: 0.7,
+                textAlign: "center",
+                maxWidth: 280,
+              }}
+            >
+              Select this element and paste a YouTube URL in the panel
+            </span>
           )}
         </div>
       )}

@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import type { Metadata } from "next";
 import {
   DM_Sans,
   DM_Serif_Display,

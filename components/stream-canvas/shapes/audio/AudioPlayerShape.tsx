@@ -18,7 +18,8 @@ import {
   type TLResizeInfo,
   useValue,
 } from "tldraw";
-import { uploadFile } from "@/lib/stream-canvas/api";
+import { mediaFilenameFromUrl } from "@/lib/stream-canvas/media-filename";
+import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
 import {
   DEFAULT_MEDIA_VOLUME,
   getEffectiveMediaVolume,
@@ -42,7 +43,10 @@ type AudioPlayerShapeProps = {
   playbackUpdatedAt?: number;
 };
 
-type AudioPlayerShape = TLBaseShape<"audio-player", AudioPlayerShapeProps>;
+export type AudioPlayerShape = TLBaseShape<
+  "audio-player",
+  AudioPlayerShapeProps
+>;
 
 declare module "tldraw" {
   interface TLGlobalShapePropsMap {
@@ -109,24 +113,6 @@ function formatPlaybackTime(seconds: number): string {
 // Audio player component (used inside the shape)
 // ---------------------------------------------------------------------------
 
-export function getAudioSyncedPlaybackPosition(
-  props: Pick<
-    AudioPlayerShapeProps,
-    "isPlaying" | "playbackPosition" | "playbackUpdatedAt"
-  >,
-) {
-  const playbackPosition = props.playbackPosition ?? 0;
-
-  if (!props.isPlaying) {
-    return playbackPosition;
-  }
-
-  return (
-    playbackPosition +
-    Math.max(0, Date.now() - (props.playbackUpdatedAt ?? 0)) / 1000
-  );
-}
-
 function stopPropagation(event: EventWithStopPropagation) {
   event.stopPropagation();
 }
@@ -146,22 +132,16 @@ function AudioPlayerComponent({
     YouTubeInteractionCtx,
   );
   const audioRef = useRef<HTMLAudioElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastSharedPlaybackRef = useRef(0);
   const lastObservedPlaybackRef = useRef(0);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadingFilename, setUploadingFilename] = useState<string | null>(
-    null,
-  );
-  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
-  const [draftUrl, setDraftUrl] = useState(shape.props.url);
   const [resolvedMediaUrl, setResolvedMediaUrl] = useState(shape.props.url);
   const [displayTime, setDisplayTime] = useState(
     shape.props.playbackPosition ?? 0,
   );
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
+  const [mediaFailed, setMediaFailed] = useState(false);
+  const mediaErrorCountRef = useRef(0);
   const uploadCtx = useContext(AudioUploadCtx);
   const syncedIsPlaying = shape.props.isPlaying ?? false;
   const syncedPlaybackPosition = shape.props.playbackPosition ?? 0;
@@ -175,22 +155,24 @@ function AudioPlayerComponent({
     pageBounds && rectIntersectsStreamZone(pageBounds),
   );
   const isInteractive = isReadonly || interactiveShapeId === shape.id;
-  const showControls = !shape.props.url || isInteractive;
   const editorAudioEnabled = shape.props.editorAudioEnabled ?? false;
   const effectiveVolume = getEffectiveMediaVolume(shape.props.volume);
   const isVolumeMuted = effectiveVolume <= 0.001;
   const shouldOutputAudio = isReadonly
     ? isAudibleInReadonly
     : isInteractive && editorAudioEnabled;
-  const currentSyncedTime = getAudioSyncedPlaybackPosition(shape.props);
+  const currentSyncedTime = getSyncedMediaPlaybackPosition(shape.props);
   const seekPreviewTime = scrubTime ?? displayTime;
   const maxTimelineTime = Math.max(duration, displayTime, currentSyncedTime, 0);
   const passiveProgressRatio =
     maxTimelineTime > 0 ? Math.min(displayTime / maxTimelineTime, 1) : 0;
 
+  // Reset scrub and error state when the audio source changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: shape.props.url is the intentional trigger
   useEffect(() => {
-    setDraftUrl(shape.props.url);
     setScrubTime(null);
+    setMediaFailed(false);
+    mediaErrorCountRef.current = 0;
   }, [shape.props.url]);
 
   const resolveMediaUrl = useCallback(
@@ -254,7 +236,7 @@ function AudioPlayerComponent({
       return;
     }
 
-    const nextDisplayTime = getAudioSyncedPlaybackPosition({
+    const nextDisplayTime = getSyncedMediaPlaybackPosition({
       isPlaying: syncedIsPlaying,
       playbackPosition: syncedPlaybackPosition,
       playbackUpdatedAt: syncedPlaybackUpdatedAt,
@@ -321,62 +303,7 @@ function AudioPlayerComponent({
     syncedPlaybackUpdatedAt,
   ]);
 
-  const handleFileUpload = async (file: File) => {
-    if (!uploadCtx) return;
-    setUploading(true);
-    setUploadingFilename(file.name);
-    setUploadError(null);
-    setUploadNotice(null);
-    try {
-      const result = await uploadFile(
-        uploadCtx.roomId,
-        file,
-        uploadCtx.getToken,
-      );
-      const nextUrl = result.url;
-      setDraftUrl(nextUrl);
-      setUploadNotice(`Uploaded ${result.filename}`);
-      onUpdateProps({
-        url: nextUrl,
-        isPlaying: false,
-        playbackPosition: 0,
-        playbackUpdatedAt: Date.now(),
-      });
-    } catch (err) {
-      console.error("[audio-player] Upload failed:", err);
-      setUploadNotice(null);
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploading(false);
-      setUploadingFilename(null);
-    }
-  };
-
-  const filename = shape.props.url
-    ? decodeURIComponent(shape.props.url.split("/").pop() ?? "audio")
-    : "";
-
-  const commitDraftUrl = () => {
-    const value = draftUrl.trim();
-    if (value === shape.props.url) {
-      return false;
-    }
-
-    setUploadNotice(null);
-    onUpdateProps({
-      url: value,
-      isPlaying: false,
-      playbackPosition: 0,
-      playbackUpdatedAt: Date.now(),
-    });
-
-    return true;
-  };
-
-  const openFilePicker = () => {
-    if (uploading) return;
-    fileInputRef.current?.click();
-  };
+  const filename = shape.props.url ? mediaFilenameFromUrl(shape.props.url) : "";
 
   const syncPlayback = (
     nextIsPlaying: boolean,
@@ -442,7 +369,7 @@ function AudioPlayerComponent({
 
   const cancelScrubPosition = () => {
     setScrubTime(null);
-    const restoredPosition = getAudioSyncedPlaybackPosition(shape.props);
+    const restoredPosition = getSyncedMediaPlaybackPosition(shape.props);
     setDisplayTime(restoredPosition);
 
     if (audioRef.current) {
@@ -455,6 +382,8 @@ function AudioPlayerComponent({
 
   const handleLoadedMetadata = () => {
     if (!audioRef.current) return;
+    mediaErrorCountRef.current = 0;
+    setMediaFailed(false);
     setDuration(
       Number.isFinite(audioRef.current.duration)
         ? audioRef.current.duration
@@ -514,7 +443,14 @@ function AudioPlayerComponent({
       url: shape.props.url,
       resolved: Boolean(resolvedMediaUrl),
     });
-    refreshResolvedMediaUrl();
+    // Retry with a freshly minted access URL a bounded number of times, then
+    // surface the failure instead of refresh-looping forever.
+    mediaErrorCountRef.current += 1;
+    if (mediaErrorCountRef.current <= 2) {
+      refreshResolvedMediaUrl();
+    } else {
+      setMediaFailed(true);
+    }
   };
 
   const sharedAudioElement = shape.props.url ? (
@@ -610,7 +546,58 @@ function AudioPlayerComponent({
     );
   }
 
-  if (showControls) {
+  if (!shape.props.url) {
+    // Passive placeholder — no pointer handling, so the empty element can be
+    // selected and dragged like any other shape. Audio is added via the
+    // media inspector panel.
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          background: "rgba(30,30,30,0.95)",
+          borderRadius: 8,
+          color: "#fff",
+          fontFamily: "sans-serif",
+          padding: 12,
+        }}
+      >
+        <svg
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ opacity: 0.6 }}
+        >
+          <title>Audio player placeholder</title>
+          <path d="M9 18V5l12-2v13" />
+          <circle cx="6" cy="18" r="3" />
+          <circle cx="18" cy="16" r="3" />
+        </svg>
+        <span
+          style={{
+            fontSize: 12,
+            opacity: 0.65,
+            textAlign: "center",
+            maxWidth: 220,
+          }}
+        >
+          Select this element and add audio in the panel
+        </span>
+      </div>
+    );
+  }
+
+  if (isInteractive) {
     return (
       <>
         {sharedAudioElement}
@@ -637,355 +624,123 @@ function AudioPlayerComponent({
           onPointerUpCapture={stopPropagation}
           onPointerMoveCapture={stopPropagation}
         >
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ opacity: 0.6 }}
-          >
-            <title>Audio player placeholder</title>
-            <path d="M9 18V5l12-2v13" />
-            <circle cx="6" cy="18" r="3" />
-            <circle cx="18" cy="16" r="3" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Paste audio URL..."
-            value={draftUrl}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => setDraftUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                commitDraftUrl();
-              }
-              e.stopPropagation();
-            }}
-            onBlur={() => {
-              commitDraftUrl();
-            }}
-            onContextMenu={(e) => e.stopPropagation()}
-            style={{
-              width: "85%",
-              padding: "6px 10px",
-              borderRadius: 6,
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "rgba(255,255,255,0.1)",
-              color: "#fff",
-              fontSize: 12,
-              outline: "none",
-              pointerEvents: "all",
-            }}
-          />
           <div
             style={{
-              width: "85%",
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              alignItems: "center",
-              textAlign: "center",
+              fontSize: 11,
+              color: "rgba(255,255,255,0.72)",
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
+            title={filename}
           >
-            {uploading ? (
-              <div style={{ fontSize: 11, color: "#fbbf24" }}>
-                Uploading {uploadingFilename ?? "audio file"}...
-              </div>
-            ) : uploadNotice ? (
-              <div style={{ fontSize: 11, color: "#86efac" }}>
-                {uploadNotice}
-              </div>
-            ) : shape.props.url ? (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "rgba(255,255,255,0.72)",
-                  maxWidth: "100%",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-                title={filename}
-              >
-                Current file: {filename}
-              </div>
-            ) : (
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>
-                No audio file selected
-              </div>
-            )}
-            {uploadError && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#fca5a5",
-                  maxWidth: "100%",
-                }}
-              >
-                {uploadError}
-              </div>
-            )}
+            {filename}
           </div>
+          {mediaFailed && (
+            <div style={{ fontSize: 11, color: "#fca5a5" }}>
+              Audio failed to load — check the file in the panel
+            </div>
+          )}
           <div
             style={{
               display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              justifyContent: "center",
+              alignItems: "center",
+              gap: 10,
+              width: "100%",
+              pointerEvents: "all",
             }}
             onPointerDownCapture={stopPropagation}
             onPointerUpCapture={stopPropagation}
+            onPointerMoveCapture={stopPropagation}
           >
-            {uploadCtx ? (
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openFilePicker();
-                }}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.88)",
-                  cursor: uploading ? "wait" : "pointer",
-                  fontSize: 12,
-                }}
-                disabled={uploading}
-              >
-                {uploading
-                  ? `Uploading ${uploadingFilename ?? "audio"}...`
-                  : "Upload audio file"}
-              </button>
-            ) : null}
-            {!!shape.props.url && (
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (audioRef.current) {
-                    audioRef.current.pause();
-                  }
-                  setDraftUrl("");
-                  setUploadNotice(null);
-                  setDisplayTime(0);
-                  onUpdateProps({
-                    url: "",
-                    isPlaying: false,
-                    playbackPosition: 0,
-                    playbackUpdatedAt: Date.now(),
-                  });
-                  setInteractiveShapeId(null);
-                }}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.78)",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                Remove audio
-              </button>
-            )}
-            {uploadCtx ? (
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="audio/*"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                  e.target.value = "";
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                disabled={uploading}
-              />
-            ) : null}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlayback();
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                e.stopPropagation();
+                togglePlayback();
+              }}
+              style={{
+                width: 48,
+                height: 48,
+                flexShrink: 0,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.18)",
+                border: "1px solid rgba(255,255,255,0.18)",
+                borderRadius: 999,
+                color: "#fff",
+                cursor: "pointer",
+                padding: 0,
+                fontSize: 24,
+                lineHeight: 1,
+              }}
+              title={syncedIsPlaying ? "Pause" : "Play"}
+            >
+              {syncedIsPlaying ? "⏸" : "▶"}
+            </button>
+            <span
+              style={{
+                flex: 1,
+                fontSize: 11,
+                opacity: 0.72,
+                textAlign: "right",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {formatPlaybackTime(seekPreviewTime)} /{" "}
+              {formatPlaybackTime(maxTimelineTime)}
+            </span>
           </div>
-          {!!shape.props.url && (
-            <>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  width: "100%",
-                  pointerEvents: "all",
-                }}
-                onPointerDownCapture={stopPropagation}
-                onPointerUpCapture={stopPropagation}
-                onPointerMoveCapture={stopPropagation}
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePlayback();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" && e.key !== " ") return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    togglePlayback();
-                  }}
-                  style={{
-                    width: 48,
-                    height: 48,
-                    flexShrink: 0,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "rgba(255,255,255,0.18)",
-                    border: "1px solid rgba(255,255,255,0.18)",
-                    borderRadius: 999,
-                    color: "#fff",
-                    cursor: "pointer",
-                    padding: 0,
-                    fontSize: 24,
-                    lineHeight: 1,
-                  }}
-                  title={syncedIsPlaying ? "Pause" : "Play"}
-                >
-                  {syncedIsPlaying ? "⏸" : "▶"}
-                </button>
-                <div
-                  style={{
-                    flex: 1,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      fontSize: 11,
-                      opacity: 0.74,
-                    }}
-                  >
-                    <span>Volume</span>
-                    <span>{Math.round(shape.props.volume * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={shape.props.volume}
-                    onChange={(e) => {
-                      const vol = Number.parseFloat(e.target.value);
-                      if (audioRef.current) {
-                        audioRef.current.volume = getEffectiveMediaVolume(vol);
-                      }
-                      onUpdateProps({ volume: vol });
-                    }}
-                    style={{
-                      flex: 1,
-                      accentColor: "#3b82f6",
-                      height: 4,
-                      cursor: "pointer",
-                    }}
-                    title={`Volume: ${Math.round(shape.props.volume * 100)}%`}
-                  />
-                </div>
-                <span
-                  style={{
-                    fontSize: 11,
-                    opacity: 0.72,
-                    minWidth: 72,
-                    textAlign: "right",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {formatPlaybackTime(seekPreviewTime)} /{" "}
-                  {formatPlaybackTime(maxTimelineTime)}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdateProps({ loop: !shape.props.loop });
-                  }}
-                  style={{
-                    background: shape.props.loop
-                      ? "rgba(59,130,246,0.4)"
-                      : "rgba(255,255,255,0.1)",
-                    border: "none",
-                    borderRadius: 4,
-                    color: "#fff",
-                    cursor: "pointer",
-                    padding: "4px 6px",
-                    fontSize: 11,
-                  }}
-                  title={shape.props.loop ? "Loop: ON" : "Loop: OFF"}
-                >
-                  🔁
-                </button>
-              </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  width: "100%",
-                  pointerEvents: "all",
-                }}
-                onPointerDownCapture={stopPropagation}
-                onPointerUpCapture={stopPropagation}
-                onPointerMoveCapture={stopPropagation}
-              >
-                <input
-                  type="range"
-                  min={0}
-                  max={Math.max(maxTimelineTime, 1)}
-                  step={0.1}
-                  value={Math.min(
-                    seekPreviewTime,
-                    Math.max(maxTimelineTime, 1),
-                  )}
-                  onPointerDown={() => {
-                    setScrubTime(seekPreviewTime);
-                  }}
-                  onPointerCancel={() => {
-                    cancelScrubPosition();
-                  }}
-                  onInput={(e) => {
-                    updateScrubPosition(
-                      Number.parseFloat((e.target as HTMLInputElement).value),
-                    );
-                  }}
-                  onChange={(e) => {
-                    commitScrubPosition(Number.parseFloat(e.target.value));
-                  }}
-                  style={{
-                    flex: 1,
-                    accentColor: "#60a5fa",
-                    height: 4,
-                    cursor: "pointer",
-                  }}
-                  title="Seek"
-                />
-              </div>
-            </>
-          )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              pointerEvents: "all",
+            }}
+            onPointerDownCapture={stopPropagation}
+            onPointerUpCapture={stopPropagation}
+            onPointerMoveCapture={stopPropagation}
+          >
+            <input
+              type="range"
+              min={0}
+              max={Math.max(maxTimelineTime, 1)}
+              step={0.1}
+              value={Math.min(seekPreviewTime, Math.max(maxTimelineTime, 1))}
+              onPointerDown={() => {
+                setScrubTime(seekPreviewTime);
+              }}
+              onPointerCancel={() => {
+                cancelScrubPosition();
+              }}
+              onInput={(e) => {
+                updateScrubPosition(
+                  Number.parseFloat((e.target as HTMLInputElement).value),
+                );
+              }}
+              onChange={(e) => {
+                commitScrubPosition(Number.parseFloat(e.target.value));
+              }}
+              style={{
+                flex: 1,
+                accentColor: "#60a5fa",
+                height: 4,
+                cursor: "pointer",
+              }}
+              title="Seek"
+            />
+          </div>
         </div>
       </>
     );
@@ -1011,25 +766,14 @@ function AudioPlayerComponent({
           padding: "8px 14px",
           border: "none",
           textAlign: "left",
-          cursor:
-            isReadonly || !shape.props.url || isInteractive
-              ? "default"
-              : "pointer",
+          cursor: "pointer",
         }}
         onDoubleClick={(e) => {
-          if (isReadonly || !shape.props.url || isInteractive) {
-            return;
-          }
-
           e.stopPropagation();
           setInteractiveShapeId(shape.id);
           editor.setCurrentTool("select");
         }}
         onKeyDown={(e) => {
-          if (isReadonly || !shape.props.url || isInteractive) {
-            return;
-          }
-
           if (e.key !== "Enter" && e.key !== " ") {
             return;
           }
@@ -1050,7 +794,13 @@ function AudioPlayerComponent({
           }}
           title={filename}
         >
-          {filename}
+          {mediaFailed ? (
+            <span style={{ color: "#fca5a5", opacity: 1 }}>
+              Audio failed to load — {filename}
+            </span>
+          ) : (
+            filename
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div
