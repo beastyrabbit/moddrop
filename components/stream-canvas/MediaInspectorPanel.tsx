@@ -18,6 +18,7 @@ import { uploadFile } from "@/lib/stream-canvas/api";
 import { mediaFilenameFromUrl } from "@/lib/stream-canvas/media-filename";
 import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
 import { DEFAULT_MEDIA_VOLUME } from "@/lib/stream-canvas/media-volume";
+import { useMediaPreference } from "./media-preferences";
 import {
   type AudioPlayerShape,
   AudioUploadCtx,
@@ -27,7 +28,6 @@ import {
   type YouTubeEmbedShape,
   YouTubeInteractionCtx,
 } from "./shapes/youtube/YouTubeEmbedShape";
-import { useMediaPreference } from "./media-preferences";
 
 /**
  * StylePanel override: when a single media element (YouTube embed or audio
