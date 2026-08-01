@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.25.0
+# syntax=docker/dockerfile:1.26.0
 
 FROM node:26.5.0-bookworm-slim AS deps
 
