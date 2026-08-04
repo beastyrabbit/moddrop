@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.25.0
 
-FROM node:26.5.0-bookworm-slim AS deps
+FROM node:26.5.1-bookworm-slim AS deps
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -13,7 +13,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/stream-canvas/package.json backend/stream-canvas/package.json
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
-FROM node:26.5.0-bookworm-slim AS builder
+FROM node:26.5.1-bookworm-slim AS builder
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -42,7 +42,7 @@ ENV PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
 
 RUN pnpm run build
 
-FROM node:26.5.0-bookworm-slim AS runner
+FROM node:26.5.1-bookworm-slim AS runner
 
 WORKDIR /app
 

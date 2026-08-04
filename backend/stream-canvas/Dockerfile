@@ -1,4 +1,4 @@
-FROM node:26.5.0-bookworm-slim AS base
+FROM node:26.5.1-bookworm-slim AS base
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -24,7 +24,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY backend/stream-canvas/package.json backend/stream-canvas/package.json
 RUN pnpm install --filter stream-canvas --prod --frozen-lockfile --ignore-scripts
 
-FROM node:26.5.0-bookworm-slim AS runner
+FROM node:26.5.1-bookworm-slim AS runner
 
 WORKDIR /app/backend/stream-canvas
 

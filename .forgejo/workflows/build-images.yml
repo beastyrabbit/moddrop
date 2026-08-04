@@ -130,7 +130,7 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 26.5.0
+          node-version: 26.6.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Fetch Convex deploy secrets from Infisical
