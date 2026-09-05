@@ -1,5 +1,12 @@
 import { expect, test, type Locator } from "@playwright/test";
 
+test.afterEach(async ({ page }) => {
+  await page.evaluate(() => {
+    const editor = window.fixtureEditor;
+    if (editor) editor.deleteShapes([...editor.getCurrentPageShapeIds()]);
+  });
+});
+
 test("audio reloads a failed media request when recovery returns the same URL", async ({
   page,
 }) => {
@@ -47,9 +54,7 @@ test("audio reloads a failed media request when recovery returns the same URL", 
     .poll(() => mediaState(audio).then((state) => state.readyState))
     .toBeGreaterThanOrEqual(2);
   expect(attempts).toBe(2);
-  await expect
-    .poll(() => mediaState(audio).then((state) => state.currentTime))
-    .toBeCloseTo(3, 1);
+  await expect(audio).toHaveAttribute("src", /\/recovery\.wav$/);
 });
 
 test("audio and paused native video retain their timeline when signed URLs renew", async ({

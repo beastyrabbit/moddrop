@@ -327,38 +327,43 @@ async function admitWebSocket(
       }
       throw error;
     }
-    if (!leaderState.isLeader) {
-      ws.close(1012, "Canvas leader is changing");
-      return;
-    }
-    const { room } = active;
-    const metadata = await db.query.rooms.findFirst({
-      where: eq(rooms.id, auth.roomId),
-    });
-    if (
-      !metadata ||
-      !leaderState.isLeader ||
-      activeRooms.get(auth.roomId) !== active ||
-      room.isClosed() ||
-      ws.readyState !== ws.OPEN
-    ) {
-      ws.close(1012, "Canvas leader is changing");
-      return;
-    }
-    clearTimeout(active.idleTimer);
-    if (room.getNumActiveSessions() >= config.maxWsSessionsPerRoom) {
-      ws.close(1013, "Room session limit reached");
-      return;
-    }
+    try {
+      if (!leaderState.isLeader) {
+        ws.close(1012, "Canvas leader is changing");
+        return;
+      }
+      const { room } = active;
+      const metadata = await db.query.rooms.findFirst({
+        where: eq(rooms.id, auth.roomId),
+      });
+      if (
+        !metadata ||
+        !leaderState.isLeader ||
+        activeRooms.get(auth.roomId) !== active ||
+        room.isClosed() ||
+        ws.readyState !== ws.OPEN
+      ) {
+        ws.close(1012, "Canvas leader is changing");
+        return;
+      }
+      clearTimeout(active.idleTimer);
+      if (room.getNumActiveSessions() >= config.maxWsSessionsPerRoom) {
+        ws.close(1013, "Room session limit reached");
+        return;
+      }
 
-    const sessionId = crypto.randomUUID();
-    active.sessions.set(sessionId, auth);
-    room.handleSocketConnect({
-      sessionId,
-      socket: ws,
-      isReadonly: auth.role === "obs",
-    });
-    room.sendCustomMessage(sessionId, roomConfigMessage(metadata));
+      const sessionId = crypto.randomUUID();
+      active.sessions.set(sessionId, auth);
+      room.handleSocketConnect({
+        sessionId,
+        socket: ws,
+        isReadonly: auth.role === "obs",
+      });
+      room.sendCustomMessage(sessionId, roomConfigMessage(metadata));
+    } finally {
+      // Failed admission has no session-removal callback to rearm cleanup.
+      scheduleIdleDisposal(auth.roomId, active);
+    }
   });
 }
 

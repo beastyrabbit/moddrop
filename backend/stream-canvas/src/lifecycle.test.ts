@@ -197,7 +197,30 @@ test("PostgreSQL and WebSockets preserve canvas state, revoke sessions, and hand
       token: string;
     }
   ).token;
-  const editor = await connect(await editorToken());
+  const initialEditorToken = await editorToken();
+  const loadSnapshot = t.mock.method(db.query.canvasDocuments, "findFirst");
+  const findRoom = db.query.rooms.findFirst.bind(db.query.rooms);
+  let metadataReads = 0;
+  const readMetadata = t.mock.method(
+    db.query.rooms,
+    "findFirst",
+    (...args: Parameters<typeof findRoom>) => {
+      if (++metadataReads === 2) throw new Error("Temporary metadata failure");
+      return findRoom(...args);
+    },
+  );
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const failedAdmission = await connect(initialEditorToken);
+  assert.equal(failedAdmission.closed, true);
+  assert.equal(loadSnapshot.mock.callCount(), 1);
+  readMetadata.mock.restore();
+  t.mock.timers.tick(30_000);
+  // Let the disposal's asynchronous flush finish before reconnecting.
+  await delay(20);
+  t.mock.timers.reset();
+  const editor = await connect(initialEditorToken);
+  assert.equal(loadSnapshot.mock.callCount(), 2);
+  loadSnapshot.mock.restore();
   const collaborator = await connect(await editorToken(member));
   const mirror = await connect(obsToken);
   assert.ok(
