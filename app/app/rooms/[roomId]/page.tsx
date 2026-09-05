@@ -30,7 +30,7 @@ export default function StreamCanvasRoomPage() {
           throw new Error(
             "This room is unavailable or you no longer have access.",
           );
-        if (!cancelled && room) {
+        if (!cancelled) {
           setTwitchChannel(room.twitchChannel);
           setYouTubePolicy(room.youtubePolicy);
           setLoadedRoomId(roomId);

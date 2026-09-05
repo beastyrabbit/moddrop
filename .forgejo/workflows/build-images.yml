@@ -38,7 +38,11 @@ env:
 
 jobs:
   verify:
+    # Legacy Docker-backed Forgejo runner. See the backend delivery runbook.
     runs-on: personal
+    container:
+      image: node:26.5.0-bookworm
+      options: --user 0
     permissions:
       contents: read
     services:

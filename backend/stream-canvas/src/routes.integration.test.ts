@@ -7,8 +7,6 @@ import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
-import { Hono } from "hono";
-import { cors } from "hono/cors";
 
 const origin = "https://moddrop.localhost:1355";
 const issuer = "https://example.clerk.accounts.dev";
@@ -144,7 +142,7 @@ await db.insert(roomMembers).values({
 });
 
 test("CORS permits the configured origin and bounded authorization preflight", async () => {
-  const app = new Hono().use("*", cors({ origin: [origin] })).route("/", api);
+  const { app } = await import("./app.ts");
   const response = await app.request("/api/rooms", {
     method: "OPTIONS",
     headers: {
@@ -167,6 +165,23 @@ test("CORS permits the configured origin and bounded authorization preflight", a
     },
   });
   assert.equal(other.headers.get("access-control-allow-origin"), null);
+});
+
+test("the production HTTP boundary rejects standby policy and secret mutations", async () => {
+  const { app } = await import("./app.ts");
+  const before = await db.select().from(rooms).where(eq(rooms.id, roomId));
+  for (const [path, method] of [
+    [`/api/rooms/${roomId}`, "PATCH"],
+    [`/api/rooms/${roomId}/regenerate-secret`, "POST"],
+  ] as const) {
+    const response = await app.request(path, { method });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("retry-after"), "2");
+  }
+  assert.deepEqual(
+    await db.select().from(rooms).where(eq(rooms.id, roomId)),
+    before,
+  );
 });
 
 test("object-write and metadata failures leave no successful upload record", async (t) => {

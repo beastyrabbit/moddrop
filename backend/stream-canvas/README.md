@@ -60,6 +60,14 @@ invalidates previously minted WebSocket tickets. Other editors stay connected.
 An already issued upload URL remains valid until its configured expiry, normally
 one hour. Downloaded bytes cannot be recalled.
 
+These guarantees apply to the leader serving the application HTTP routes.
+The production HTTP middleware rejects standby requests with 503 and
+`Retry-After: 2`, independently of ingress readiness routing. Deployments must
+still drain HTTP requests on the old process before starting its successor,
+as part of the stop/flush/start handover. A request admitted before demotion
+can otherwise finish its database transaction after the old sessions close;
+configuration notifications are process-local, not a cross-replica event bus.
+
 The service sends committed Twitch and YouTube settings over existing WebSockets.
 Official clients apply them on receipt, without a manual refresh or polling.
 This requires an open, functioning connection; a reconnect receives current
@@ -76,9 +84,14 @@ lock. On involuntary connection loss the service immediately stops admission,
 closes sessions, and discards uncommitted in-memory changes rather than writing
 them over a successor's state. Voluntary shutdown retains the lock until flush
 finishes. Failed flushes are reported as failures, including a nonzero shutdown
-exit. Database statements have a 10-second deadline, readiness has a 3-second
+exit. Service database statements have a 10-second deadline, readiness has a 3-second
 deadline, and shutdown has a 25-second deadline. Configure the external
 orchestrator's termination grace period to at least 30 seconds.
+Migration and offline import commands use a separate pool without statement or
+client query deadlines, so lock waits and long DDL are not cut off by request
+limits. Bound those maintenance jobs with the deployment job's timeout instead.
+The live snapshot writer retains the service deadline; investigate repeated
+write timeouts as an operational failure rather than assuming those edits are durable.
 
 ## Upload retention
 
@@ -95,6 +108,16 @@ and backup restores within that grace period or extend it. No live uploads are
 deleted by this change.
 
 ## Verification
+
+The Forgejo workflow is a legacy delivery target. The homelab `personal` runner
+pool was retired on 2026-08-31; it cannot currently provide hosted verification.
+If this workflow is used again, it requires a Docker-backed `personal` runner
+with service-container networking. Its verification job explicitly uses the
+pinned Node Bookworm container as root so Playwright can install Debian browser
+dependencies without relying on host sudo configuration. Validate that job on
+the replacement runner before enabling delivery. GitHub Actions must also be
+enabled at repository level for `.github/workflows/verify.yml` to run; workflow
+files alone do not turn it on.
 
 `pnpm run test` runs fast route and lifecycle unit tests and tears down its
 temporary storage and pools. Set `CANVAS_TEST_DATABASE_URL` to a disposable

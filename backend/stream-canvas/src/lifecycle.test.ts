@@ -223,6 +223,25 @@ test("PostgreSQL and WebSockets preserve canvas state, revoke sessions, and hand
   loadSnapshot.mock.restore();
   const collaborator = await connect(await editorToken(member));
   const mirror = await connect(obsToken);
+  for (const connection of [editor, collaborator, mirror]) {
+    await until(() =>
+      connection.messages.some(
+        (message) =>
+          isMessage(message, "custom") &&
+          JSON.stringify(message).includes('"youtubePolicy":"preview_only"'),
+      ),
+    );
+    const handshake = connection.messages.findIndex((message) =>
+      isMessage(message, "connect"),
+    );
+    const settings = connection.messages.findIndex((message) =>
+      isMessage(message, "custom"),
+    );
+    assert.ok(
+      settings > handshake,
+      "initial settings follow the completed handshake",
+    );
+  }
   assert.ok(
     mirror.messages.some(
       (message) => isMessage(message, "connect") && message.isReadonly === true,
@@ -318,6 +337,13 @@ test("PostgreSQL and WebSockets preserve canvas state, revoke sessions, and hand
   await until(() => leaderState.isLeader);
   assert.equal(demotions, 1);
   const recovered = await connect(await editorToken());
+  await until(() =>
+    recovered.messages.some(
+      (message) =>
+        isMessage(message, "custom") &&
+        JSON.stringify(message).includes('"youtubePolicy":"disabled"'),
+    ),
+  );
   assert.ok(
     recovered.messages.some((message) =>
       JSON.stringify(message).includes("Latest durable canvas"),

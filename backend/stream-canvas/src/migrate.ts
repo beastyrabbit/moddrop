@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { closeDatabase, db, pool } from "./db.ts";
+import { closeDatabase, db, pool } from "./maintenance-db.ts";
 
 const MIGRATION_LOCK_KEY = 1_296_315_461;
 const migrationsFolder = fileURLToPath(new URL("../drizzle", import.meta.url));

@@ -38,6 +38,8 @@ for (const configured of [
   "https://canvas-runtime.invalid/alternate",
   "/custom-canvas",
 ]) {
+  // Next.js 16.2.11 Turbopack chunk registration format. Keep this adapter in
+  // sync when upgrading Next; assertions still execute the actual built module.
   const registrations: unknown[] = [];
   const requests: string[] = [];
   const context = vm.createContext({
@@ -75,7 +77,10 @@ for (const configured of [
   const factory = factories(registrations).find((fn) =>
     fn.toString().includes('"buildEditorWsUrl"'),
   );
-  assert.ok(factory, "Expected a compiled API factory");
+  assert.ok(
+    factory,
+    "Compiled chunk format changed; update scripts/test-runtime-config.ts for this Next.js version",
+  );
   const exports: Record<string, unknown> = {};
   factory({
     s(entries: unknown[]) {

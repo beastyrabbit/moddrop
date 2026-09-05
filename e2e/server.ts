@@ -120,7 +120,8 @@ async function stop() {
   stopping = true;
   await vite.close();
   backend.kill("SIGTERM");
-  if (backend.exitCode === null) await once(backend, "exit");
+  if (backend.exitCode === null && backend.signalCode === null)
+    await once(backend, "exit");
   // Remove only this fixture's records, using the backend's installed pg package.
   const cleanup = spawn(
     process.execPath,
@@ -135,12 +136,19 @@ async function stop() {
       stdio: "inherit",
     },
   );
-  await once(cleanup, "exit");
+  const [cleanupCode] = await once(cleanup, "exit");
+  if (cleanupCode !== 0) throw new Error("Fixture database cleanup failed");
   await rm(directory, { recursive: true, force: true });
 }
-process.on("SIGTERM", () => {
-  void stop();
-});
-process.on("SIGINT", () => {
-  void stop();
-});
+function requestStop() {
+  if (stopping) return;
+  void stop().then(
+    () => process.exit(0),
+    (error) => {
+      console.error("[browser-fixture] cleanup failed", error);
+      process.exit(1);
+    },
+  );
+}
+process.on("SIGTERM", requestStop);
+process.on("SIGINT", requestStop);

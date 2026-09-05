@@ -29,7 +29,8 @@ interface ActiveRoom {
   room: TLSocketRoom<TLRecord>;
   storage: InMemorySyncStorage<TLRecord>;
   writer: RoomSnapshotWriter;
-  sessions: Map<string, AuthResult>;
+  sessions: Map<string, AuthResult & { initialConfigSent?: boolean }>;
+  config?: ReturnType<typeof roomConfigMessage>;
   idleTimer?: NodeJS.Timeout;
   disposing?: Promise<void>;
 }
@@ -85,6 +86,22 @@ async function loadRoom(roomId: string, epoch: number): Promise<ActiveRoom> {
   const room = new TLSocketRoom({
     storage,
     schema: streamCanvasSchema,
+    onBeforeSendMessage({ sessionId }) {
+      const session = active.sessions.get(sessionId);
+      if (!session || session.initialConfigSent) return;
+      if (
+        !room
+          .getSessions()
+          .some((s) => s.sessionId === sessionId && s.isConnected)
+      )
+        return;
+      session.initialConfigSent = true;
+      // The first connected send is the handshake response. Send configuration
+      // after that frame, using the latest policy if it changed during admission.
+      queueMicrotask(() => {
+        if (active.config) room.sendCustomMessage(sessionId, active.config);
+      });
+    },
     onSessionRemoved(_room, { sessionId, numSessionsRemaining }) {
       active.sessions.delete(sessionId);
       if (numSessionsRemaining !== 0 || activeRooms.get(roomId) !== active)
@@ -166,6 +183,7 @@ export function roomConfigChanged(
 ): void {
   const active = activeRooms.get(room.id);
   if (!active) return;
+  active.config = roomConfigMessage(room);
   for (const [sessionId, auth] of active.sessions) {
     if (
       auth.role === "editor" &&
@@ -353,13 +371,13 @@ async function admitWebSocket(
       }
 
       const sessionId = crypto.randomUUID();
+      active.config = roomConfigMessage(metadata);
       active.sessions.set(sessionId, auth);
       room.handleSocketConnect({
         sessionId,
         socket: ws,
         isReadonly: auth.role === "obs",
       });
-      room.sendCustomMessage(sessionId, roomConfigMessage(metadata));
     } finally {
       // Failed admission has no session-removal callback to rearm cleanup.
       scheduleIdleDisposal(auth.roomId, active);
