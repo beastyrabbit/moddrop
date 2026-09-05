@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { once } from "node:events";
+import { createServer as createHttpServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -74,13 +75,15 @@ const created = await fetch(`${backendBase}/api/rooms`, {
 });
 if (!created.ok) throw new Error("Fixture room creation failed");
 const room = (await created.json()) as { id: string; obsSetupSecret: string };
+const frontend = createHttpServer();
 const vite = await createServer({
   configFile: false,
   root: join(root, "e2e"),
   server: {
-    host: "127.0.0.1",
-    port: 4310,
-    strictPort: true,
+    // Own shutdown: Vite's standalone SIGTERM handler calls process.exit()
+    // before fixture database and upload cleanup can finish.
+    middlewareMode: true,
+    hmr: { server: frontend },
     fs: { allow: [root] },
   },
   resolve: {
@@ -113,12 +116,17 @@ const vite = await createServer({
     },
   ],
 });
-await vite.listen();
+frontend.on("request", vite.middlewares);
+frontend.listen(4310, "127.0.0.1");
+await once(frontend, "listening");
 let stopping = false;
 async function stop() {
   if (stopping) return;
   stopping = true;
   await vite.close();
+  await new Promise<void>((resolve, reject) => {
+    frontend.close((error) => (error ? reject(error) : resolve()));
+  });
   backend.kill("SIGTERM");
   if (backend.exitCode === null && backend.signalCode === null)
     await once(backend, "exit");
