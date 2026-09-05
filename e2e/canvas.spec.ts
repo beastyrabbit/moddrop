@@ -1,5 +1,57 @@
 import { expect, test, type Locator } from "@playwright/test";
 
+test("audio reloads a failed media request when recovery returns the same URL", async ({
+  page,
+}) => {
+  const wav = Buffer.alloc(44 + 16_000 * 10);
+  wav.write("RIFF");
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(8_000, 24);
+  wav.writeUInt32LE(16_000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(wav.length - 44, 40);
+  let attempts = 0;
+  await page.route("**/recovery.wav", async (route) => {
+    if (++attempts === 1) {
+      await route.fulfill({ status: 503, body: "Temporarily unavailable" });
+      return;
+    }
+    await route.fulfill({ contentType: "audio/wav", body: wav });
+  });
+  await page.goto("/");
+  await expect
+    .poll(() => page.evaluate(() => Boolean(window.fixtureEditor)))
+    .toBe(true);
+  await page.evaluate(() => {
+    window.fixtureEditor?.createShape({
+      type: "audio-player",
+      x: 150,
+      y: 400,
+      props: {
+        url: `${location.origin}/recovery.wav`,
+        volume: 0,
+        isPlaying: false,
+        playbackPosition: 3,
+        playbackUpdatedAt: Date.now(),
+      },
+    });
+  });
+  const audio = page.locator("audio");
+  await expect
+    .poll(() => mediaState(audio).then((state) => state.readyState))
+    .toBeGreaterThanOrEqual(2);
+  expect(attempts).toBe(2);
+  await expect
+    .poll(() => mediaState(audio).then((state) => state.currentTime))
+    .toBeCloseTo(3, 1);
+});
+
 test("audio and paused native video retain their timeline when signed URLs renew", async ({
   page,
   context,

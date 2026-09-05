@@ -10,7 +10,11 @@ export interface MediaUrlResolver {
 }
 
 export function useMediaUrl(src: string, resolver: MediaUrlResolver | null) {
-  const [resolved, setResolved] = useState({ src, url: resolver ? "" : src });
+  const [resolved, setResolved] = useState({
+    src,
+    url: resolver ? "" : src,
+    reloadVersion: 0,
+  });
   const generation = useRef(0);
   const [recovery, setRecovery] = useState(0);
   const recover = useCallback(() => setRecovery((value) => value + 1), []);
@@ -29,7 +33,11 @@ export function useMediaUrl(src: string, resolver: MediaUrlResolver | null) {
             ? await resolver.resolveUrl(src, { forceRefresh })
             : src;
         if (generation.current !== current) return;
-        setResolved({ src, url });
+        setResolved((previous) => ({
+          src,
+          url,
+          reloadVersion: previous.reloadVersion + (forceRefresh ? 1 : 0),
+        }));
         failures = 0;
         const delay = resolver?.getRefreshDelayMs(src);
         if (delay !== undefined)
@@ -40,8 +48,13 @@ export function useMediaUrl(src: string, resolver: MediaUrlResolver | null) {
       } catch (error) {
         if (generation.current !== current) return;
         console.error("[media] URL renewal failed", error);
-        if (++failures <= 3)
-          timer = setTimeout(() => void refresh(), failures * 1_000);
+        failures++;
+        // Keep mounted OBS sources recoverable through longer API outages.
+        // After the quick retries, limit requests to one every 30 seconds.
+        timer = setTimeout(
+          () => void refresh(forceRefresh),
+          failures <= 3 ? failures * 1_000 : 30_000,
+        );
       }
     };
     void refresh(force);
@@ -51,5 +64,9 @@ export function useMediaUrl(src: string, resolver: MediaUrlResolver | null) {
     };
   }, [src, resolver, recovery]);
 
-  return { url: resolved.src === src ? resolved.url : "", recover };
+  return {
+    url: resolved.src === src ? resolved.url : "",
+    reloadVersion: resolved.reloadVersion,
+    recover,
+  };
 }

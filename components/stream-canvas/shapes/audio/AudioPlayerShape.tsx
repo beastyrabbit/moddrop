@@ -140,8 +140,16 @@ function AudioPlayerComponent({
   const [mediaFailed, setMediaFailed] = useState(false);
   const mediaErrorCountRef = useRef(0);
   const uploadCtx = useContext(AudioUploadCtx);
-  const { url: resolvedMediaUrl, recover: refreshResolvedMediaUrl } =
-    useMediaUrl(shape.props.url, uploadCtx);
+  const {
+    url: resolvedMediaUrl,
+    reloadVersion,
+    recover: refreshResolvedMediaUrl,
+  } = useMediaUrl(shape.props.url, uploadCtx);
+  useEffect(() => {
+    // Re-minting within the same second can return the identical URL. Reload
+    // after recovery succeeds even when React has no src change to apply.
+    if (reloadVersion > 0) audioRef.current?.load();
+  }, [reloadVersion]);
   const previewPreference = useMediaPreference(shape.id);
   const syncedIsPlaying = shape.props.isPlaying ?? false;
   const syncedPlaybackPosition = shape.props.playbackPosition ?? 0;
