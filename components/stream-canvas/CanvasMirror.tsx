@@ -11,12 +11,13 @@ import {
 import "tldraw/tldraw.css";
 import {
   buildObsWsUrl,
-  exchangeObsToken,
+  exchangeObsTokenWithRetry as exchangeObsToken,
   getObsUploadUrlRefreshDelayMs,
   resolveObsUploadUrl,
 } from "@/lib/stream-canvas/api";
 import { STREAM_ZONE } from "@/lib/stream-canvas/stream-zone";
 import type { YouTubePolicy } from "@/lib/stream-canvas/types";
+import { readRoomConfigMessage } from "@/lib/stream-canvas/room-config";
 import { AudioUploadCtx } from "./shapes/audio/AudioPlayerShape";
 import {
   CanvasMediaRefreshContext,
@@ -72,7 +73,21 @@ function OBSSetup() {
   return null;
 }
 
-export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
+export function CanvasMirror(props: CanvasMirrorProps) {
+  const [attempt, setAttempt] = useState(0);
+  return (
+    <ConnectedCanvasMirror
+      key={`${props.obsSecret}:${attempt}`}
+      {...props}
+      retry={() => setAttempt((value) => value + 1)}
+    />
+  );
+}
+
+function ConnectedCanvasMirror({
+  obsSecret,
+  retry,
+}: CanvasMirrorProps & { retry: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -143,6 +158,8 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
             getToken: async () => null,
             resolveUrl: (src: string, options?: { forceRefresh?: boolean }) =>
               resolveObsUploadUrl(src, obsSecret, options),
+            getRefreshDelayMs: (src: string) =>
+              getObsUploadUrlRefreshDelayMs(src),
           }
         : null,
     [obsSecret, roomId],
@@ -158,12 +175,26 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
     uri: getUri,
     assets,
     shapeUtils: syncShapeUtils,
+    onCustomMessageReceived(data: unknown) {
+      const roomConfig = readRoomConfigMessage(data);
+      if (roomConfig) setYouTubePolicy(roomConfig.youtubePolicy);
+    },
   });
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center text-red-500 text-sm">
+      <div
+        role="alert"
+        className="flex h-screen flex-col items-center justify-center gap-3 text-red-500 text-sm"
+      >
         {error}
+        <button
+          type="button"
+          className="rounded border px-3 py-2"
+          onClick={retry}
+        >
+          Retry OBS connection
+        </button>
       </div>
     );
   }
@@ -180,6 +211,13 @@ export function CanvasMirror({ obsSecret }: CanvasMirrorProps) {
     return (
       <div className="flex h-screen items-center justify-center bg-black/70 px-6 text-center text-red-300 text-sm">
         OBS connection error. Refresh the source or regenerate the OBS URL.
+        <button
+          type="button"
+          className="ml-3 rounded border px-3 py-2"
+          onClick={retry}
+        >
+          Retry OBS connection
+        </button>
       </div>
     );
   }

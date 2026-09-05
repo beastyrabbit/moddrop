@@ -27,6 +27,7 @@ export function UserMultiSelect({
 }: UserMultiSelectProps) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const generatedId = useId();
   const listboxId = `${inputId ?? generatedId}-results`;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -85,6 +86,10 @@ export function UserMultiSelect({
     results?.filter((user) => !value.includes(user.userId)) ?? [];
   const hasSearch = search.trim().length > 0;
   const showResults = open && hasSearch;
+  const activeOptionIndex = Math.min(
+    activeIndex,
+    Math.max(0, filteredResults.length - 1),
+  );
 
   return (
     <div ref={containerRef} className="relative">
@@ -140,15 +145,33 @@ export function UserMultiSelect({
             aria-autocomplete="list"
             aria-expanded={showResults}
             aria-controls={listboxId}
+            aria-activedescendant={
+              showResults && filteredResults.length
+                ? `${listboxId}-${activeOptionIndex}`
+                : undefined
+            }
             value={search}
             onChange={(event) => {
               setSearch(event.target.value);
+              setActiveIndex(0);
               setOpen(true);
             }}
             onFocus={() => {
               if (hasSearch) setOpen(true);
             }}
             onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                setOpen(true);
+                const count = filteredResults.length;
+                if (count)
+                  setActiveIndex(
+                    (activeOptionIndex +
+                      (event.key === "ArrowDown" ? 1 : -1) +
+                      count) %
+                      count,
+                  );
+              }
               if (event.key === "Escape") {
                 setOpen(false);
               }
@@ -158,7 +181,7 @@ export function UserMultiSelect({
               if (event.key === "Enter") {
                 event.preventDefault();
                 if (showResults && filteredResults.length > 0) {
-                  handleSelect(filteredResults[0]);
+                  handleSelect(filteredResults[activeOptionIndex]);
                 }
               }
             }}
@@ -207,14 +230,20 @@ export function UserMultiSelect({
             </div>
           ) : (
             <div className="max-h-52 overflow-y-auto p-1">
-              {filteredResults.map((entry) => (
+              {filteredResults.map((entry, index) => (
                 <div key={entry.userId} role="none">
                   <button
                     type="button"
                     role="option"
-                    aria-selected="false"
+                    id={`${listboxId}-${index}`}
+                    aria-selected={index === activeOptionIndex}
+                    onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => handleSelect(entry)}
-                    className="flex min-h-11 w-full min-w-0 flex-col justify-center rounded-md px-3 py-2 text-left hover:bg-[var(--app-billiard-hover)]"
+                    className={cn(
+                      "flex min-h-11 w-full min-w-0 flex-col justify-center rounded-md px-3 py-2 text-left hover:bg-[var(--app-billiard-hover)]",
+                      index === activeOptionIndex &&
+                        "bg-[var(--app-billiard-hover)]",
+                    )}
                   >
                     <span className="font-semibold text-foreground">
                       {entry.username}

@@ -29,11 +29,11 @@ function normalizeConfiguredCanvasApi(
   if (
     !value ||
     value === "http://placeholder.canvas.local" ||
-    value === "__NEXT_PUBLIC_CANVAS_API_URL__"
+    /^__[A-Z_]+__$/.test(value)
   ) {
     return undefined;
   }
-  return value;
+  return value.replace(/\/+$/, "");
 }
 
 async function getClerkToken(
@@ -170,11 +170,40 @@ export async function exchangeObsToken(secret: string): Promise<{
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(
+    throw new ObsTokenExchangeError(
+      res.status,
       (body as { error?: string }).error ?? `Token exchange failed`,
     );
   }
   return res.json();
+}
+
+export class ObsTokenExchangeError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export async function exchangeObsTokenWithRetry(secret: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await exchangeObsToken(secret);
+    } catch (error) {
+      if (
+        attempt >= 2 ||
+        (error instanceof ObsTokenExchangeError &&
+          error.status < 500 &&
+          error.status !== 429)
+      )
+        throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, (attempt + 1) * 1_000),
+      );
+    }
+  }
 }
 
 /** Mint a short-lived OBS access URL for uploaded room media. */
@@ -292,7 +321,7 @@ async function resolveCachedUploadAccessUrl(
   ) {
     return cached.url;
   }
-  if (!options.forceRefresh && cached?.pending) {
+  if (cached?.pending) {
     return cached.pending;
   }
 

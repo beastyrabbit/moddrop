@@ -48,7 +48,7 @@ export const landingContent = {
     {
       id: "brb",
       title: "BRB cards",
-      description: "Timers, designs, and scene variations.",
+      description: "Upload BRB artwork and scene variations.",
     },
     {
       id: "emotes",
@@ -58,7 +58,7 @@ export const landingContent = {
     {
       id: "clips",
       title: "Clips & highlights",
-      description: "Queue, preview, and play stream clips.",
+      description: "Place and play uploaded video highlights.",
     },
     {
       id: "sponsors",
@@ -68,7 +68,7 @@ export const landingContent = {
     {
       id: "scorebugs",
       title: "Scorebugs",
-      description: "Scores, timers, and leaderboard graphics.",
+      description: "Compose score graphics with text and uploaded artwork.",
     },
     {
       id: "audio",

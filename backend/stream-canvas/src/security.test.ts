@@ -38,7 +38,7 @@ test("OBS secrets are hashed and verified without storing plaintext", () => {
 });
 
 test("short-lived OBS and editor WebSocket tokens validate role, scope, and expiry", () => {
-  const obsToken = mintObsToken(roomId);
+  const obsToken = mintObsToken(roomId, "test-credential-version");
   const obsClaims = verifyObsToken(obsToken);
   assert.equal(obsClaims?.roomId, roomId);
   assert.equal(obsClaims?.role, "obs");

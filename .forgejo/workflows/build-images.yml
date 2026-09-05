@@ -1,6 +1,7 @@
 name: Build and Push Container Images
 
 on:
+  pull_request:
   push:
     branches:
       - main
@@ -36,6 +37,35 @@ env:
   INFISICAL_MACHINE_IDENTITY_ID: ${{ vars.INFISICAL_MACHINE_IDENTITY_ID }}
 
 jobs:
+  verify:
+    runs-on: personal
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:18.4-bookworm
+        env:
+          POSTGRES_DB: canvas_test
+          POSTGRES_USER: canvas_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd "pg_isready -U canvas_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      CANVAS_TEST_DATABASE_URL: postgresql://canvas_test@postgres:5432/canvas_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: bash scripts/verify.sh
+
   changes:
     runs-on: personal
     if: github.ref == 'refs/heads/main'
@@ -61,25 +91,7 @@ jobs:
             base="$(git rev-list --max-parents=0 "$head")"
           fi
 
-          changed="$(git diff --name-only "$base" "$head" || git diff --name-only HEAD~1 HEAD || true)"
-
-          has_changed() {
-            printf '%s\n' "$changed" | grep -Eq "$1"
-          }
-
-          set_output() {
-            name="$1"
-            pattern="$2"
-            if has_changed "$pattern"; then
-              echo "$name=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "$name=false" >> "$GITHUB_OUTPUT"
-            fi
-          }
-
-          set_output frontend '^(app|components|lib|public)/|^(\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|next\.config\.mjs|postcss\.config\.mjs|tailwind\.config\.ts|tsconfig\.json|biome\.json|components\.json|Dockerfile|docker-entrypoint\.sh)$'
-          set_output convex '^convex/|^convex\.json$'
-          set_output stream_canvas '^backend/stream-canvas/|^\.dockerignore$'
+          git diff --name-only "$base" "$head" | bash scripts/delivery-changes.sh >> "$GITHUB_OUTPUT"
 
   tag-convex-changes:
     runs-on: personal
@@ -97,31 +109,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          previous_tag=$(
-            git tag --sort=-version:refname \
-              | grep -Fxv "$CURRENT_TAG" \
-              | head -n 1
-          )
-
-          if [ -z "$previous_tag" ]; then
-            echo "No previous release tag found; deploying Convex by default."
-            echo "convex=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if git diff --quiet "$previous_tag..$CURRENT_SHA" -- convex; then
-            echo "convex=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "convex=true" >> "$GITHUB_OUTPUT"
-          fi
+          bash scripts/delivery-changes.sh tag >> "$GITHUB_OUTPUT"
 
   deploy-convex:
-    needs: [changes, tag-convex-changes]
+    needs: [verify, changes, tag-convex-changes]
     if: |
-      always() &&
+      always() && needs.verify.result == 'success' && github.event_name != 'pull_request' &&
       ((github.ref == 'refs/heads/main' && needs.changes.outputs.convex == 'true') ||
        (startsWith(github.ref, 'refs/tags/v') && needs.tag-convex-changes.outputs.convex == 'true') ||
-       github.event.inputs.deploy_convex == 'true')
+       (github.ref == 'refs/heads/main' && github.event.inputs.deploy_convex == 'true'))
     runs-on: personal
     steps:
       - uses: actions/checkout@v7
@@ -192,9 +188,9 @@ jobs:
           CLERK_JWT_ISSUER_DOMAIN: ${{ steps.ci-secrets.outputs.CLERK_JWT_ISSUER_DOMAIN }}
 
   build-frontend:
-    needs: changes
+    needs: [verify, changes]
     if: |
-      always() &&
+      always() && needs.verify.result == 'success' && github.event_name != 'pull_request' &&
       (startsWith(github.ref, 'refs/tags/v') ||
        needs.changes.outputs.frontend == 'true' ||
        github.event.inputs.build_frontend == 'true')
@@ -290,9 +286,9 @@ jobs:
             NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${{ steps.ci-secrets.outputs.NEXT_PUBLIC_TLDRAW_LICENSE_KEY }}
 
   build-stream-canvas:
-    needs: [changes, build-frontend]
+    needs: [verify, changes]
     if: |
-      always() &&
+      always() && needs.verify.result == 'success' && github.event_name != 'pull_request' &&
       (startsWith(github.ref, 'refs/tags/v') ||
        needs.changes.outputs.stream_canvas == 'true' ||
        github.event.inputs.build_stream_canvas == 'true')

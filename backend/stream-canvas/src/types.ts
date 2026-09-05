@@ -13,6 +13,7 @@ export interface ClerkClaims {
 /** Decoded claims from a short-lived OBS token. */
 export interface ObsTokenClaims {
   roomId: string;
+  credentialVersion: string;
   role: "obs";
   scope: "stream-canvas-ws";
   exp: number;

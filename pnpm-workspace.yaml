@@ -5,7 +5,7 @@ allowBuilds:
   esbuild: true
   sharp: true
 minimumReleaseAgeExclude:
-  - hono@4.12.32
+  - hono@4.12.32 || 4.13.7
   - postcss@8.5.23
   - '@clerk/backend@3.13.1'
   - '@clerk/nextjs@7.6.1'

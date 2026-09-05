@@ -26,6 +26,7 @@ import {
 } from "@/lib/stream-canvas/media-volume";
 import { rectIntersectsStreamZone } from "@/lib/stream-canvas/stream-zone";
 import { useMediaPreference } from "../../media-preferences";
+import { type MediaUrlResolver, useMediaUrl } from "../../use-media-url";
 import { YouTubeInteractionCtx } from "../youtube/YouTubeEmbedShape";
 
 // ---------------------------------------------------------------------------
@@ -73,7 +74,7 @@ export const audioPlayerShapeProps: RecordProps<AudioPlayerShape> = {
 // Context for file upload (provided by CanvasEditor)
 // ---------------------------------------------------------------------------
 
-export interface AudioUploadContext {
+export interface AudioUploadContext extends MediaUrlResolver {
   roomId: string;
   getToken: () => Promise<string | null>;
   resolveUrl: (
@@ -83,8 +84,6 @@ export interface AudioUploadContext {
 }
 
 export const AudioUploadCtx = createContext<AudioUploadContext | null>(null);
-
-const MEDIA_URL_REFRESH_INTERVAL_MS = 60_000;
 
 type EventWithStopPropagation = {
   stopPropagation(): void;
@@ -133,7 +132,6 @@ function AudioPlayerComponent({
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastSharedPlaybackRef = useRef(0);
   const lastObservedPlaybackRef = useRef(0);
-  const [resolvedMediaUrl, setResolvedMediaUrl] = useState(shape.props.url);
   const [displayTime, setDisplayTime] = useState(
     shape.props.playbackPosition ?? 0,
   );
@@ -142,6 +140,8 @@ function AudioPlayerComponent({
   const [mediaFailed, setMediaFailed] = useState(false);
   const mediaErrorCountRef = useRef(0);
   const uploadCtx = useContext(AudioUploadCtx);
+  const { url: resolvedMediaUrl, recover: refreshResolvedMediaUrl } =
+    useMediaUrl(shape.props.url, uploadCtx);
   const previewPreference = useMediaPreference(shape.id);
   const syncedIsPlaying = shape.props.isPlaying ?? false;
   const syncedPlaybackPosition = shape.props.playbackPosition ?? 0;
@@ -174,56 +174,6 @@ function AudioPlayerComponent({
     setMediaFailed(false);
     mediaErrorCountRef.current = 0;
   }, [shape.props.url]);
-
-  const resolveMediaUrl = useCallback(
-    async (options: { forceRefresh?: boolean } = {}) => {
-      if (!shape.props.url) return "";
-      return uploadCtx?.resolveUrl
-        ? uploadCtx.resolveUrl(shape.props.url, options)
-        : shape.props.url;
-    },
-    [shape.props.url, uploadCtx],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!shape.props.url) {
-      setResolvedMediaUrl("");
-      return;
-    }
-
-    const refresh = (forceRefresh = false) => {
-      resolveMediaUrl({ forceRefresh })
-        .then((url) => {
-          if (!cancelled) setResolvedMediaUrl(url);
-        })
-        .catch((error) => {
-          console.error("[audio-player] media URL resolution failed:", error);
-          if (!cancelled) setResolvedMediaUrl(shape.props.url);
-        });
-    };
-
-    refresh();
-    const refreshInterval = window.setInterval(() => {
-      refresh(true);
-    }, MEDIA_URL_REFRESH_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(refreshInterval);
-    };
-  }, [shape.props.url, resolveMediaUrl]);
-
-  const refreshResolvedMediaUrl = useCallback(() => {
-    resolveMediaUrl({ forceRefresh: true })
-      .then((url) => {
-        setResolvedMediaUrl(url);
-        audioRef.current?.load();
-      })
-      .catch((error) => {
-        console.error("[audio-player] media URL refresh failed:", error);
-      });
-  }, [resolveMediaUrl]);
 
   useEffect(() => {
     if (!shape.props.url) {
@@ -263,15 +213,19 @@ function AudioPlayerComponent({
     audioRef.current.muted = !shouldOutputAudio || isVolumeMuted;
   }, [effectiveVolume, isVolumeMuted, shape.props.loop, shouldOutputAudio]);
 
-  useEffect(() => {
+  const synchronizePlayback = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio || !shape.props.url || !resolvedMediaUrl) return;
+    if (!audio || !shape.props.url || audio.readyState < 1) return;
 
-    const desiredTime = clampPlaybackPosition(
+    const elapsed =
       syncedPlaybackPosition +
-        (syncedIsPlaying
-          ? Math.max(0, Date.now() - syncedPlaybackUpdatedAt) / 1000
-          : 0),
+      (syncedIsPlaying
+        ? Math.max(0, Date.now() - syncedPlaybackUpdatedAt) / 1000
+        : 0);
+    const desiredTime = clampPlaybackPosition(
+      shape.props.loop && audio.duration > 0
+        ? elapsed % audio.duration
+        : elapsed,
       Number.isFinite(audio.duration) ? audio.duration : null,
     );
 
@@ -295,13 +249,16 @@ function AudioPlayerComponent({
     audio.pause();
   }, [
     shape.props.url,
-    resolvedMediaUrl,
+    shape.props.loop,
     isInteractive,
     isReadonly,
     syncedIsPlaying,
     syncedPlaybackPosition,
     syncedPlaybackUpdatedAt,
   ]);
+  useEffect(() => {
+    if (resolvedMediaUrl) synchronizePlayback();
+  }, [resolvedMediaUrl, synchronizePlayback]);
 
   const filename = shape.props.url ? mediaFilenameFromUrl(shape.props.url) : "";
 
@@ -382,6 +339,7 @@ function AudioPlayerComponent({
 
   const handleLoadedMetadata = () => {
     if (!audioRef.current) return;
+    synchronizePlayback();
     mediaErrorCountRef.current = 0;
     setMediaFailed(false);
     setDuration(
@@ -440,7 +398,6 @@ function AudioPlayerComponent({
     console.error("[audio-player] media error", {
       code: mediaError?.code,
       message: mediaError?.message,
-      url: shape.props.url,
       resolved: Boolean(resolvedMediaUrl),
     });
     // Retry with a freshly minted access URL a bounded number of times, then
@@ -457,7 +414,7 @@ function AudioPlayerComponent({
     // biome-ignore lint/a11y/useMediaCaption: audio-only controls in the editor do not support caption tracks
     <audio
       ref={audioRef}
-      src={resolvedMediaUrl}
+      src={resolvedMediaUrl || undefined}
       loop={shape.props.loop}
       style={{ display: "none" }}
       onLoadedMetadata={handleLoadedMetadata}

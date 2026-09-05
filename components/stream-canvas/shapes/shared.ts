@@ -5,6 +5,7 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -66,6 +67,13 @@ function RefreshingTldrawMedia({
   const editor = useEditor();
   const refreshController = useContext(CanvasMediaRefreshContext);
   const [refreshKey, setRefreshKey] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const playbackRef = useRef<{
+    time: number;
+    paused: boolean;
+    rate: number;
+    at: number;
+  } | null>(null);
   const src = useValue("refreshing media asset src", () => {
     const asset = shape.props.assetId
       ? editor.getAsset(shape.props.assetId)
@@ -74,6 +82,7 @@ function RefreshingTldrawMedia({
   }, [editor, shape.props.assetId]);
 
   useEffect(() => {
+    playbackRef.current = null;
     if (!src || !refreshController) return;
 
     let timeoutId: number | undefined;
@@ -92,6 +101,14 @@ function RefreshingTldrawMedia({
       timeoutId = window.setTimeout(() => {
         if (cancelled) return;
         if (refreshDelay !== null) {
+          const video = containerRef.current?.querySelector("video");
+          if (video)
+            playbackRef.current = {
+              time: video.currentTime,
+              paused: video.paused,
+              rate: video.playbackRate,
+              at: performance.now(),
+            };
           setRefreshKey((value) => value + 1);
           schedule(true);
           return;
@@ -110,7 +127,32 @@ function RefreshingTldrawMedia({
     };
   }, [refreshController, src]);
 
-  return createElement(Fragment, { key: refreshKey }, children);
+  return createElement(
+    "div",
+    {
+      ref: containerRef,
+      className: "contents",
+      onLoadedMetadataCapture: (event) => {
+        const video = event.target;
+        const playback = playbackRef.current;
+        if (!(video instanceof HTMLVideoElement) || !playback) return;
+        playbackRef.current = null;
+        const position =
+          playback.time +
+          (playback.paused
+            ? 0
+            : ((performance.now() - playback.at) / 1000) * playback.rate);
+        video.currentTime =
+          video.loop && video.duration > 0
+            ? position % video.duration
+            : Math.min(position, video.duration || position);
+        video.playbackRate = playback.rate;
+        if (playback.paused) video.pause();
+        else void video.play().catch(() => {});
+      },
+    },
+    createElement(Fragment, { key: refreshKey }, children),
+  );
 }
 
 const defaultShapeUtilsWithMediaRefresh = defaultShapeUtils.map((ShapeUtil) => {

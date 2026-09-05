@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { sql } from "drizzle-orm";
 import { WebSocketServer } from "ws";
 import { config, validateServerConfig } from "./config.ts";
+import { withDeadline } from "./deadline.ts";
 import { closeDatabase, db } from "./db.ts";
 import { leaderState } from "./leader.ts";
 import { objectStore } from "./object-store.ts";
@@ -25,7 +26,13 @@ app.get("/ready", async (c) => {
     return c.json({ status: "standby", role: "standby" }, 503);
   }
   try {
-    await Promise.all([db.execute(sql`SELECT 1`), objectStore.check()]);
+    await withDeadline(
+      Promise.all([db.execute(sql`SELECT 1`), objectStore.check()]),
+      3_000,
+      "Readiness",
+    );
+    if (!leaderState.isLeader)
+      return c.json({ status: "standby", role: "standby" }, 503);
     return c.json({ status: "ready", role: "leader" });
   } catch (error) {
     console.error("[readiness] dependency check failed", error);
@@ -53,9 +60,9 @@ const wss = new WebSocketServer({
   perMessageDeflate: false,
 });
 
-leaderState.onDemote(async () => {
+leaderState.onDemote(async (persist) => {
   for (const client of wss.clients) client.close(1012, "Service restarting");
-  await closeAllRooms();
+  await closeAllRooms(persist);
 });
 leaderState.start();
 
@@ -111,7 +118,11 @@ async function performShutdown(): Promise<void> {
 }
 
 function requestShutdown(): void {
-  void shutdown().then(
+  void withDeadline(
+    shutdown(),
+    25_000,
+    "Shutdown; pending data may not be durable",
+  ).then(
     () => process.exit(0),
     (error) => {
       console.error("[stream-canvas] shutdown failed", error);
