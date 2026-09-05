@@ -183,7 +183,10 @@ test("an edit reaches OBS and saved policy changes update the running mirror", a
   await expect(
     mirror.locator("svg > title", { hasText: "YouTube video placeholder" }),
   ).toHaveCount(1);
-  await mirror.screenshot({ path: testInfo.outputPath("obs-allowed.png") });
+  await mirror.screenshot({
+    path: testInfo.outputPath("obs-allowed.png"),
+    omitBackground: true,
+  });
   await page.evaluate(async () => {
     const session = await (await fetch("/__test/session")).json();
     const response = await fetch(
@@ -209,7 +212,10 @@ test("an edit reaches OBS and saved policy changes update the running mirror", a
   await expect(
     mirror.locator("svg > title", { hasText: "YouTube video placeholder" }),
   ).toHaveCount(0);
-  await mirror.screenshot({ path: testInfo.outputPath("obs.png") });
+  await mirror.screenshot({
+    path: testInfo.outputPath("obs.png"),
+    omitBackground: true,
+  });
   await page.reload();
   await expect(page.locator(".tl-shape[data-shape-type='geo']")).toHaveCount(1);
 });
