@@ -10,7 +10,9 @@ import {
 } from "react";
 import {
   defaultShapeUtils,
+  EmbedShapeUtil,
   ImageShapeUtil,
+  type TLEmbedShape,
   type TLImageShape,
   type TLVideoShape,
   useEditor,
@@ -20,7 +22,11 @@ import {
 import type { UploadUrlRefreshDelayMs } from "@/lib/stream-canvas/api";
 import { AudioPlayerShapeUtil } from "./audio/AudioPlayerShape";
 import { AudioPlayerTool } from "./audio/AudioPlayerTool";
-import { YouTubeEmbedShapeUtil } from "./youtube/YouTubeEmbedShape";
+import {
+  extractYouTubeId,
+  YouTubeEmbedShapeUtil,
+  YouTubePolicyCtx,
+} from "./youtube/YouTubeEmbedShape";
 import { YouTubeEmbedTool } from "./youtube/YouTubeEmbedTool";
 
 interface CanvasMediaRefreshController {
@@ -32,6 +38,28 @@ export const CanvasMediaRefreshContext =
 
 const CACHE_PENDING_RECHECK_MS = 5_000;
 const MAX_REFRESH_TIMEOUT_MS = 2 ** 31 - 1;
+
+// Keep legacy records/schema readable while applying owner policy to every
+// default YouTube renderer. Newly pasted URLs use the custom shape.
+class PolicyEmbedShapeUtil extends EmbedShapeUtil {
+  static override type = "embed" as const;
+  override component(shape: TLEmbedShape) {
+    if (!extractYouTubeId(shape.props.url)) return super.component(shape);
+    return createElement(PolicyEmbed, {}, super.component(shape));
+  }
+}
+function PolicyEmbed({ children }: { children?: ReactNode }) {
+  const policy = useContext(YouTubePolicyCtx);
+  const editor = useEditor();
+  const readonly = useValue(
+    "embed readonly",
+    () => editor.getInstanceState().isReadonly,
+    [editor],
+  );
+  if (policy === "disabled" || (readonly && policy !== "allow_on_air"))
+    return null;
+  return children;
+}
 
 class RefreshingImageShapeUtil extends ImageShapeUtil {
   static override type = "image" as const;
@@ -100,9 +128,17 @@ function RefreshingTldrawMedia({
           : Math.min(refreshDelay, MAX_REFRESH_TIMEOUT_MS);
       timeoutId = window.setTimeout(() => {
         if (cancelled) return;
-        if (refreshDelay !== null) {
+        const currentDelay = refreshController.getRefreshDelayMs(src);
+        if (currentDelay === undefined) return;
+        if (currentDelay !== null && currentDelay > 0) {
+          schedule();
+          return;
+        }
+        // A missing cache can mean a failed mint, not only an in-flight one.
+        // Remount after the backoff so tldraw actually retries the resolver.
+        {
           const video = containerRef.current?.querySelector("video");
-          if (video)
+          if (video && video.readyState >= 1 && !playbackRef.current)
             playbackRef.current = {
               time: video.currentTime,
               paused: video.paused,
@@ -113,7 +149,6 @@ function RefreshingTldrawMedia({
           schedule(true);
           return;
         }
-        schedule();
       }, timeoutMs);
     };
 
@@ -156,6 +191,7 @@ function RefreshingTldrawMedia({
 }
 
 const defaultShapeUtilsWithMediaRefresh = defaultShapeUtils.map((ShapeUtil) => {
+  if (ShapeUtil.type === "embed") return PolicyEmbedShapeUtil;
   if (ShapeUtil.type === RefreshingImageShapeUtil.type) {
     return RefreshingImageShapeUtil;
   }
@@ -167,6 +203,7 @@ const defaultShapeUtilsWithMediaRefresh = defaultShapeUtils.map((ShapeUtil) => {
 
 /** Custom shape utils — register in both CanvasEditor and CanvasMirror. */
 export const customShapeUtils = [
+  PolicyEmbedShapeUtil,
   RefreshingImageShapeUtil,
   RefreshingVideoShapeUtil,
   YouTubeEmbedShapeUtil,

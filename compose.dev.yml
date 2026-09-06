@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: moddrop
       POSTGRES_PASSWORD: moddrop
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - moddrop-postgres:/var/lib/postgresql/18/docker
     healthcheck:

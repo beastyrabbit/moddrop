@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
+import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
-import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
-import type { IncomingMessage } from "node:http";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -454,6 +454,24 @@ test("room creation and regeneration only reveal OBS secrets once", async () => 
     body: oldSecretExchangeBody,
   });
   assert.equal(rejectedOldSecret.status, 401);
+});
+
+test("invalid upload capabilities do not query metadata or object storage", async (t) => {
+  const { objectStore } = await import("./object-store.ts");
+  const lookup = t.mock.method(db.query.uploads, "findFirst", async () => {
+    throw new Error("Unexpected metadata lookup");
+  });
+  const stat = t.mock.method(objectStore, "stat", async () => {
+    throw new Error("Unexpected object stat");
+  });
+  for (const suffix of ["", "?token=invalid"]) {
+    const response = await api.request(
+      `/uploads/${uuidv4()}/test.png${suffix}`,
+    );
+    assert.equal(response.status, 401);
+  }
+  assert.equal(lookup.mock.callCount(), 0);
+  assert.equal(stat.mock.callCount(), 0);
 });
 
 test("uploads use sniffed MIME type and sanitized filenames", async () => {

@@ -16,15 +16,14 @@ import {
 import { config } from "./config.ts";
 import { db } from "./db.ts";
 import { parseSingleByteRange } from "./http-range.ts";
+import { objectStore } from "./object-store.ts";
 import {
   generateObsSecret,
   hashObsSecret,
   obsCredentialVersion,
 } from "./obs-secret.ts";
-import { withRoomOperation } from "./room-operations.ts";
-import { roomConfigChanged, revokeObsSessions } from "./ws-handler.ts";
-import { objectStore } from "./object-store.ts";
 import { FixedWindowRateLimit, rateLimitKeyFromHeaders } from "./rate-limit.ts";
+import { withRoomOperation } from "./room-operations.ts";
 import {
   isValidRoomId,
   MAX_ROOM_CONFIG_BODY_BYTES,
@@ -37,6 +36,7 @@ import {
   sniffUploadMime,
   validateUploadedMedia,
 } from "./upload-validation.ts";
+import { revokeObsSessions, roomConfigChanged } from "./ws-handler.ts";
 
 // ---------------------------------------------------------------------------
 // Middleware: require Clerk JWT
@@ -104,23 +104,24 @@ export const api = new Hono();
 
 // Serve uploaded files (public)
 api.get("/uploads/:uploadId/:filename", async (c) => {
+  const token = c.req.query("token");
+  const tokenClaims = token ? verifyUploadAccessToken(token) : null;
+  if (!tokenClaims || tokenClaims.uploadId !== c.req.param("uploadId")) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
   const upload = await db.query.uploads.findFirst({
     where: eq(uploads.id, c.req.param("uploadId")),
   });
-  const storedObject = upload ? await objectStore.stat(upload.objectKey) : null;
-  if (!upload || !storedObject) {
+  if (!upload) {
     return c.json({ error: "Not found" }, 404);
   }
 
-  const token = c.req.query("token");
-  const tokenClaims = token ? verifyUploadAccessToken(token) : null;
-  if (
-    !tokenClaims ||
-    tokenClaims.uploadId !== upload.id ||
-    tokenClaims.roomId !== upload.roomId
-  ) {
+  if (tokenClaims.roomId !== upload.roomId) {
     return c.json({ error: "Unauthorized" }, 401);
   }
+
+  const storedObject = await objectStore.stat(upload.objectKey);
+  if (!storedObject) return c.json({ error: "Not found" }, 404);
 
   const fileSize = storedObject.size;
   const range = parseSingleByteRange(c.req.header("range"), fileSize);

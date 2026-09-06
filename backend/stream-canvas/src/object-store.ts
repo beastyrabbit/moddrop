@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { Client as MinioClient } from "minio";
 import { config, validateObjectStorageConfig } from "./config.ts";
+import { ObjectStoreTransport } from "./object-store-transport.ts";
 
 validateObjectStorageConfig();
 
@@ -66,10 +67,14 @@ class FilesystemObjectStore implements ObjectStore {
 
 class S3ObjectStore implements ObjectStore {
   private readonly client: MinioClient;
+  private readonly requests: ObjectStoreTransport;
+  private checking: Promise<void> | null = null;
 
   constructor() {
     const endpoint = new URL(config.s3Endpoint);
+    this.requests = new ObjectStoreTransport(endpoint.protocol === "https:");
     this.client = new MinioClient({
+      transport: this.requests.transport,
       endPoint: endpoint.hostname,
       port: endpoint.port
         ? Number(endpoint.port)
@@ -81,28 +86,47 @@ class S3ObjectStore implements ObjectStore {
       secretKey: config.s3SecretKey,
       region: config.s3Region,
       pathStyle: true,
+      retryOptions: { disableRetry: true },
     });
   }
 
-  async check(): Promise<void> {
-    if (!(await this.client.bucketExists(config.s3Bucket))) {
-      throw new Error(`S3 bucket ${config.s3Bucket} does not exist`);
-    }
+  check(): Promise<void> {
+    // Finish before /ready's overall deadline, cancelling actual S3 work.
+    this.checking ??= this.requests
+      .run(async () => {
+        if (!(await this.client.bucketExists(config.s3Bucket))) {
+          throw new Error(`S3 bucket ${config.s3Bucket} does not exist`);
+        }
+      }, 2_500)
+      .finally(() => {
+        this.checking = null;
+      });
+    return this.checking;
   }
 
   async put(key: string, bytes: Buffer, contentType: string): Promise<void> {
-    await this.client.putObject(config.s3Bucket, key, bytes, bytes.byteLength, {
-      "Content-Type": contentType,
-    });
+    await this.requests.run(
+      () =>
+        this.client.putObject(config.s3Bucket, key, bytes, bytes.byteLength, {
+          "Content-Type": contentType,
+        }),
+      30_000,
+    );
   }
 
   async remove(key: string): Promise<void> {
-    await this.client.removeObject(config.s3Bucket, key);
+    await this.requests.run(
+      () => this.client.removeObject(config.s3Bucket, key),
+      10_000,
+    );
   }
 
   async stat(key: string): Promise<StoredObjectStat | null> {
     try {
-      const result = await this.client.statObject(config.s3Bucket, key);
+      const result = await this.requests.run(
+        () => this.client.statObject(config.s3Bucket, key),
+        10_000,
+      );
       return { size: result.size };
     } catch (error) {
       if (isNotFound(error)) return null;
@@ -115,14 +139,21 @@ class S3ObjectStore implements ObjectStore {
     range?: { start: number; length: number },
   ): Promise<Readable> {
     if (range) {
-      return this.client.getPartialObject(
-        config.s3Bucket,
-        key,
-        range.start,
-        range.length,
+      return this.requests.run(
+        () =>
+          this.client.getPartialObject(
+            config.s3Bucket,
+            key,
+            range.start,
+            range.length,
+          ),
+        120_000,
       );
     }
-    return this.client.getObject(config.s3Bucket, key);
+    return this.requests.run(
+      () => this.client.getObject(config.s3Bucket, key),
+      120_000,
+    );
   }
 }
 

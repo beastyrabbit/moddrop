@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -46,6 +47,7 @@ export function MediaPreferencesProvider({
   userId: string | null | undefined;
 }) {
   const storageKey = getMediaPreferencesStorageKey(userId, roomId);
+  const persistenceFailed = useRef(false);
   const [storedState, setStoredState] = useState<StoredPreferenceState>({
     storageKey: null,
     preferences: {},
@@ -69,10 +71,16 @@ export function MediaPreferencesProvider({
 
   useEffect(() => {
     if (!storageKey || storedState.storageKey !== storageKey) return;
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify(storedState.preferences),
-    );
+    if (persistenceFailed.current) return;
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(storedState.preferences),
+      );
+    } catch {
+      // Preview preferences remain usable in memory when storage is unavailable.
+      persistenceFailed.current = true;
+    }
   }, [storageKey, storedState]);
 
   const getPreference = useCallback(

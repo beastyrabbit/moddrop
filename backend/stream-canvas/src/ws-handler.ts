@@ -16,14 +16,14 @@ import {
 import { config } from "./config.ts";
 import { db } from "./db.ts";
 import { leaderState } from "./leader.ts";
+import { obsCredentialVersion } from "./obs-secret.ts";
 import { FixedWindowRateLimit, rateLimitKeyFromHeaders } from "./rate-limit.ts";
+import { withRoomOperation } from "./room-operations.ts";
 import { isValidRoomId } from "./room-validation.ts";
 import { canvasDocuments, roomMembers, rooms } from "./schema.ts";
+import { RoomSnapshotWriter } from "./snapshot-writer.ts";
 import { streamCanvasSchema } from "./tldraw-schema.ts";
 import type { ConnectionRole } from "./types.ts";
-import { obsCredentialVersion } from "./obs-secret.ts";
-import { withRoomOperation } from "./room-operations.ts";
-import { RoomSnapshotWriter } from "./snapshot-writer.ts";
 
 interface ActiveRoom {
   room: TLSocketRoom<TLRecord>;
@@ -56,6 +56,8 @@ async function getOrCreateRoom(roomId: string): Promise<ActiveRoom> {
 
   const loading = roomLoads.get(roomId);
   if (loading) return loading;
+  if (activeRooms.size + roomLoads.size >= config.maxActiveRooms)
+    throw new Error("Active room capacity reached");
 
   const epoch = roomEpoch;
   const promise = loadRoom(roomId, epoch).finally(() =>
@@ -282,6 +284,12 @@ export async function handleWebSocketUpgrade(
   ws: WebSocket,
   req: IncomingMessage,
 ): Promise<void> {
+  // This listener outlives admission and tldraw's session listeners. Receiver
+  // errors are EventEmitter events, not rejections of the admission promise.
+  ws.on("error", () => {
+    console.warn("[ws] connection failed");
+    ws.terminate();
+  });
   // The client can send its connect frame immediately after HTTP upgrade.
   // Keep it buffered until asynchronous admission installs room listeners.
   ws.pause();
@@ -329,7 +337,8 @@ async function admitWebSocket(
 
     if (
       !activeRooms.has(auth.roomId) &&
-      activeRooms.size >= config.maxActiveRooms
+      !roomLoads.has(auth.roomId) &&
+      activeRooms.size + roomLoads.size >= config.maxActiveRooms
     ) {
       ws.close(1013, "Too many active rooms");
       return;

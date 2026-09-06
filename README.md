@@ -35,7 +35,8 @@ Clerk restricts the production instance to `moddrop.live`; it requires the
 matching `pk_test_` / `sk_test_` pair instead. If needed, authenticate once with
 `infisical login --domain http://192.168.60.11:8080`. Set
 `MODDROP_DEV_DATABASE_URL` only when intentionally using a different
-development PostgreSQL instance.
+development PostgreSQL instance. With that override, startup and shutdown leave
+the default Compose database alone. The default database port is loopback-only.
 
 - `https://moddrop.localhost:1355`
 - `https://moddrop-stream-canvas.localhost:1355`
@@ -46,6 +47,10 @@ the data model, migration flow, and production storage design.
 ## Check
 
 ```bash
-pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build
-pnpm --dir backend/stream-canvas run typecheck && pnpm --dir backend/stream-canvas run test
+CANVAS_TEST_DATABASE_URL=<isolated-test-database-url> bash scripts/verify.sh
 ```
+
+Use the pinned Node/pnpm versions and a disposable PostgreSQL database, never an
+application database. The canonical script checks formatting, lint, application
+and test types, unit/integration tests, builds, compiled runtime configuration,
+and browser flows. See the backend guide's verification section for setup.

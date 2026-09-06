@@ -25,6 +25,7 @@ import {
   DefaultToolbar,
   DiamondToolbarItem,
   DrawToolbarItem,
+  defaultHandleExternalEmbedContent,
   EditSubmenu,
   EllipseToolbarItem,
   EraserToolbarItem,
@@ -70,14 +71,13 @@ import {
   uploadFile,
 } from "@/lib/stream-canvas/api";
 import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
+import { readRoomConfigMessage } from "@/lib/stream-canvas/room-config";
 import {
   getStreamZoneViewportPlacement,
   STREAM_ZONE,
 } from "@/lib/stream-canvas/stream-zone";
 import type { YouTubePolicy } from "@/lib/stream-canvas/types";
-import { readRoomConfigMessage } from "@/lib/stream-canvas/room-config";
 import { CanvasStylePanel } from "./MediaInspectorPanel";
-import { TwitchPreview } from "./TwitchPreview";
 import {
   MediaPreferencesProvider,
   useMediaPreference,
@@ -93,10 +93,12 @@ import {
   syncShapeUtils,
 } from "./shapes/shared";
 import {
+  extractYouTubeId,
   type YouTubeEmbedShape,
   YouTubeInteractionCtx,
   YouTubePolicyCtx,
 } from "./shapes/youtube/YouTubeEmbedShape";
+import { TwitchPreview } from "./TwitchPreview";
 
 const TLDRAW_LICENSE_KEY = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
@@ -808,7 +810,30 @@ export function CanvasEditor({
             <YouTubeInteractionCtx.Provider value={youtubeInteractionCtx}>
               <YouTubePolicyCtx.Provider value={youtubePolicy}>
                 <Tldraw
-                  onMount={onMount}
+                  onMount={(editor) => {
+                    editor.registerExternalContentHandler(
+                      "embed",
+                      (content) => {
+                        if (extractYouTubeId(content.url)) {
+                          const point =
+                            content.point ??
+                            editor.getViewportPageBounds().center;
+                          editor.createShape({
+                            type: "youtube-embed",
+                            x: point.x - 240,
+                            y: point.y - 135,
+                            props: { url: content.url, w: 480, h: 270 },
+                          });
+                          return;
+                        }
+                        return defaultHandleExternalEmbedContent(
+                          editor,
+                          content,
+                        );
+                      },
+                    );
+                    return onMount?.(editor);
+                  }}
                   store={storeWithStatus.store}
                   shapeUtils={customShapeUtils}
                   tools={editorTools}
