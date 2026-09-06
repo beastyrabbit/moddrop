@@ -23,7 +23,7 @@ import type { UploadUrlRefreshDelayMs } from "@/lib/stream-canvas/api";
 import { AudioPlayerShapeUtil } from "./audio/AudioPlayerShape";
 import { AudioPlayerTool } from "./audio/AudioPlayerTool";
 import {
-  extractYouTubeId,
+  isYouTubeUrl,
   YouTubeEmbedShapeUtil,
   YouTubePolicyCtx,
 } from "./youtube/YouTubeEmbedShape";
@@ -44,7 +44,7 @@ const MAX_REFRESH_TIMEOUT_MS = 2 ** 31 - 1;
 class PolicyEmbedShapeUtil extends EmbedShapeUtil {
   static override type = "embed" as const;
   override component(shape: TLEmbedShape) {
-    if (!extractYouTubeId(shape.props.url)) return super.component(shape);
+    if (!isYouTubeUrl(shape.props.url)) return super.component(shape);
     return createElement(PolicyEmbed, {}, super.component(shape));
   }
 }

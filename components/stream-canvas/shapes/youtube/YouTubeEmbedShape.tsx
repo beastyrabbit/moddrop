@@ -92,22 +92,48 @@ export const YouTubePolicyCtx = createContext<YouTubePolicy>("preview_only");
  *  - youtube.com/live/ID
  */
 export function extractYouTubeId(raw: string): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
+  const url = parseYouTubeUrl(raw);
+  if (!url) return null;
+  let path: string[];
+  try {
+    path = decodeURIComponent(url.pathname).split("/");
+  } catch {
+    return null;
+  }
+  const id =
+    url.hostname === "youtu.be"
+      ? path[1]
+      : path[1] === "watch"
+        ? url.searchParams.get("v")
+        : ["embed", "shorts", "live"].includes(path[1])
+          ? path[2]
+          : null;
+  return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+}
 
-  // youtu.be short link
-  const shortMatch = trimmed.match(
-    /(?:https?:\/\/)?youtu\.be\/([a-zA-Z0-9_-]{11})/,
-  );
-  if (shortMatch) return shortMatch[1];
+/** Owner policy applies to the provider, even without a recognized video ID. */
+export function isYouTubeUrl(raw: string): boolean {
+  return parseYouTubeUrl(raw) !== null;
+}
 
-  // youtube.com variants
-  const longMatch = trimmed.match(
-    /(?:https?:\/\/)?(?:www\.|m\.)?youtube(?:-nocookie)?\.com\/(?:watch\?.*v=|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{11})/,
-  );
-  if (longMatch) return longMatch[1];
-
-  return null;
+function parseYouTubeUrl(raw: string): URL | null {
+  try {
+    const trimmed = raw.trim();
+    const url = new URL(
+      trimmed.includes("://") ? trimmed : `https://${trimmed}`,
+    );
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    const host = url.hostname.replace(/\.$/, "");
+    url.hostname = host;
+    return host === "youtu.be" ||
+      ["youtube.com", "youtube-nocookie.com"].some(
+        (domain) => host === domain || host.endsWith(`.${domain}`),
+      )
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 const YOUTUBE_SYNC_THRESHOLD_PLAYING = 1.5;

@@ -57,7 +57,7 @@ test("pasted and persisted YouTube embeds obey policy before OBS loads a player"
     if (!editor) throw new Error("Editor missing");
     await editor.putExternalContent({
       type: "url",
-      url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      url: "https://WWW.YOUTUBE.COM/watch?v=%64Qw4w9WgXcQ",
       point: { x: 400, y: 300 },
     });
     editor.createShape({
@@ -70,6 +70,16 @@ test("pasted and persisted YouTube embeds obey policy before OBS loads a player"
         url: "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
       },
     });
+    editor.createShape({
+      type: "embed",
+      x: 800,
+      y: 400,
+      props: {
+        w: 480,
+        h: 270,
+        url: "https://WWW.YOUTUBE.COM/watch?v=%64Qw4w9WgXcQ",
+      },
+    });
   });
   const mirror = await context.newPage();
   const youtubeRequests: string[] = [];
@@ -78,7 +88,7 @@ test("pasted and persisted YouTube embeds obey policy before OBS loads a player"
       youtubeRequests.push(request.url());
   });
   await mirror.goto("/?view=mirror");
-  await expect(mirror.locator(".tl-shape")).toHaveCount(2);
+  await expect(mirror.locator(".tl-shape")).toHaveCount(3);
   await expect(mirror.locator("iframe")).toHaveCount(0);
   expect(youtubeRequests).toEqual([]);
   await setPolicy(page, "disabled");
