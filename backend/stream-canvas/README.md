@@ -109,15 +109,19 @@ deleted by this change.
 
 ## Verification
 
-The Forgejo workflow is a legacy delivery target. The homelab `personal` runner
-pool was retired on 2026-08-31; it cannot currently provide hosted verification.
-If this workflow is used again, it requires a Docker-backed `personal` runner
-with service-container networking. Its verification job explicitly uses the
-pinned Node Bookworm container as root so Playwright can install Debian browser
-dependencies without relying on host sudo configuration. Validate that job on
-the replacement runner before enabling delivery. GitHub Actions must also be
-enabled at repository level for `.github/workflows/verify.yml` to run; workflow
-files alone do not turn it on.
+GitHub verification runs on the homelab `arc-moddrop` Docker-backed runner.
+The pinned Node Bookworm container runs as root so Playwright can install browser
+dependencies; PostgreSQL is an isolated service container. Release tags run this
+same gate before deploying Convex and publishing both images to GHCR. Manual
+publication is restricted to `main`. The Forgejo workflow is retained as a legacy
+copy; its `personal` runner pool was retired on 2026-08-31.
+
+After a release succeeds, update all three image references in the Homelab
+Moddrop HelmRelease to the released tag and verified GHCR digests. Commit through
+the Homelab GitOps workflow, reconcile Flux, and verify frontend and backend
+readiness plus the public application. Cluster access is available through SSH
+on `bunux`. Backend rollout uses Recreate so the old leader flushes and exits
+before the new leader admits sessions.
 
 `pnpm run test` runs fast route and lifecycle unit tests and tears down its
 temporary storage and pools. Set `CANVAS_TEST_DATABASE_URL` to a disposable

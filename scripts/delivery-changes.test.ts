@@ -2,8 +2,36 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parse } from "yaml";
 import { expect, test } from "vitest";
+import { parse } from "yaml";
+
+test("GitHub releases use the PR verification gate before production actions", () => {
+  const workflow = parse(
+    readFileSync(".github/workflows/build-images.yml", "utf8"),
+  );
+  const verification = parse(
+    readFileSync(".github/workflows/verify.yml", "utf8"),
+  );
+  expect(workflow.jobs.verify.uses).toBe("./.github/workflows/verify.yml");
+  expect(verification.on).toHaveProperty("pull_request");
+  expect(verification.on).toHaveProperty("workflow_call");
+  expect(verification.jobs.verify["runs-on"]).toBe("arc-moddrop");
+  expect(workflow.jobs.build.needs).toContain("verify");
+  expect(workflow.jobs.build.needs).toContain("deploy-convex");
+  expect(workflow.jobs["deploy-convex"].needs).toBe("verify");
+  for (const job of [workflow.jobs.build, workflow.jobs["deploy-convex"]]) {
+    const allowed = (ref: string) =>
+      Function(
+        "github",
+        "startsWith",
+        `return (${job.if})`,
+      )({ ref }, (value: string, prefix: string) => value.startsWith(prefix));
+    expect(allowed("refs/heads/feature")).toBe(false);
+    expect(allowed("refs/heads/main")).toBe(true);
+    expect(allowed("refs/tags/v0.6.2")).toBe(true);
+    expect(job.if).not.toContain("always()");
+  }
+});
 
 test.each(["pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", ".npmrc"])(
   "shared install input %s rebuilds both images and Convex",
