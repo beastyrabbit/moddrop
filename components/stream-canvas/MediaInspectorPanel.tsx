@@ -241,6 +241,7 @@ function ToggleRow({
       <TldrawUiButton
         type="normal"
         role="switch"
+        aria-label={label}
         aria-checked={checked}
         onClick={onToggle}
         style={{

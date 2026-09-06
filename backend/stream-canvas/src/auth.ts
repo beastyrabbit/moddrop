@@ -123,7 +123,9 @@ if (!config.clerkJwtKey && !config.clerkSecretKey) {
 }
 
 function getInternalTokenSigningSecret(): string {
-  return process.env.OBS_TOKEN_SIGNING_SECRET ?? randomBytes(32).toString("hex");
+  return (
+    process.env.OBS_TOKEN_SIGNING_SECRET ?? randomBytes(32).toString("hex")
+  );
 }
 if (!normalizedClerkIssuer()) {
   if (config.nodeEnv === "production") {
@@ -168,9 +170,13 @@ function verifySignedClaims(token: string): unknown | null {
 }
 
 /** Mint a short-lived OBS token for a given room. */
-export function mintObsToken(roomId: string): string {
+export function mintObsToken(
+  roomId: string,
+  credentialVersion: string,
+): string {
   const claims: ObsTokenClaims = {
     roomId,
+    credentialVersion,
     role: "obs",
     scope: "stream-canvas-ws",
     iat: Math.floor(Date.now() / 1000),
@@ -215,7 +221,10 @@ export function verifyCanvasWsToken(
 }
 
 /** Mint a short-lived access token for an uploaded media file. */
-export function mintUploadAccessToken(roomId: string, uploadId: string): string {
+export function mintUploadAccessToken(
+  roomId: string,
+  uploadId: string,
+): string {
   const claims: UploadAccessTokenClaims = {
     roomId,
     uploadId,
@@ -260,6 +269,8 @@ function isObsTokenClaims(value: unknown): value is ObsTokenClaims {
     typeof value === "object" &&
     value !== null &&
     "roomId" in value &&
+    "credentialVersion" in value &&
+    typeof value.credentialVersion === "string" &&
     "role" in value &&
     "scope" in value &&
     "exp" in value &&

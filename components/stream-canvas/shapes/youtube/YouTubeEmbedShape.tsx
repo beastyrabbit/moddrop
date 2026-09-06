@@ -92,22 +92,48 @@ export const YouTubePolicyCtx = createContext<YouTubePolicy>("preview_only");
  *  - youtube.com/live/ID
  */
 export function extractYouTubeId(raw: string): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
+  const url = parseYouTubeUrl(raw);
+  if (!url) return null;
+  let path: string[];
+  try {
+    path = decodeURIComponent(url.pathname).split("/");
+  } catch {
+    return null;
+  }
+  const id =
+    url.hostname === "youtu.be"
+      ? path[1]
+      : path[1] === "watch"
+        ? url.searchParams.get("v")
+        : ["embed", "shorts", "live"].includes(path[1])
+          ? path[2]
+          : null;
+  return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+}
 
-  // youtu.be short link
-  const shortMatch = trimmed.match(
-    /(?:https?:\/\/)?youtu\.be\/([a-zA-Z0-9_-]{11})/,
-  );
-  if (shortMatch) return shortMatch[1];
+/** Owner policy applies to the provider, even without a recognized video ID. */
+export function isYouTubeUrl(raw: string): boolean {
+  return parseYouTubeUrl(raw) !== null;
+}
 
-  // youtube.com variants
-  const longMatch = trimmed.match(
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/|live\/)([a-zA-Z0-9_-]{11})/,
-  );
-  if (longMatch) return longMatch[1];
-
-  return null;
+function parseYouTubeUrl(raw: string): URL | null {
+  try {
+    const trimmed = raw.trim();
+    const url = new URL(
+      trimmed.includes("://") ? trimmed : `https://${trimmed}`,
+    );
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    const host = url.hostname.replace(/\.$/, "");
+    url.hostname = host;
+    return host === "youtu.be" ||
+      ["youtube.com", "youtube-nocookie.com"].some(
+        (domain) => host === domain || host.endsWith(`.${domain}`),
+      )
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 const YOUTUBE_SYNC_THRESHOLD_PLAYING = 1.5;
@@ -182,19 +208,31 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
 
   youtubeIframeApiPromise = new Promise((resolve, reject) => {
     const scriptId = "youtube-iframe-api";
-    const existingScript = document.getElementById(
-      scriptId,
-    ) as HTMLScriptElement | null;
+    // A previous failed tag must not prevent the next network attempt.
+    document.getElementById(scriptId)?.remove();
+    const script = document.createElement("script");
     const previousReady = window.onYouTubeIframeAPIReady;
 
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      script.onerror = null;
+      if (window.onYouTubeIframeAPIReady === ready)
+        window.onYouTubeIframeAPIReady = previousReady;
+    };
+    const fail = (message: string) => {
+      cleanup();
+      script.remove();
+      youtubeIframeApiPromise = null;
+      reject(new Error(message));
+    };
     const finish = () => {
       if (window.YT?.Player) {
+        cleanup();
         resolve(window.YT);
         return;
       }
 
-      youtubeIframeApiPromise = null;
-      reject(new Error("YouTube iframe API failed to initialize"));
+      fail("YouTube iframe API failed to initialize");
     };
 
     // Backstop for the hang cases: an existing script tag that already
@@ -206,34 +244,19 @@ function loadYouTubeIframeApi(): Promise<YouTubeNamespace> {
         finish();
         return;
       }
-      youtubeIframeApiPromise = null;
-      reject(new Error("Timed out loading the YouTube iframe API"));
+      fail("Timed out loading the YouTube iframe API");
     }, 30_000);
 
-    window.onYouTubeIframeAPIReady = () => {
-      window.clearTimeout(timeoutId);
-      previousReady?.();
+    const ready = () => {
       finish();
+      previousReady?.();
     };
-
-    if (existingScript) {
-      window.setTimeout(() => {
-        if (window.YT?.Player) {
-          window.clearTimeout(timeoutId);
-          finish();
-        }
-      }, 0);
-      return;
-    }
-
-    const script = document.createElement("script");
+    window.onYouTubeIframeAPIReady = ready;
     script.id = scriptId;
     script.src = "https://www.youtube.com/iframe_api";
     script.async = true;
     script.onerror = () => {
-      window.clearTimeout(timeoutId);
-      youtubeIframeApiPromise = null;
-      reject(new Error("Failed to load YouTube iframe API"));
+      fail("Failed to load YouTube iframe API");
     };
     document.head.appendChild(script);
   });
@@ -261,6 +284,7 @@ function YouTubeEmbedPlayer({
   const playerRef = useRef<YouTubePlayer | null>(null);
   const playerReadyRef = useRef(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
   const commandHoldUntilRef = useRef(0);
   const interactiveRef = useRef(false);
   const readonlyRef = useRef(isReadonly);
@@ -417,6 +441,7 @@ function YouTubeEmbedPlayer({
     }
 
     let cancelled = false;
+    setLoadFailed(false);
     let retryTimeoutId: number | undefined;
     playerReadyRef.current = false;
     host.innerHTML = "";
@@ -511,6 +536,8 @@ function YouTubeEmbedPlayer({
         });
       })
       .catch((error) => {
+        if (cancelled) return;
+        setLoadFailed(true);
         console.error("[youtube-embed] Failed to initialize player", error);
         // The loader clears its cached promise on failure, so retrying can
         // succeed once the API loads late (slow network, brief outage).
@@ -638,9 +665,20 @@ function YouTubeEmbedPlayer({
       }}
     >
       {playerContent}
+      {loadFailed ? (
+        <button
+          type="button"
+          className="pointer-events-auto absolute inset-0 z-10 bg-zinc-900 text-sm text-white"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+        >
+          Retry YouTube player
+        </button>
+      ) : null}
       {!isReadonly && !isInteractive ? (
         <button
           type="button"
+          aria-label="Interact with YouTube player"
           style={{
             position: "absolute",
             inset: 0,

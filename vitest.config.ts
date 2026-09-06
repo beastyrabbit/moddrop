@@ -8,6 +8,12 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: ["**/node_modules/**", "**/backend/**", "**/.next/**"],
+    env: { NEXT_PUBLIC_CANVAS_API_URL: "https://canvas-test.invalid" },
+    exclude: [
+      "**/node_modules/**",
+      "**/backend/**",
+      "**/.next/**",
+      "**/e2e/**",
+    ],
   },
 });

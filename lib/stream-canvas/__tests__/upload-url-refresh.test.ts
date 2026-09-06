@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  CANVAS_API,
   getEditorUploadUrlRefreshDelayMs,
   resolveEditorUploadUrl,
 } from "@/lib/stream-canvas/api";
@@ -28,13 +29,19 @@ describe("upload URL refresh timing", () => {
     expect(getEditorUploadUrlRefreshDelayMs(roomId, src)).toBeNull();
 
     const resolved = await resolveEditorUploadUrl(roomId, src, getToken);
-    expect(resolved).toBe(
-      `https://moddrop-stream-canvas.localhost:1355${src}?token=signed-token`,
-    );
+    expect(resolved).toBe(`${CANVAS_API}${src}?token=signed-token`);
 
     const delay = getEditorUploadUrlRefreshDelayMs(roomId, src);
     expect(delay).toBeGreaterThan(0);
     expect(delay).toBeLessThanOrEqual(30_000);
+    expect(fetch).toHaveBeenCalledWith(
+      `${CANVAS_API}/api/rooms/${roomId}/uploads/${uploadId}/access-url`,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer clerk-token",
+        }),
+      }),
+    );
   });
 
   it("does not schedule refreshes for external media URLs", () => {

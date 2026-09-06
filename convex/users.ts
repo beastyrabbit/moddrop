@@ -189,9 +189,7 @@ export const searchByUsername = query({
     const candidates = await ctx.db
       .query("users")
       .withIndex("byUsernameSearch", (q) =>
-        q
-          .gte("usernameSearch", prefix)
-          .lt("usernameSearch", `${prefix}\uffff`),
+        q.gte("usernameSearch", prefix).lt("usernameSearch", `${prefix}\uffff`),
       )
       .take(10);
 

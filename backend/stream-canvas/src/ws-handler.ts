@@ -3,6 +3,7 @@ import {
   InMemorySyncStorage,
   type RoomSnapshot,
   TLSocketRoom,
+  TLSyncErrorCloseEventReason,
 } from "@tldraw/sync-core";
 import { and, eq } from "drizzle-orm";
 import type { TLRecord } from "tldraw";
@@ -15,9 +16,12 @@ import {
 import { config } from "./config.ts";
 import { db } from "./db.ts";
 import { leaderState } from "./leader.ts";
+import { obsCredentialVersion } from "./obs-secret.ts";
 import { FixedWindowRateLimit, rateLimitKeyFromHeaders } from "./rate-limit.ts";
+import { withRoomOperation } from "./room-operations.ts";
 import { isValidRoomId } from "./room-validation.ts";
 import { canvasDocuments, roomMembers, rooms } from "./schema.ts";
+import { RoomSnapshotWriter } from "./snapshot-writer.ts";
 import { streamCanvasSchema } from "./tldraw-schema.ts";
 import type { ConnectionRole } from "./types.ts";
 
@@ -25,6 +29,10 @@ interface ActiveRoom {
   room: TLSocketRoom<TLRecord>;
   storage: InMemorySyncStorage<TLRecord>;
   writer: RoomSnapshotWriter;
+  sessions: Map<string, AuthResult & { initialConfigSent?: boolean }>;
+  config?: ReturnType<typeof roomConfigMessage>;
+  idleTimer?: NodeJS.Timeout;
+  disposing?: Promise<void>;
 }
 
 const activeRooms = new Map<string, ActiveRoom>();
@@ -35,74 +43,21 @@ const wsFailureLimiter = new FixedWindowRateLimit({
   max: 30,
 });
 
-class RoomSnapshotWriter {
-  private pending: RoomSnapshot | null = null;
-  private drainPromise: Promise<void> | null = null;
-  private readonly roomId: string;
-
-  constructor(roomId: string) {
-    this.roomId = roomId;
-  }
-
-  schedule(snapshot: RoomSnapshot): void {
-    this.pending = snapshot;
-    if (!this.drainPromise) {
-      this.drainPromise = this.drain()
-        .catch(async (error) => {
-          console.error(
-            `[canvas] snapshot persistence failed for room ${this.roomId}; retrying`,
-            error,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 1_000));
-        })
-        .finally(() => {
-          this.drainPromise = null;
-          if (this.pending) this.schedule(this.pending);
-        });
-    }
-  }
-
-  async flush(snapshot?: RoomSnapshot): Promise<void> {
-    if (snapshot) this.schedule(snapshot);
-    while (this.drainPromise) await this.drainPromise;
-  }
-
-  private async drain(): Promise<void> {
-    while (this.pending) {
-      const snapshot = this.pending;
-      this.pending = null;
-      try {
-        await db
-          .insert(canvasDocuments)
-          .values({
-            roomId: this.roomId,
-            snapshot,
-            revision: snapshot.documentClock,
-            updatedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: canvasDocuments.roomId,
-            set: {
-              snapshot,
-              revision: snapshot.documentClock,
-              updatedAt: new Date(),
-            },
-          });
-      } catch (error) {
-        // Keep a newer pending snapshot if one arrived while this write ran.
-        this.pending ??= snapshot;
-        throw error;
-      }
-    }
-  }
-}
-
 async function getOrCreateRoom(roomId: string): Promise<ActiveRoom> {
   const existing = activeRooms.get(roomId);
-  if (existing) return existing;
+  if (existing?.disposing) {
+    await existing.disposing;
+    return getOrCreateRoom(roomId);
+  }
+  if (existing) {
+    clearTimeout(existing.idleTimer);
+    return existing;
+  }
 
   const loading = roomLoads.get(roomId);
   if (loading) return loading;
+  if (activeRooms.size + roomLoads.size >= config.maxActiveRooms)
+    throw new Error("Active room capacity reached");
 
   const epoch = roomEpoch;
   const promise = loadRoom(roomId, epoch).finally(() =>
@@ -119,45 +74,155 @@ async function loadRoom(roomId: string, epoch: number): Promise<ActiveRoom> {
   if (epoch !== roomEpoch) {
     throw new Error("Room load cancelled during leadership handover");
   }
-  const writer = new RoomSnapshotWriter(roomId);
+  const writer = new RoomSnapshotWriter(
+    () => storage.getSnapshot(),
+    (snapshot) => leaderState.persistSnapshot(roomId, snapshot),
+    `room ${roomId}`,
+  );
   const storage = new InMemorySyncStorage<TLRecord>({
     ...(persisted ? { snapshot: persisted.snapshot as RoomSnapshot } : {}),
     onChange() {
-      writer.schedule(storage.getSnapshot());
+      writer.schedule();
     },
   });
   const room = new TLSocketRoom({
     storage,
     schema: streamCanvasSchema,
-    onSessionRemoved(_room, { numSessionsRemaining }) {
-      if (numSessionsRemaining !== 0) return;
-      setTimeout(() => void disposeInactiveRoom(roomId), 30_000);
+    onBeforeSendMessage({ sessionId }) {
+      const session = active.sessions.get(sessionId);
+      if (!session || session.initialConfigSent) return;
+      if (
+        !room
+          .getSessions()
+          .some((s) => s.sessionId === sessionId && s.isConnected)
+      )
+        return;
+      session.initialConfigSent = true;
+      // The first connected send is the handshake response. Send configuration
+      // after that frame, using the latest policy if it changed during admission.
+      queueMicrotask(() => {
+        if (active.config) room.sendCustomMessage(sessionId, active.config);
+      });
+    },
+    onSessionRemoved(_room, { sessionId, numSessionsRemaining }) {
+      active.sessions.delete(sessionId);
+      if (numSessionsRemaining !== 0 || activeRooms.get(roomId) !== active)
+        return;
+      scheduleIdleDisposal(roomId, active);
     },
   });
-  const active = { room, storage, writer };
+  const active: ActiveRoom = { room, storage, writer, sessions: new Map() };
   activeRooms.set(roomId, active);
   return active;
 }
 
-async function disposeInactiveRoom(roomId: string): Promise<void> {
-  const active = activeRooms.get(roomId);
-  if (active?.room.getNumActiveSessions() !== 0) return;
-  activeRooms.delete(roomId);
-  await active.writer.flush(active.storage.getSnapshot());
-  active.room.close();
+function scheduleIdleDisposal(roomId: string, active: ActiveRoom): void {
+  if (
+    activeRooms.get(roomId) !== active ||
+    active.room.getNumActiveSessions() !== 0
+  )
+    return;
+  clearTimeout(active.idleTimer);
+  active.idleTimer = setTimeout(() => {
+    if (activeRooms.get(roomId) !== active) return;
+    void disposeInactiveRoom(roomId).catch((error) => {
+      console.error("[canvas] idle flush failed", error);
+      scheduleIdleDisposal(roomId, active);
+    });
+  }, 30_000);
+  active.idleTimer.unref();
 }
 
-export async function closeAllRooms(): Promise<void> {
+export async function disposeInactiveRoom(roomId: string): Promise<void> {
+  const active = activeRooms.get(roomId);
+  if (active?.room.getNumActiveSessions() !== 0) return;
+  if (active.disposing) return active.disposing;
+  clearTimeout(active.idleTimer);
+  active.disposing = (async () => {
+    await active.writer.flush();
+    if (activeRooms.get(roomId) !== active) return;
+    activeRooms.delete(roomId);
+    active.writer.stop();
+    active.room.close();
+  })().finally(() => {
+    active.disposing = undefined;
+  });
+  return active.disposing;
+}
+
+export async function closeAllRooms(persist = true): Promise<void> {
   roomEpoch += 1;
-  await Promise.allSettled([...roomLoads.values()]);
   const entries = [...activeRooms.values()];
   activeRooms.clear();
-  await Promise.all(
-    entries.map(async ({ room, storage, writer }) => {
-      await writer.flush(storage.getSnapshot());
-      room.close();
+  // Stop accepting edits before taking the final snapshot, including sessions
+  // whose WebSocket close handshake has not completed.
+  for (const active of entries) {
+    clearTimeout(active.idleTimer);
+    active.room.close();
+    if (!persist) active.writer.stop();
+  }
+  await Promise.allSettled([...roomLoads.values()]);
+  const results = await Promise.allSettled(
+    entries.map(async (active) => {
+      try {
+        if (persist) await active.writer.flush();
+      } finally {
+        active.writer.stop();
+      }
     }),
   );
+  const failures = results.filter((result) => result.status === "rejected");
+  if (failures.length)
+    throw new AggregateError(
+      failures.map((result) => result.reason),
+      "Canvas flush failed",
+    );
+}
+
+export function roomConfigChanged(
+  room: typeof rooms.$inferSelect,
+  allowedUsers?: string[],
+): void {
+  const active = activeRooms.get(room.id);
+  if (!active) return;
+  active.config = roomConfigMessage(room);
+  for (const [sessionId, auth] of active.sessions) {
+    if (
+      auth.role === "editor" &&
+      allowedUsers &&
+      auth.userId !== room.ownerClerkId &&
+      !allowedUsers.includes(auth.userId ?? "")
+    ) {
+      active.room.closeSession(
+        sessionId,
+        TLSyncErrorCloseEventReason.FORBIDDEN,
+      );
+    } else {
+      active.room.sendCustomMessage(sessionId, roomConfigMessage(room));
+    }
+  }
+}
+
+export function revokeObsSessions(roomId: string): void {
+  const active = activeRooms.get(roomId);
+  if (!active) return;
+  for (const [sessionId, auth] of active.sessions) {
+    if (auth.role === "obs")
+      active.room.closeSession(
+        sessionId,
+        TLSyncErrorCloseEventReason.FORBIDDEN,
+      );
+  }
+}
+
+function roomConfigMessage(
+  room: Pick<typeof rooms.$inferSelect, "twitchChannel" | "youtubePolicy">,
+) {
+  return {
+    type: "room-config",
+    twitchChannel: room.twitchChannel,
+    youtubePolicy: room.youtubePolicy,
+  };
 }
 
 interface AuthResult {
@@ -204,7 +269,11 @@ export async function authenticateWebSocketUpgrade(
     const room = await db.query.rooms.findFirst({
       where: eq(rooms.id, roomId),
     });
-    if (!room) return null;
+    if (
+      !room ||
+      obsClaims.credentialVersion !== obsCredentialVersion(room.obsSecret)
+    )
+      return null;
     return { role: "obs", roomId };
   }
 
@@ -212,6 +281,26 @@ export async function authenticateWebSocketUpgrade(
 }
 
 export async function handleWebSocketUpgrade(
+  ws: WebSocket,
+  req: IncomingMessage,
+): Promise<void> {
+  // This listener outlives admission and tldraw's session listeners. Receiver
+  // errors are EventEmitter events, not rejections of the admission promise.
+  ws.on("error", () => {
+    console.warn("[ws] connection failed");
+    ws.terminate();
+  });
+  // The client can send its connect frame immediately after HTTP upgrade.
+  // Keep it buffered until asynchronous admission installs room listeners.
+  ws.pause();
+  try {
+    await admitWebSocket(ws, req);
+  } finally {
+    ws.resume();
+  }
+}
+
+async function admitWebSocket(
   ws: WebSocket,
   req: IncomingMessage,
 ): Promise<void> {
@@ -226,48 +315,82 @@ export async function handleWebSocketUpgrade(
     return;
   }
 
-  const auth = await authenticateWebSocketUpgrade(req);
-  if (!auth) {
-    wsFailureLimiter.consume(failureKey);
+  const roomId = new URL(
+    req.url ?? "",
+    "http://stream-canvas.local",
+  ).searchParams.get("roomId");
+  if (!roomId || !isValidRoomId(roomId)) {
     ws.close(4001, "Unauthorized");
     return;
   }
-  if (!leaderState.isLeader) {
-    ws.close(1012, "Canvas leader is changing");
-    return;
-  }
-
-  if (
-    !activeRooms.has(auth.roomId) &&
-    activeRooms.size >= config.maxActiveRooms
-  ) {
-    ws.close(1013, "Too many active rooms");
-    return;
-  }
-
-  let room: TLSocketRoom<TLRecord>;
-  try {
-    ({ room } = await getOrCreateRoom(auth.roomId));
-  } catch (error) {
+  await withRoomOperation(roomId, async () => {
+    const auth = await authenticateWebSocketUpgrade(req);
+    if (!auth) {
+      wsFailureLimiter.consume(failureKey);
+      ws.close(4001, "Unauthorized");
+      return;
+    }
     if (!leaderState.isLeader) {
       ws.close(1012, "Canvas leader is changing");
       return;
     }
-    throw error;
-  }
-  if (!leaderState.isLeader) {
-    ws.close(1012, "Canvas leader is changing");
-    return;
-  }
-  if (room.getNumActiveSessions() >= config.maxWsSessionsPerRoom) {
-    ws.close(1013, "Room session limit reached");
-    return;
-  }
 
-  room.handleSocketConnect({
-    sessionId: crypto.randomUUID(),
-    socket: ws,
-    isReadonly: auth.role === "obs",
+    if (
+      !activeRooms.has(auth.roomId) &&
+      !roomLoads.has(auth.roomId) &&
+      activeRooms.size + roomLoads.size >= config.maxActiveRooms
+    ) {
+      ws.close(1013, "Too many active rooms");
+      return;
+    }
+
+    let active: ActiveRoom;
+    try {
+      active = await getOrCreateRoom(auth.roomId);
+    } catch (error) {
+      if (!leaderState.isLeader) {
+        ws.close(1012, "Canvas leader is changing");
+        return;
+      }
+      throw error;
+    }
+    try {
+      if (!leaderState.isLeader) {
+        ws.close(1012, "Canvas leader is changing");
+        return;
+      }
+      const { room } = active;
+      const metadata = await db.query.rooms.findFirst({
+        where: eq(rooms.id, auth.roomId),
+      });
+      if (
+        !metadata ||
+        !leaderState.isLeader ||
+        activeRooms.get(auth.roomId) !== active ||
+        room.isClosed() ||
+        ws.readyState !== ws.OPEN
+      ) {
+        ws.close(1012, "Canvas leader is changing");
+        return;
+      }
+      clearTimeout(active.idleTimer);
+      if (room.getNumActiveSessions() >= config.maxWsSessionsPerRoom) {
+        ws.close(1013, "Room session limit reached");
+        return;
+      }
+
+      const sessionId = crypto.randomUUID();
+      active.config = roomConfigMessage(metadata);
+      active.sessions.set(sessionId, auth);
+      room.handleSocketConnect({
+        sessionId,
+        socket: ws,
+        isReadonly: auth.role === "obs",
+      });
+    } finally {
+      // Failed admission has no session-removal callback to rearm cleanup.
+      scheduleIdleDisposal(auth.roomId, active);
+    }
   });
 }
 

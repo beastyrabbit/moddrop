@@ -14,6 +14,8 @@ backend/stream-canvas/node_modules
 backend/stream-canvas/data
 backend/stream-canvas/bun.lockb
 coverage
+playwright-report
+test-results
 dist
 build
 out

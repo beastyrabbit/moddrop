@@ -63,7 +63,10 @@ export class FixedWindowRateLimit {
   }
 
   private cleanup(now: number): void {
-    if (this.entries.size < 1000 && this.entries.size <= this.options.maxEntries) {
+    if (
+      this.entries.size < 1000 &&
+      this.entries.size <= this.options.maxEntries
+    ) {
       return;
     }
 

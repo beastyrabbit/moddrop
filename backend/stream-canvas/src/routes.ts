@@ -16,9 +16,14 @@ import {
 import { config } from "./config.ts";
 import { db } from "./db.ts";
 import { parseSingleByteRange } from "./http-range.ts";
-import { generateObsSecret, hashObsSecret } from "./obs-secret.ts";
 import { objectStore } from "./object-store.ts";
+import {
+  generateObsSecret,
+  hashObsSecret,
+  obsCredentialVersion,
+} from "./obs-secret.ts";
 import { FixedWindowRateLimit, rateLimitKeyFromHeaders } from "./rate-limit.ts";
+import { withRoomOperation } from "./room-operations.ts";
 import {
   isValidRoomId,
   MAX_ROOM_CONFIG_BODY_BYTES,
@@ -31,6 +36,7 @@ import {
   sniffUploadMime,
   validateUploadedMedia,
 } from "./upload-validation.ts";
+import { revokeObsSessions, roomConfigChanged } from "./ws-handler.ts";
 
 // ---------------------------------------------------------------------------
 // Middleware: require Clerk JWT
@@ -98,23 +104,24 @@ export const api = new Hono();
 
 // Serve uploaded files (public)
 api.get("/uploads/:uploadId/:filename", async (c) => {
+  const token = c.req.query("token");
+  const tokenClaims = token ? verifyUploadAccessToken(token) : null;
+  if (!tokenClaims || tokenClaims.uploadId !== c.req.param("uploadId")) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
   const upload = await db.query.uploads.findFirst({
     where: eq(uploads.id, c.req.param("uploadId")),
   });
-  const storedObject = upload ? await objectStore.stat(upload.objectKey) : null;
-  if (!upload || !storedObject) {
+  if (!upload) {
     return c.json({ error: "Not found" }, 404);
   }
 
-  const token = c.req.query("token");
-  const tokenClaims = token ? verifyUploadAccessToken(token) : null;
-  if (
-    !tokenClaims ||
-    tokenClaims.uploadId !== upload.id ||
-    tokenClaims.roomId !== upload.roomId
-  ) {
+  if (tokenClaims.roomId !== upload.roomId) {
     return c.json({ error: "Unauthorized" }, 401);
   }
+
+  const storedObject = await objectStore.stat(upload.objectKey);
+  if (!storedObject) return c.json({ error: "Not found" }, 404);
 
   const fileSize = storedObject.size;
   const range = parseSingleByteRange(c.req.header("range"), fileSize);
@@ -180,7 +187,7 @@ api.post("/obs/token", async (c) => {
     return c.json({ error: "Invalid secret" }, 401);
   }
 
-  const token = mintObsToken(room.id);
+  const token = mintObsToken(room.id, obsCredentialVersion(room.obsSecret));
   return c.json({
     token,
     roomId: room.id,
@@ -258,9 +265,16 @@ authed.post("/rooms", async (c) => {
       createdAt: now,
       updatedAt: now,
     })
+    .onConflictDoNothing({ target: rooms.ownerClerkId })
     .returning();
 
-  if (!room) return c.json({ error: "Room creation failed" }, 500);
+  if (!room) {
+    const winner = await db.query.rooms.findFirst({
+      where: eq(rooms.ownerClerkId, user.sub),
+    });
+    if (!winner) return c.json({ error: "Room creation failed" }, 500);
+    return c.json(await ownerRoomResponse(winner));
+  }
   return c.json(await ownerRoomResponse(room, obsSecret), 201);
 });
 
@@ -340,45 +354,44 @@ authed.patch("/rooms/:id", async (c) => {
     return c.json({ error: validation.error }, 400);
   }
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(rooms)
-      .set({
-        ...(validation.value.twitchChannel !== undefined && {
-          twitchChannel: validation.value.twitchChannel,
-        }),
-        ...(validation.value.youtubePolicy !== undefined && {
-          youtubePolicy: validation.value.youtubePolicy,
-          youtubeRiskAcknowledgedAt:
-            validation.value.youtubePolicy === "allow_on_air"
-              ? new Date()
-              : null,
-        }),
-        updatedAt: new Date(),
-      })
-      .where(eq(rooms.id, room.id));
+  return withRoomOperation(room.id, async () => {
+    const updated = await db.transaction(async (tx) => {
+      const [updatedRoom] = await tx
+        .update(rooms)
+        .set({
+          ...(validation.value.twitchChannel !== undefined && {
+            twitchChannel: validation.value.twitchChannel,
+          }),
+          ...(validation.value.youtubePolicy !== undefined && {
+            youtubePolicy: validation.value.youtubePolicy,
+            youtubeRiskAcknowledgedAt:
+              validation.value.youtubePolicy === "allow_on_air"
+                ? new Date()
+                : null,
+          }),
+          updatedAt: new Date(),
+        })
+        .where(eq(rooms.id, room.id))
+        .returning();
+      if (!updatedRoom) throw new Error("Room disappeared during update");
 
-    if (validation.value.allowedUsers !== undefined) {
-      await tx.delete(roomMembers).where(eq(roomMembers.roomId, room.id));
-      if (validation.value.allowedUsers.length > 0) {
-        await tx.insert(roomMembers).values(
-          validation.value.allowedUsers.map((clerkUserId) => ({
-            roomId: room.id,
-            clerkUserId,
-          })),
-        );
+      if (validation.value.allowedUsers !== undefined) {
+        await tx.delete(roomMembers).where(eq(roomMembers.roomId, room.id));
+        if (validation.value.allowedUsers.length > 0) {
+          await tx.insert(roomMembers).values(
+            validation.value.allowedUsers.map((clerkUserId) => ({
+              roomId: room.id,
+              clerkUserId,
+            })),
+          );
+        }
       }
-    }
-  });
+      return updatedRoom;
+    });
 
-  const updated = await db.query.rooms.findFirst({
-    where: eq(rooms.id, room.id),
+    roomConfigChanged(updated, validation.value.allowedUsers);
+    return c.json(await ownerRoomResponse(updated));
   });
-  if (!updated) {
-    return c.json({ error: "Updated room could not be retrieved" }, 500);
-  }
-
-  return c.json(await ownerRoomResponse(updated));
 });
 
 // Mint a short-lived editor WebSocket ticket. Raw Clerk JWTs never go in WS URLs.
@@ -426,12 +439,15 @@ authed.post("/rooms/:id/regenerate-secret", async (c) => {
   if (!room) return c.json({ error: "Not found" }, 404);
 
   const newSecret = generateObsSecret();
-  await db
-    .update(rooms)
-    .set({ obsSecret: hashObsSecret(newSecret), updatedAt: new Date() })
-    .where(eq(rooms.id, room.id));
+  return withRoomOperation(room.id, async () => {
+    await db
+      .update(rooms)
+      .set({ obsSecret: hashObsSecret(newSecret), updatedAt: new Date() })
+      .where(eq(rooms.id, room.id));
 
-  return c.json({ ok: true, obsSecret: newSecret });
+    revokeObsSessions(room.id);
+    return c.json({ ok: true, obsSecret: newSecret });
+  });
 });
 
 // OBS secrets are hashed at rest and cannot be revealed after creation.

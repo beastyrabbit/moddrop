@@ -19,6 +19,14 @@ export function isHashedObsSecret(value: string): boolean {
   return value.startsWith(OBS_SECRET_PREFIX);
 }
 
+/** Public ticket version, separate from the stored bootstrap credential. */
+export function obsCredentialVersion(storedSecret: string): string {
+  return createHash("sha256")
+    .update("obs-ticket-version\0")
+    .update(storedSecret)
+    .digest("base64url");
+}
+
 export function verifyObsSecret(secret: string, storedSecret: string): boolean {
   const expected = isHashedObsSecret(storedSecret)
     ? storedSecret

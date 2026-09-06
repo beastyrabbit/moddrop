@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -32,11 +32,13 @@ let exitCode = 0;
 
 try {
   assertRequiredEnvironment();
-  console.log(
-    "[dev] Starting PostgreSQL and waiting for it to become healthy...",
-  );
-  composeAttempted = true;
-  await run("docker", [...composeArgs, "up", "--wait", "postgres"]);
+  if (!process.env.MODDROP_DEV_DATABASE_URL) {
+    console.log(
+      "[dev] Starting PostgreSQL and waiting for it to become healthy...",
+    );
+    composeAttempted = true;
+    await run("docker", [...composeArgs, "up", "--wait", "postgres"]);
+  }
   throwIfStopping();
 
   console.log("[dev] Applying Drizzle migrations...");

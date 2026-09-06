@@ -48,12 +48,8 @@
           "name": "canvas_documents_room_id_rooms_id_fk",
           "tableFrom": "canvas_documents",
           "tableTo": "rooms",
-          "columnsFrom": [
-            "room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -110,12 +106,8 @@
           "name": "room_members_room_id_rooms_id_fk",
           "tableFrom": "room_members",
           "tableTo": "rooms",
-          "columnsFrom": [
-            "room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -123,10 +115,7 @@
       "compositePrimaryKeys": {
         "room_members_room_id_clerk_user_id_pk": {
           "name": "room_members_room_id_clerk_user_id_pk",
-          "columns": [
-            "room_id",
-            "clerk_user_id"
-          ]
+          "columns": ["room_id", "clerk_user_id"]
         }
       },
       "uniqueConstraints": {},
@@ -214,9 +203,7 @@
         "rooms_owner_clerk_id_unique": {
           "name": "rooms_owner_clerk_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "owner_clerk_id"
-          ]
+          "columns": ["owner_clerk_id"]
         }
       },
       "policies": {},
@@ -293,12 +280,8 @@
           "name": "uploads_room_id_rooms_id_fk",
           "tableFrom": "uploads",
           "tableTo": "rooms",
-          "columnsFrom": [
-            "room_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["room_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -308,9 +291,7 @@
         "uploads_object_key_unique": {
           "name": "uploads_object_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "object_key"
-          ]
+          "columns": ["object_key"]
         }
       },
       "policies": {},
@@ -322,11 +303,7 @@
     "public.youtube_policy": {
       "name": "youtube_policy",
       "schema": "public",
-      "values": [
-        "disabled",
-        "preview_only",
-        "allow_on_air"
-      ]
+      "values": ["disabled", "preview_only", "allow_on_air"]
     }
   },
   "schemas": {},

@@ -7,6 +7,7 @@ export default defineSchema({
     clerkUserId: v.string(),
     username: v.optional(v.string()),
     usernameSearch: v.optional(v.string()),
+    // Retained for existing documents; no active API key authentication uses it.
     apiKey: v.optional(v.string()),
     showProfilePic: v.optional(v.boolean()),
     createdAt: v.number(),

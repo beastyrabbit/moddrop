@@ -25,6 +25,7 @@ import {
   DefaultToolbar,
   DiamondToolbarItem,
   DrawToolbarItem,
+  defaultHandleExternalEmbedContent,
   EditSubmenu,
   EllipseToolbarItem,
   EraserToolbarItem,
@@ -70,6 +71,7 @@ import {
   uploadFile,
 } from "@/lib/stream-canvas/api";
 import { getSyncedMediaPlaybackPosition } from "@/lib/stream-canvas/media-playback";
+import { readRoomConfigMessage } from "@/lib/stream-canvas/room-config";
 import {
   getStreamZoneViewportPlacement,
   STREAM_ZONE,
@@ -91,10 +93,12 @@ import {
   syncShapeUtils,
 } from "./shapes/shared";
 import {
+  extractYouTubeId,
   type YouTubeEmbedShape,
   YouTubeInteractionCtx,
   YouTubePolicyCtx,
 } from "./shapes/youtube/YouTubeEmbedShape";
+import { TwitchPreview } from "./TwitchPreview";
 
 const TLDRAW_LICENSE_KEY = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 
@@ -104,132 +108,7 @@ interface CanvasEditorProps {
   roomId: string;
   twitchChannel?: string | null;
   youtubePolicy: YouTubePolicy;
-}
-
-interface TwitchPlayer {
-  setMuted(muted: boolean): void;
-  setVolume(volume: number): void;
-}
-
-interface TwitchEmbedInstance {
-  addEventListener(event: string, callback: () => void): void;
-  getPlayer(): TwitchPlayer;
-}
-
-interface TwitchEmbedConstructor {
-  new (
-    element: HTMLElement,
-    options: Record<string, string | string[] | number | boolean>,
-  ): TwitchEmbedInstance;
-  VIDEO: string;
-  VIDEO_READY: string;
-}
-
-declare global {
-  interface Window {
-    Twitch?: { Embed: TwitchEmbedConstructor };
-  }
-}
-
-let twitchEmbedScriptPromise: Promise<TwitchEmbedConstructor> | null = null;
-
-function loadTwitchEmbed(): Promise<TwitchEmbedConstructor> {
-  if (window.Twitch?.Embed) return Promise.resolve(window.Twitch.Embed);
-  if (twitchEmbedScriptPromise) return twitchEmbedScriptPromise;
-  const promise = new Promise<TwitchEmbedConstructor>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://embed.twitch.tv/embed/v1.js"]',
-    );
-    const script = existing ?? document.createElement("script");
-    const handleLoad = () => {
-      if (window.Twitch?.Embed) resolve(window.Twitch.Embed);
-      else reject(new Error("Twitch embed API did not initialize"));
-    };
-    script.addEventListener("load", handleLoad, { once: true });
-    script.addEventListener(
-      "error",
-      () => reject(new Error("Failed to load Twitch embed API")),
-      { once: true },
-    );
-    if (!existing) {
-      script.src = "https://embed.twitch.tv/embed/v1.js";
-      script.async = true;
-      document.head.appendChild(script);
-    }
-  }).catch((error) => {
-    twitchEmbedScriptPromise = null;
-    throw error;
-  });
-  twitchEmbedScriptPromise = promise;
-  return promise;
-}
-
-function TwitchPreview({
-  channel,
-  hostname,
-  interactive,
-}: {
-  channel: string;
-  hostname: string;
-  interactive: boolean;
-}) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<TwitchPlayer | null>(null);
-  const preference = useMediaPreference("twitch-preview");
-  const preferenceRef = useRef({
-    enabled: preference.enabled,
-    volume: preference.volume,
-  });
-  preferenceRef.current = {
-    enabled: preference.enabled,
-    volume: preference.volume,
-  };
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    let cancelled = false;
-    host.replaceChildren();
-    void loadTwitchEmbed()
-      .then((Embed) => {
-        if (cancelled || !hostRef.current) return;
-        const embed = new Embed(hostRef.current, {
-          width: "100%",
-          height: "100%",
-          channel,
-          parent: [hostname],
-          layout: Embed.VIDEO,
-          autoplay: true,
-          muted: true,
-        });
-        embed.addEventListener(Embed.VIDEO_READY, () => {
-          if (cancelled) return;
-          playerRef.current = embed.getPlayer();
-          playerRef.current.setVolume(preferenceRef.current.volume);
-          playerRef.current.setMuted(!preferenceRef.current.enabled);
-        });
-      })
-      .catch((error) => console.error("[twitch] embed failed", error));
-    return () => {
-      cancelled = true;
-      playerRef.current = null;
-      host.replaceChildren();
-    };
-  }, [channel, hostname]);
-
-  useEffect(() => {
-    playerRef.current?.setVolume(preference.volume);
-    playerRef.current?.setMuted(!preference.enabled);
-  }, [preference.enabled, preference.volume]);
-
-  return (
-    <section
-      ref={hostRef}
-      className="size-full overflow-hidden rounded-sm"
-      style={{ pointerEvents: interactive ? "auto" : "none" }}
-      aria-label={`${channel} Twitch stream`}
-    />
-  );
+  onMount?: import("tldraw").TLOnMountHandler;
 }
 
 /**
@@ -805,9 +684,14 @@ function YouTubeInteractionController() {
 
 export function CanvasEditor({
   roomId,
-  twitchChannel,
-  youtubePolicy,
+  twitchChannel: initialTwitchChannel,
+  youtubePolicy: initialYouTubePolicy,
+  onMount,
 }: CanvasEditorProps) {
+  const [{ twitchChannel, youtubePolicy }, setRoomConfig] = useState({
+    twitchChannel: initialTwitchChannel ?? null,
+    youtubePolicy: initialYouTubePolicy,
+  });
   const { getToken, userId } = useAuth();
   const [interactiveShapeId, setInteractiveShapeId] = useState<string | null>(
     null,
@@ -861,6 +745,8 @@ export function CanvasEditor({
       getToken,
       resolveUrl: (src: string, options?: { forceRefresh?: boolean }) =>
         resolveEditorUploadUrl(roomId, src, getToken, options),
+      getRefreshDelayMs: (src: string) =>
+        getEditorUploadUrlRefreshDelayMs(roomId, src),
     }),
     [roomId, getToken],
   );
@@ -894,6 +780,10 @@ export function CanvasEditor({
     uri: getUri,
     assets,
     shapeUtils: syncShapeUtils,
+    onCustomMessageReceived(data: unknown) {
+      const roomConfig = readRoomConfigMessage(data);
+      if (roomConfig) setRoomConfig(roomConfig);
+    },
   });
 
   if (storeWithStatus.status === "loading") {
@@ -920,6 +810,30 @@ export function CanvasEditor({
             <YouTubeInteractionCtx.Provider value={youtubeInteractionCtx}>
               <YouTubePolicyCtx.Provider value={youtubePolicy}>
                 <Tldraw
+                  onMount={(editor) => {
+                    editor.registerExternalContentHandler(
+                      "embed",
+                      (content) => {
+                        if (extractYouTubeId(content.url)) {
+                          const point =
+                            content.point ??
+                            editor.getViewportPageBounds().center;
+                          editor.createShape({
+                            type: "youtube-embed",
+                            x: point.x - 240,
+                            y: point.y - 135,
+                            props: { url: content.url, w: 480, h: 270 },
+                          });
+                          return;
+                        }
+                        return defaultHandleExternalEmbedContent(
+                          editor,
+                          content,
+                        );
+                      },
+                    );
+                    return onMount?.(editor);
+                  }}
                   store={storeWithStatus.store}
                   shapeUtils={customShapeUtils}
                   tools={editorTools}

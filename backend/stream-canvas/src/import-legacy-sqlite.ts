@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { RoomSnapshot } from "@tldraw/sync-core";
-import { closeDatabase, db } from "./db.ts";
+import { closeDatabase, db } from "./maintenance-db.ts";
 import { objectStore } from "./object-store.ts";
 import { hashObsSecret, isHashedObsSecret } from "./obs-secret.ts";
 import { canvasDocuments, roomMembers, rooms, uploads } from "./schema.ts";

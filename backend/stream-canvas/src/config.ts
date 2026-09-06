@@ -20,7 +20,8 @@ export const config = {
   databaseUrl:
     process.env.DATABASE_URL ??
     "postgresql://moddrop:moddrop@127.0.0.1:5432/moddrop",
-  databasePoolSize: numberEnv("DATABASE_POOL_SIZE", 10, { min: 1, max: 100 }),
+  // Leadership retains one connection; requests need at least one more.
+  databasePoolSize: numberEnv("DATABASE_POOL_SIZE", 10, { min: 2, max: 100 }),
   objectStorageMode,
   uploadsDir,
   s3Endpoint: process.env.S3_ENDPOINT ?? "",

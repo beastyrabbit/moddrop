@@ -1,32 +1,46 @@
 "use client";
 
 import { useConvexAuth, useMutation } from "convex/react";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api";
 
 export function UserRecordBootstrap() {
   const { isAuthenticated } = useConvexAuth();
   const getOrCreateUser = useMutation(api.users.getOrCreateUser);
-  const syncedRef = useRef(false);
-
   useEffect(() => {
-    if (!isAuthenticated) {
-      syncedRef.current = false;
-      return;
-    }
-    if (syncedRef.current) {
-      return;
-    }
-
-    syncedRef.current = true;
-    getOrCreateUser().catch((error) => {
-      console.error("[moddrop] failed to sync user record", error);
-      toast.error(
-        "Failed to sync your profile. Some features may be unavailable.",
-      );
-      syncedRef.current = false;
-    });
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const sync = async () => {
+      try {
+        await getOrCreateUser();
+      } catch (error) {
+        if (cancelled) return;
+        if (++attempts < 3) {
+          timer = setTimeout(() => void sync(), attempts * 1_000);
+          return;
+        }
+        console.error("[moddrop] failed to sync user record", error);
+        toast.error("Failed to sync your profile.", {
+          action: {
+            label: "Retry",
+            onClick: () => {
+              if (!cancelled) {
+                attempts = 0;
+                void sync();
+              }
+            },
+          },
+        });
+      }
+    };
+    void sync();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [getOrCreateUser, isAuthenticated]);
 
   return null;

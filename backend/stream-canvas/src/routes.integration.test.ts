@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
-import { generateKeyPairSync, sign } from "node:crypto";
-import type { IncomingMessage } from "node:http";
+import test, { after } from "node:test";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -53,10 +53,13 @@ process.env.CLERK_JWT_KEY = publicKey.export({
 });
 process.env.CLERK_JWT_ISSUER_DOMAIN = issuer;
 process.env.CORS_ORIGINS = origin;
-process.env.OBS_TOKEN_SIGNING_SECRET =
-  "test-signing-secret-with-at-least-32-bytes";
+process.env.OBS_TOKEN_SIGNING_SECRET = randomBytes(32).toString("hex");
 
 const { db, pool } = await import("./db.ts");
+after(async () => {
+  await pool.end();
+  await rm(tempRoot, { recursive: true, force: true });
+});
 
 for (const statement of [
   "CREATE TYPE youtube_policy AS ENUM ('disabled', 'preview_only', 'allow_on_air')",
@@ -136,6 +139,88 @@ await db.insert(rooms).values({
 await db.insert(roomMembers).values({
   roomId,
   clerkUserId: collaboratorUserId,
+});
+
+test("CORS permits the configured origin and bounded authorization preflight", async () => {
+  const { app } = await import("./app.ts");
+  const response = await app.request("/api/rooms", {
+    method: "OPTIONS",
+    headers: {
+      Origin: origin,
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "authorization,content-type",
+    },
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), origin);
+  assert.match(
+    response.headers.get("access-control-allow-headers") ?? "",
+    /authorization/i,
+  );
+  const other = await app.request("/api/rooms", {
+    method: "OPTIONS",
+    headers: {
+      Origin: "https://other.example",
+      "Access-Control-Request-Method": "POST",
+    },
+  });
+  assert.equal(other.headers.get("access-control-allow-origin"), null);
+});
+
+test("the production HTTP boundary rejects standby policy and secret mutations", async () => {
+  const { app } = await import("./app.ts");
+  const before = await db.select().from(rooms).where(eq(rooms.id, roomId));
+  for (const [path, method] of [
+    [`/api/rooms/${roomId}`, "PATCH"],
+    [`/api/rooms/${roomId}/regenerate-secret`, "POST"],
+  ] as const) {
+    const response = await app.request(path, { method });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("retry-after"), "2");
+  }
+  assert.deepEqual(
+    await db.select().from(rooms).where(eq(rooms.id, roomId)),
+    before,
+  );
+});
+
+test("object-write and metadata failures leave no successful upload record", async (t) => {
+  const { objectStore } = await import("./object-store.ts");
+  const before = await db.select().from(uploads);
+  const upload = () => {
+    const body = new FormData();
+    body.set(
+      "file",
+      new File([Uint8Array.from(minimalPng())], "fixture.png", {
+        type: "image/png",
+      }),
+    );
+    return api.request(`/api/rooms/${roomId}/upload`, {
+      method: "POST",
+      headers: authHeaders(ownerUserId),
+      body,
+    });
+  };
+  t.mock.method(objectStore, "put", async () => {
+    throw new Error("test object store unavailable");
+  });
+  assert.equal((await upload()).status, 500);
+  assert.equal((await db.select().from(uploads)).length, before.length);
+  t.mock.restoreAll();
+  const originalRemove = objectStore.remove.bind(objectStore);
+  const removed: string[] = [];
+  t.mock.method(objectStore, "remove", async (key: string) => {
+    removed.push(key);
+    await originalRemove(key);
+  });
+  t.mock.method(db, "insert", () => {
+    throw new Error("test metadata insertion failed");
+  });
+  assert.equal((await upload()).status, 500);
+  assert.equal(removed.length, 1);
+  assert.equal(await objectStore.stat(removed[0] ?? ""), null);
+  assert.equal((await db.select().from(uploads)).length, before.length);
+  t.mock.restoreAll();
 });
 
 test("OBS token exchange accepts hashed room secrets", async () => {
@@ -369,6 +454,24 @@ test("room creation and regeneration only reveal OBS secrets once", async () => 
     body: oldSecretExchangeBody,
   });
   assert.equal(rejectedOldSecret.status, 401);
+});
+
+test("invalid upload capabilities do not query metadata or object storage", async (t) => {
+  const { objectStore } = await import("./object-store.ts");
+  const lookup = t.mock.method(db.query.uploads, "findFirst", async () => {
+    throw new Error("Unexpected metadata lookup");
+  });
+  const stat = t.mock.method(objectStore, "stat", async () => {
+    throw new Error("Unexpected object stat");
+  });
+  for (const suffix of ["", "?token=invalid"]) {
+    const response = await api.request(
+      `/uploads/${uuidv4()}/test.png${suffix}`,
+    );
+    assert.equal(response.status, 401);
+  }
+  assert.equal(lookup.mock.callCount(), 0);
+  assert.equal(stat.mock.callCount(), 0);
 });
 
 test("uploads use sniffed MIME type and sanitized filenames", async () => {

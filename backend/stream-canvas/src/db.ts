@@ -56,6 +56,8 @@ async function createPool(): Promise<Pool> {
     max: config.databasePoolSize,
     connectionTimeoutMillis: 5_000,
     idleTimeoutMillis: 30_000,
+    statement_timeout: 10_000,
+    query_timeout: 12_000,
     application_name: "moddrop-stream-canvas",
   });
 }
