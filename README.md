@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./nextjs-restyled.png" alt="Moddrop preview" width="100%" />
+  <img src="public/img/canvas-preview.jpg" alt="Moddrop preview" width="100%" />
   <h1>Moddrop</h1>
   <p><strong>One browser source. Infinite canvas.</strong></p>
   <p>Shared live overlay control for streamers and mods.</p>
@@ -33,7 +33,7 @@ the shared Infisical development project into both applications without being
 written to disk. Local startup rejects `pk_live_` / `sk_live_` keys because
 Clerk restricts the production instance to `moddrop.live`; it requires the
 matching `pk_test_` / `sk_test_` pair instead. If needed, authenticate once with
-`infisical login --domain http://192.168.60.11:8080`. Set
+`infisical login --domain https://<internal-host>`. Set
 `MODDROP_DEV_DATABASE_URL` only when intentionally using a different
 development PostgreSQL instance. With that override, startup and shutdown leave
 the default Compose database alone. The default database port is loopback-only.
