@@ -349,6 +349,15 @@ test("PostgreSQL and WebSockets preserve canvas state, revoke sessions, and hand
       JSON.stringify(message).includes("Latest durable canvas"),
     ),
   );
+  const unsubscribeThrowing = leaderState.onDemote(() => {
+    throw new Error("synchronous demotion failure");
+  });
+  await assert.rejects(leaderState.stop(), AggregateError);
+  unsubscribeThrowing();
+  const released = await pool.query(
+    "SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND objid = 1296315460 AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) AND granted",
+  );
+  assert.equal(released.rows.length, 0);
 });
 
 function isMessage(
