@@ -48,6 +48,8 @@ test("audio reloads a failed media request when recovery returns the same URL", 
         playbackUpdatedAt: Date.now(),
       },
     });
+    window.fixtureEditor?.zoomToFit();
+    window.fixtureEditor?.selectAll();
   });
   const audio = page.locator("audio");
   await expect
@@ -55,6 +57,22 @@ test("audio reloads a failed media request when recovery returns the same URL", 
     .toBeGreaterThanOrEqual(2);
   expect(attempts).toBe(2);
   await expect(audio).toHaveAttribute("src", /\/recovery\.wav$/);
+  await page
+    .locator(".tl-shape[data-shape-type='audio-player'] button")
+    .press("Enter");
+  const playButton = page.getByTitle("Play", { exact: true });
+  await expect(playButton).toBeVisible();
+  await playButton.click();
+  const pauseButton = page.getByTitle("Pause", { exact: true });
+  await expect(pauseButton).toBeVisible();
+  await expect
+    .poll(() => mediaState(audio).then((state) => state.paused))
+    .toBe(false);
+  await pauseButton.press("Enter");
+  await expect(playButton).toBeVisible();
+  await expect
+    .poll(() => mediaState(audio).then((state) => state.paused))
+    .toBe(true);
 });
 
 test("audio and paused native video retain their timeline when signed URLs renew", async ({

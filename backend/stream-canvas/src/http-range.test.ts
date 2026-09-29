@@ -47,3 +47,51 @@ test("parseSingleByteRange rejects malformed or out-of-bounds ranges", () => {
     kind: "invalid",
   });
 });
+
+test("parseSingleByteRange clamps ranges and retains first-range selection", () => {
+  for (const header of ["bytes=0-9999", "bytes=-9999", "bytes=0-999,200-299"]) {
+    assert.deepEqual(
+      parseSingleByteRange(header, 1000),
+      {
+        kind: "range",
+        start: 0,
+        end: 999,
+        length: 1000,
+      },
+      header,
+    );
+  }
+  assert.deepEqual(parseSingleByteRange("bytes= 999 - 999 ", 1000), {
+    kind: "range",
+    start: 999,
+    end: 999,
+    length: 1,
+  });
+});
+
+test("parseSingleByteRange rejects empty, unsafe and non-integer bounds", () => {
+  for (const header of [
+    "bytes=",
+    "bytes=-",
+    "bytes=-0",
+    "bytes=-abc",
+    "bytes=0-abc",
+    "bytes=1.5-9",
+    "bytes=0-1.5",
+    "bytes=-1.5",
+    "bytes=9007199254740992-",
+    "bytes=0-9007199254740992",
+    "bytes=-9007199254740992",
+  ]) {
+    assert.deepEqual(
+      parseSingleByteRange(header, 1000),
+      { kind: "invalid" },
+      header,
+    );
+  }
+  for (const size of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.deepEqual(parseSingleByteRange("bytes=0-1", size), {
+      kind: "invalid",
+    });
+  }
+});

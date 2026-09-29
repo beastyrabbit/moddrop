@@ -14,7 +14,7 @@ export function LandingAuthActions({
   className,
   secondaryClassName,
   primaryClassName,
-}: LandingAuthActionsProps) {
+}: Readonly<LandingAuthActionsProps>) {
   const clerk = useClerk();
   const { isLoaded, isSignedIn } = useAuth();
 

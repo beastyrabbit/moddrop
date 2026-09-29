@@ -7,6 +7,31 @@ import schema from "./schema";
 
 const modules = import.meta.glob("./**/*.ts");
 
+test.each([
+  ["__--Ada_-Lovelace!!--__", "Ada_-Lovelace"],
+  [`a${"_".repeat(100_000)}b`, `a${"_".repeat(29)}`],
+  [`___${"a".repeat(40)}___`, "a".repeat(30)],
+])(
+  "profile creation normalizes nickname boundaries",
+  async (nickname, expected) => {
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "normalization-test",
+      nickname,
+    });
+    const user = await t.mutation(api.users.getOrCreateUser);
+    expect(user.username).toBe(expected);
+  },
+);
+
+test("an empty sanitized nickname uses a generated username", async () => {
+  const t = convexTest(schema, modules).withIdentity({
+    subject: "empty-nickname",
+    nickname: "_-!!-_",
+  });
+  const user = await t.mutation(api.users.getOrCreateUser);
+  expect(user.username).toMatch(/^user-[a-f0-9]{8}$/);
+});
+
 test("profile operations require identity and preserve unique, public directory records", async () => {
   const t = convexTest(schema, modules);
   await expect(t.mutation(api.users.getOrCreateUser)).rejects.toThrow(

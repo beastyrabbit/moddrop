@@ -161,7 +161,7 @@ export async function closeAllRooms(persist = true): Promise<void> {
     active.room.close();
     if (!persist) active.writer.stop();
   }
-  await Promise.allSettled([...roomLoads.values()]);
+  await Promise.allSettled(roomLoads.values());
   const results = await Promise.allSettled(
     entries.map(async (active) => {
       try {

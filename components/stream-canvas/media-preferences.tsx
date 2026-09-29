@@ -41,11 +41,11 @@ export function MediaPreferencesProvider({
   children,
   roomId,
   userId,
-}: {
+}: Readonly<{
   children: ReactNode;
   roomId: string;
   userId: string | null | undefined;
-}) {
+}>) {
   const storageKey = getMediaPreferencesStorageKey(userId, roomId);
   const persistenceFailed = useRef(false);
   const [storedState, setStoredState] = useState<StoredPreferenceState>({

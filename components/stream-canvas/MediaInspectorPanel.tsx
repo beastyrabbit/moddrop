@@ -70,10 +70,10 @@ export function CanvasStylePanel(props: TLUiStylePanelProps) {
 function MediaInspectorPanel({
   shape,
   isMobile,
-}: {
+}: Readonly<{
   shape: YouTubeEmbedShape | AudioPlayerShape;
   isMobile?: boolean;
-}) {
+}>) {
   const editor = useEditor();
   const ref = useRef<HTMLDivElement>(null);
   usePassThroughWheelEvents(ref);
@@ -132,10 +132,10 @@ function freshMediaUrlProps(url: string) {
 function InspectorSection({
   divider = true,
   children,
-}: {
+}: Readonly<{
   divider?: boolean;
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <div
       style={{
@@ -151,7 +151,10 @@ function InspectorSection({
   );
 }
 
-function InspectorHeader({ icon, title }: { icon: string; title: string }) {
+function InspectorHeader({
+  icon,
+  title,
+}: Readonly<{ icon: string; title: string }>) {
   return (
     <div
       style={{
@@ -170,7 +173,7 @@ function InspectorHeader({ icon, title }: { icon: string; title: string }) {
   );
 }
 
-function InspectorLabel({ children }: { children: React.ReactNode }) {
+function InspectorLabel({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div
       style={{
@@ -187,16 +190,15 @@ function InspectorLabel({ children }: { children: React.ReactNode }) {
 function InspectorHint({
   tone = "muted",
   children,
-}: {
+}: Readonly<{
   tone?: "muted" | "error" | "success";
   children: React.ReactNode;
-}) {
-  const color =
-    tone === "error"
-      ? "#e5484d"
-      : tone === "success"
-        ? "#46a758"
-        : "var(--tl-color-text-3)";
+}>) {
+  const color = {
+    error: "#e5484d",
+    success: "#46a758",
+    muted: "var(--tl-color-text-3)",
+  }[tone];
   return (
     <div
       style={{
@@ -215,11 +217,11 @@ function ToggleRow({
   label,
   checked,
   onToggle,
-}: {
+}: Readonly<{
   label: string;
   checked: boolean;
   onToggle: () => void;
-}) {
+}>) {
   return (
     <div
       style={{
@@ -261,10 +263,10 @@ function ToggleRow({
 function VolumeSlider({
   volume,
   onChange,
-}: {
+}: Readonly<{
   volume: number;
   onChange: (volume: number) => void;
-}) {
+}>) {
   const editor = useEditor();
   const percent = Math.round(volume * 100);
   return (
@@ -297,11 +299,11 @@ function PlaybackControls({
   isPlaying,
   onTogglePlay,
   onResync,
-}: {
+}: Readonly<{
   isPlaying: boolean;
   onTogglePlay: () => void;
   onResync: () => void;
-}) {
+}>) {
   return (
     <div style={{ display: "flex", gap: 4 }}>
       <TldrawUiButton
@@ -325,12 +327,12 @@ function InteractToggleButton({
   enterLabel,
   exitLabel,
   onToggle,
-}: {
+}: Readonly<{
   isInteractive: boolean;
   enterLabel: string;
   exitLabel: string;
   onToggle: () => void;
-}) {
+}>) {
   return (
     <TldrawUiButton
       type="normal"
@@ -350,7 +352,7 @@ function InteractToggleButton({
 // YouTube inspector
 // ---------------------------------------------------------------------------
 
-function YouTubeInspector({ shape }: { shape: YouTubeEmbedShape }) {
+function YouTubeInspector({ shape }: Readonly<{ shape: YouTubeEmbedShape }>) {
   const editor = useEditor();
   const { interactiveShapeId, setInteractiveShapeId } = useContext(
     YouTubeInteractionCtx,
@@ -498,7 +500,7 @@ interface PendingUpload {
 const pendingUploads = new Map<TLShapeId, PendingUpload>();
 const uploadOutcomes = new Map<TLShapeId, UploadOutcome>();
 
-function AudioInspector({ shape }: { shape: AudioPlayerShape }) {
+function AudioInspector({ shape }: Readonly<{ shape: AudioPlayerShape }>) {
   const editor = useEditor();
   const { interactiveShapeId, setInteractiveShapeId } = useContext(
     YouTubeInteractionCtx,

@@ -220,10 +220,10 @@ export function StreamCanvasHome() {
 function CreateRoomButton({
   creating,
   onCreate,
-}: {
+}: Readonly<{
   creating: boolean;
   onCreate: () => void;
-}) {
+}>) {
   return (
     <button
       type="button"
@@ -244,10 +244,10 @@ function CreateRoomButton({
 function InitialLoadError({
   message,
   onRetry,
-}: {
+}: Readonly<{
   message: string;
   onRetry: () => void;
-}) {
+}>) {
   return (
     <section
       aria-labelledby="rooms-error-title"
@@ -272,10 +272,10 @@ function InitialLoadError({
 function AppLoadingState({
   label,
   compact = false,
-}: {
+}: Readonly<{
   label: string;
   compact?: boolean;
-}) {
+}>) {
   return (
     <div
       className={cn(

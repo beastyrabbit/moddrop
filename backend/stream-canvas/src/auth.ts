@@ -150,7 +150,7 @@ function signClaims(
   return `${payload}.${signature}`;
 }
 
-function verifySignedClaims(token: string): unknown | null {
+function verifySignedClaims(token: string): unknown {
   if (token.length > MAX_INTERNAL_TOKEN_LENGTH) return null;
   const [payload, signature, extra] = token.split(".");
   if (!payload || !signature || extra) return null;

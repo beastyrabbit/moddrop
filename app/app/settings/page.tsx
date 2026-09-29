@@ -38,17 +38,13 @@ export default function StreamCanvasSettingsPage() {
   const [room, setRoom] = useState<CanvasRoom | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [obsSecret, setObsSecret] = useState<string | null>(null);
-  const [secretRevealed, setSecretRevealed] = useState(false);
   const [twitchChannel, setTwitchChannel] = useState("");
-  const [youtubePolicy, setYouTubePolicy] =
+  const [youtubePolicy, setYoutubePolicy] =
     useState<YouTubePolicy>("preview_only");
-  const [youtubeRiskAcknowledged, setYouTubeRiskAcknowledged] = useState(false);
+  const [youtubeRiskAcknowledged, setYoutubeRiskAcknowledged] = useState(false);
   const [allowedUsers, setAllowedUsers] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [confirmingRegeneration, setConfirmingRegeneration] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
   const loadRequestRef = useRef(0);
-  const regenerateRequestRef = useRef(0);
 
   const loadRoom = useCallback(async () => {
     const requestId = loadRequestRef.current + 1;
@@ -62,13 +58,12 @@ export default function StreamCanvasSettingsPage() {
 
       setRoom(loadedRoom);
       setTwitchChannel(loadedRoom.twitchChannel ?? "");
-      setYouTubePolicy(loadedRoom.youtubePolicy);
-      setYouTubeRiskAcknowledged(loadedRoom.youtubePolicy === "allow_on_air");
+      setYoutubePolicy(loadedRoom.youtubePolicy);
+      setYoutubeRiskAcknowledged(loadedRoom.youtubePolicy === "allow_on_air");
       setAllowedUsers(loadedRoom.allowedUsers);
       const pendingSecret =
         loadedRoom.obsSetupSecret ?? takePendingObsSecret(loadedRoom.id);
       setObsSecret(pendingSecret);
-      setSecretRevealed(Boolean(pendingSecret));
     } catch (error) {
       if (loadRequestRef.current === requestId) {
         setLoadError(
@@ -121,39 +116,6 @@ export default function StreamCanvasSettingsPage() {
     void handleSave();
   };
 
-  const handleRegenerate = useCallback(async () => {
-    if (!room || regenerating) return;
-
-    const requestId = regenerateRequestRef.current + 1;
-    regenerateRequestRef.current = requestId;
-    setRegenerating(true);
-    try {
-      const data = await regenerateSecret(room.id, getToken);
-      if (regenerateRequestRef.current !== requestId) return;
-      setObsSecret(data.obsSecret);
-      setSecretRevealed(true);
-      setConfirmingRegeneration(false);
-      toast.success("OBS secret regenerated");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to regenerate",
-      );
-    } finally {
-      if (regenerateRequestRef.current === requestId) {
-        setRegenerating(false);
-      }
-    }
-  }, [room, regenerating, getToken]);
-
-  const obsUrl =
-    obsSecret && typeof window !== "undefined"
-      ? `${window.location.origin}/obs#secret=${obsSecret}`
-      : null;
-  const maskedObsUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/obs#secret=${"•".repeat(8)}`
-      : "/obs#secret=••••••••";
-
   if (!isLoaded) {
     return <SettingsLoadingState label="Loading your account" />;
   }
@@ -189,11 +151,13 @@ export default function StreamCanvasSettingsPage() {
         description="Manage what appears on your canvas, who can edit it, and how OBS connects."
       />
 
-      {loadError ? (
+      {loadError && (
         <SettingsLoadError message={loadError} onRetry={loadRoom} />
-      ) : !room ? (
+      )}
+      {!loadError && !room && (
         <SettingsLoadingState label="Loading room settings" compact />
-      ) : (
+      )}
+      {!loadError && room && (
         <div className="space-y-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <section
@@ -224,79 +188,12 @@ export default function StreamCanvasSettingsPage() {
               </div>
             </section>
 
-            <section
-              aria-labelledby="youtube-settings-title"
-              className="rounded-xl border border-border bg-card p-5 sm:p-6"
-            >
-              <SectionHeader
-                id="youtube-settings-title"
-                title="YouTube safety"
-                description="Choose whether YouTube links can be previewed by moderators or sent to the OBS output."
-              />
-              <fieldset className="mt-5 space-y-3">
-                <legend className="sr-only">YouTube playback policy</legend>
-                <PolicyChoice
-                  checked={youtubePolicy === "disabled"}
-                  description="YouTube cannot be added or played in this room."
-                  label="Disabled"
-                  onChange={() => {
-                    setYouTubePolicy("disabled");
-                    setYouTubeRiskAcknowledged(false);
-                  }}
-                  value="disabled"
-                />
-                <PolicyChoice
-                  checked={youtubePolicy === "preview_only"}
-                  description="Moderators can preview videos for themselves, but OBS never loads them."
-                  label="Moderator preview only"
-                  onChange={() => {
-                    setYouTubePolicy("preview_only");
-                    setYouTubeRiskAcknowledged(false);
-                  }}
-                  value="preview_only"
-                />
-                <PolicyChoice
-                  checked={youtubePolicy === "allow_on_air"}
-                  description="YouTube players in the stream zone are loaded in OBS with shared playback and volume."
-                  label="Allow on air"
-                  onChange={() => setYouTubePolicy("allow_on_air")}
-                  value="allow_on_air"
-                />
-              </fieldset>
-
-              {youtubePolicy === "allow_on_air" ? (
-                <div className="mt-4 rounded-lg border border-[var(--app-ember)] bg-background p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle
-                      className="mt-0.5 size-5 shrink-0 text-[var(--app-ember)]"
-                      aria-hidden="true"
-                    />
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        Browser-source sign-in is not reliable
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                        YouTube controls its own embedded session. ModDrop
-                        cannot copy a moderator&apos;s cookies into OBS, so ads,
-                        consent screens, or sign-in prompts may still appear on
-                        air.
-                      </p>
-                    </div>
-                  </div>
-                  <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={youtubeRiskAcknowledged}
-                      onChange={(event) =>
-                        setYouTubeRiskAcknowledged(event.target.checked)
-                      }
-                      className="mt-1 size-4 accent-primary"
-                    />
-                    I understand and want OBS to load YouTube embeds.
-                  </label>
-                </div>
-              ) : null}
-            </section>
+            <YouTubeSettings
+              youtubePolicy={youtubePolicy}
+              setYoutubePolicy={setYoutubePolicy}
+              youtubeRiskAcknowledged={youtubeRiskAcknowledged}
+              setYoutubeRiskAcknowledged={setYoutubeRiskAcknowledged}
+            />
 
             <section
               aria-labelledby="collaborators-settings-title"
@@ -341,119 +238,258 @@ export default function StreamCanvasSettingsPage() {
             </button>
           </form>
 
-          <section
-            aria-labelledby="obs-settings-title"
-            className="rounded-xl border border-border bg-card p-5 sm:p-6"
-          >
-            <SectionHeader
-              id="obs-settings-title"
-              title="OBS browser source"
-              description="Add this URL to a 1920×1080 Browser Source in OBS."
-            />
-
-            <div className="mt-5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch">
-              <code className="min-h-11 min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-input bg-background px-3 py-3 text-xs text-foreground">
-                {obsUrl === null
-                  ? "Regenerate the secret to create a new copyable OBS URL."
-                  : secretRevealed
-                    ? obsUrl
-                    : maskedObsUrl}
-              </code>
-              <div className="grid grid-cols-2 gap-2 sm:flex">
-                <button
-                  type="button"
-                  onClick={() => setSecretRevealed((revealed) => !revealed)}
-                  disabled={!obsUrl}
-                  aria-label={
-                    secretRevealed ? "Hide OBS URL" : "Reveal OBS URL"
-                  }
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-11"
-                >
-                  {secretRevealed ? (
-                    <EyeOff className="size-4" aria-hidden="true" />
-                  ) : (
-                    <Eye className="size-4" aria-hidden="true" />
-                  )}
-                  <span className="sm:sr-only">
-                    {secretRevealed ? "Hide" : "Reveal"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!obsUrl) return;
-                    try {
-                      await navigator.clipboard.writeText(obsUrl);
-                      toast.success("Copied to clipboard");
-                    } catch {
-                      toast.error(
-                        "Failed to copy — please select and copy manually",
-                      );
-                    }
-                  }}
-                  disabled={!obsUrl}
-                  aria-label="Copy OBS URL"
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-11"
-                >
-                  <Copy className="size-4" aria-hidden="true" />
-                  <span className="sm:sr-only">Copy</span>
-                </button>
-              </div>
-            </div>
-
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              For security, the full URL is only available immediately after
-              room creation or regeneration.
-            </p>
-
-            {confirmingRegeneration ? (
-              <div
-                role="alert"
-                className="mt-5 rounded-lg border border-[var(--app-ember)] bg-background p-4"
-              >
-                <p className="text-sm font-semibold text-foreground">
-                  Replace the current OBS secret?
-                </p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Your current browser source URL will stop working immediately.
-                </p>
-                <div className="mt-4 flex flex-col-reverse gap-2 min-[360px]:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingRegeneration(false)}
-                    disabled={regenerating}
-                    className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-semibold hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleRegenerate()}
-                    disabled={regenerating}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-ember)] bg-[var(--app-ember)] px-4 text-sm font-semibold text-[var(--app-ink)] hover:bg-[#e27e5e] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <RefreshCw
-                      className={cn("size-4", regenerating && "animate-spin")}
-                      aria-hidden="true"
-                    />
-                    {regenerating ? "Regenerating…" : "Regenerate now"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingRegeneration(true)}
-                className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-ember)] px-4 text-sm font-semibold text-foreground hover:bg-[rgba(217,112,79,0.12)]"
-              >
-                <RefreshCw className="size-4" aria-hidden="true" />
-                Regenerate secret
-              </button>
-            )}
-          </section>
+          <ObsSettings
+            roomId={room.id}
+            initialSecret={obsSecret}
+            getToken={getToken}
+          />
         </div>
       )}
     </main>
+  );
+}
+
+function ObsSettings({
+  roomId,
+  initialSecret,
+  getToken,
+}: Readonly<{
+  roomId: string;
+  initialSecret: string | null;
+  getToken: ReturnType<typeof useAuth>["getToken"];
+}>) {
+  const [obsSecret, setObsSecret] = useState(initialSecret);
+  const [secretRevealed, setSecretRevealed] = useState(Boolean(initialSecret));
+  const [confirmingRegeneration, setConfirmingRegeneration] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const regenerateRequestRef = useRef(0);
+
+  const handleRegenerate = useCallback(async () => {
+    if (regenerating) return;
+
+    const requestId = regenerateRequestRef.current + 1;
+    regenerateRequestRef.current = requestId;
+    setRegenerating(true);
+    try {
+      const data = await regenerateSecret(roomId, getToken);
+      if (regenerateRequestRef.current !== requestId) return;
+      setObsSecret(data.obsSecret);
+      setSecretRevealed(true);
+      setConfirmingRegeneration(false);
+      toast.success("OBS secret regenerated");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to regenerate",
+      );
+    } finally {
+      if (regenerateRequestRef.current === requestId) {
+        setRegenerating(false);
+      }
+    }
+  }, [roomId, regenerating, getToken]);
+
+  const obsUrl =
+    obsSecret && typeof window !== "undefined"
+      ? `${window.location.origin}/obs#secret=${obsSecret}`
+      : null;
+  const maskedObsUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/obs#secret=${"•".repeat(8)}`
+      : "/obs#secret=••••••••";
+
+  let displayUrl = "Regenerate the secret to create a new copyable OBS URL.";
+  if (obsUrl) displayUrl = secretRevealed ? obsUrl : maskedObsUrl;
+
+  return (
+    <section
+      aria-labelledby="obs-settings-title"
+      className="rounded-xl border border-border bg-card p-5 sm:p-6"
+    >
+      <SectionHeader
+        id="obs-settings-title"
+        title="OBS browser source"
+        description="Add this URL to a 1920×1080 Browser Source in OBS."
+      />
+
+      <div className="mt-5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch">
+        <code className="min-h-11 min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-input bg-background px-3 py-3 text-xs text-foreground">
+          {displayUrl}
+        </code>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <button
+            type="button"
+            onClick={() => setSecretRevealed((revealed) => !revealed)}
+            disabled={!obsUrl}
+            aria-label={secretRevealed ? "Hide OBS URL" : "Reveal OBS URL"}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-11"
+          >
+            {secretRevealed ? (
+              <EyeOff className="size-4" aria-hidden="true" />
+            ) : (
+              <Eye className="size-4" aria-hidden="true" />
+            )}
+            <span className="sm:sr-only">
+              {secretRevealed ? "Hide" : "Reveal"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!obsUrl) return;
+              try {
+                await navigator.clipboard.writeText(obsUrl);
+                toast.success("Copied to clipboard");
+              } catch {
+                toast.error("Failed to copy — please select and copy manually");
+              }
+            }}
+            disabled={!obsUrl}
+            aria-label="Copy OBS URL"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:cursor-not-allowed disabled:opacity-45 sm:min-w-11"
+          >
+            <Copy className="size-4" aria-hidden="true" />
+            <span className="sm:sr-only">Copy</span>
+          </button>
+        </div>
+      </div>
+
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">
+        For security, the full URL is only available immediately after room
+        creation or regeneration.
+      </p>
+
+      {confirmingRegeneration ? (
+        <div
+          role="alert"
+          className="mt-5 rounded-lg border border-[var(--app-ember)] bg-background p-4"
+        >
+          <p className="text-sm font-semibold text-foreground">
+            Replace the current OBS secret?
+          </p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Your current browser source URL will stop working immediately.
+          </p>
+          <div className="mt-4 flex flex-col-reverse gap-2 min-[360px]:flex-row">
+            <button
+              type="button"
+              onClick={() => setConfirmingRegeneration(false)}
+              disabled={regenerating}
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 text-sm font-semibold hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRegenerate()}
+              disabled={regenerating}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-ember)] bg-[var(--app-ember)] px-4 text-sm font-semibold text-[var(--app-ink)] hover:bg-[#e27e5e] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw
+                className={cn("size-4", regenerating && "animate-spin")}
+                aria-hidden="true"
+              />
+              {regenerating ? "Regenerating…" : "Regenerate now"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirmingRegeneration(true)}
+          className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--app-ember)] px-4 text-sm font-semibold text-foreground hover:bg-[rgba(217,112,79,0.12)]"
+        >
+          <RefreshCw className="size-4" aria-hidden="true" />
+          Regenerate secret
+        </button>
+      )}
+    </section>
+  );
+}
+
+function YouTubeSettings({
+  youtubePolicy,
+  setYoutubePolicy,
+  youtubeRiskAcknowledged,
+  setYoutubeRiskAcknowledged,
+}: Readonly<{
+  youtubePolicy: YouTubePolicy;
+  setYoutubePolicy: (policy: YouTubePolicy) => void;
+  youtubeRiskAcknowledged: boolean;
+  setYoutubeRiskAcknowledged: (acknowledged: boolean) => void;
+}>) {
+  return (
+    <section
+      aria-labelledby="youtube-settings-title"
+      className="rounded-xl border border-border bg-card p-5 sm:p-6"
+    >
+      <SectionHeader
+        id="youtube-settings-title"
+        title="YouTube safety"
+        description="Choose whether YouTube links can be previewed by moderators or sent to the OBS output."
+      />
+      <fieldset className="mt-5 space-y-3">
+        <legend className="sr-only">YouTube playback policy</legend>
+        <PolicyChoice
+          checked={youtubePolicy === "disabled"}
+          description="YouTube cannot be added or played in this room."
+          label="Disabled"
+          onChange={() => {
+            setYoutubePolicy("disabled");
+            setYoutubeRiskAcknowledged(false);
+          }}
+          value="disabled"
+        />
+        <PolicyChoice
+          checked={youtubePolicy === "preview_only"}
+          description="Moderators can preview videos for themselves, but OBS never loads them."
+          label="Moderator preview only"
+          onChange={() => {
+            setYoutubePolicy("preview_only");
+            setYoutubeRiskAcknowledged(false);
+          }}
+          value="preview_only"
+        />
+        <PolicyChoice
+          checked={youtubePolicy === "allow_on_air"}
+          description="YouTube players in the stream zone are loaded in OBS with shared playback and volume."
+          label="Allow on air"
+          onChange={() => setYoutubePolicy("allow_on_air")}
+          value="allow_on_air"
+        />
+      </fieldset>
+
+      {youtubePolicy === "allow_on_air" ? (
+        <div className="mt-4 rounded-lg border border-[var(--app-ember)] bg-background p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle
+              className="mt-0.5 size-5 shrink-0 text-[var(--app-ember)]"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Browser-source sign-in is not reliable
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                YouTube controls its own embedded session. ModDrop cannot copy a
+                moderator&apos;s cookies into OBS, so ads, consent screens, or
+                sign-in prompts may still appear on air.
+              </p>
+            </div>
+          </div>
+          <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-foreground">
+            <input
+              type="checkbox"
+              checked={youtubeRiskAcknowledged}
+              onChange={(event) =>
+                setYoutubeRiskAcknowledged(event.target.checked)
+              }
+              className="mt-1 size-4 accent-primary"
+            />
+            <span>I understand and want OBS to load YouTube embeds.</span>
+          </label>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -463,13 +499,13 @@ function PolicyChoice({
   label,
   onChange,
   value,
-}: {
+}: Readonly<{
   checked: boolean;
   description: string;
   label: string;
   onChange: () => void;
   value: YouTubePolicy;
-}) {
+}>) {
   return (
     <label
       className={cn(
@@ -503,11 +539,11 @@ function SectionHeader({
   id,
   title,
   description,
-}: {
+}: Readonly<{
   id: string;
   title: string;
   description: string;
-}) {
+}>) {
   return (
     <div>
       <h2 id={id} className="font-product-display text-2xl text-foreground">
@@ -523,10 +559,10 @@ function SectionHeader({
 function SettingsLoadError({
   message,
   onRetry,
-}: {
+}: Readonly<{
   message: string;
   onRetry: () => void;
-}) {
+}>) {
   return (
     <section
       aria-labelledby="settings-error-title"
@@ -551,24 +587,23 @@ function SettingsLoadError({
 function SettingsLoadingState({
   label,
   compact = false,
-}: {
+}: Readonly<{
   label: string;
   compact?: boolean;
-}) {
+}>) {
   return (
-    <div
+    <output
       className={cn(
         "flex items-center justify-center",
         compact ? "min-h-52" : "min-h-[55vh]",
       )}
-      role="status"
     >
       <Loader2
         className="size-5 animate-spin text-[var(--app-brass-highlight)]"
         aria-hidden="true"
       />
       <span className="sr-only">{label}</span>
-    </div>
+    </output>
   );
 }
 

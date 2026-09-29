@@ -4,6 +4,7 @@ import type { Editor } from "tldraw";
 import { CanvasEditor } from "../components/stream-canvas/CanvasEditor";
 import { CanvasMirror } from "../components/stream-canvas/CanvasMirror";
 import OBSLayout from "../app/obs/layout";
+import Settings from "../app/app/settings/page";
 import { UserMultiSelect } from "../components/stream-canvas/UserMultiSelect";
 import { MediaPreferencesProvider } from "../components/stream-canvas/media-preferences";
 import { TwitchPreview } from "../components/stream-canvas/TwitchPreview";
@@ -27,6 +28,13 @@ function Fixture() {
   }, []);
   if (!session) return <p>Preparing room…</p>;
   const view = new URLSearchParams(location.search).get("view");
+  if (view === "settings") {
+    return (
+      <div className="app-shell">
+        <Settings />
+      </div>
+    );
+  }
   if (view === "mirror")
     return (
       <OBSLayout>

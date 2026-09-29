@@ -115,17 +115,137 @@ function stopPropagation(event: EventWithStopPropagation) {
   event.stopPropagation();
 }
 
+function ReadonlyAudioCard({
+  audible,
+  filename,
+}: Readonly<{
+  audible: boolean;
+  filename: string;
+}>) {
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        borderRadius: 8,
+        background: audible
+          ? "linear-gradient(135deg, rgba(24,24,27,0.88), rgba(30,64,175,0.68))"
+          : "linear-gradient(135deg, rgba(24,24,27,0.88), rgba(63,63,70,0.72))",
+        border: "1px solid rgba(255,255,255,0.1)",
+        color: "#fff",
+        fontFamily: "sans-serif",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 10,
+          textAlign: "center",
+          maxWidth: "100%",
+        }}
+      >
+        <svg
+          width="44"
+          height="44"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            opacity: audible ? 1 : 0.72,
+          }}
+        >
+          <title>Audio source</title>
+          <path d="M9 18V5l12-2v13" />
+          <circle cx="6" cy="18" r="3" />
+          <circle cx="18" cy="16" r="3" />
+        </svg>
+        <div style={{ fontSize: 11, letterSpacing: "0.18em", opacity: 0.72 }}>
+          {audible ? "LIVE AUDIO" : "AUDIO"}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            maxWidth: "100%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={filename}
+        >
+          {filename}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AudioPlaybackButton({
+  isPlaying,
+  togglePlayback,
+}: Readonly<{
+  isPlaying: boolean;
+  togglePlayback: () => void;
+}>) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        togglePlayback();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        e.stopPropagation();
+        togglePlayback();
+      }}
+      style={{
+        width: 48,
+        height: 48,
+        flexShrink: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(255,255,255,0.18)",
+        border: "1px solid rgba(255,255,255,0.18)",
+        borderRadius: 999,
+        color: "#fff",
+        cursor: "pointer",
+        padding: 0,
+        fontSize: 24,
+        lineHeight: 1,
+      }}
+      title={isPlaying ? "Pause" : "Play"}
+    >
+      {isPlaying ? "⏸" : "▶"}
+    </button>
+  );
+}
+
 function AudioPlayerComponent({
   editor,
   shape,
   isReadonly,
   onUpdateProps,
-}: {
+}: Readonly<{
   editor: Editor;
   shape: AudioPlayerShape;
   isReadonly: boolean;
   onUpdateProps: (props: Partial<AudioPlayerShape["props"]>) => void;
-}) {
+}>) {
   const { interactiveShapeId, setInteractiveShapeId } = useContext(
     YouTubeInteractionCtx,
   );
@@ -438,75 +558,10 @@ function AudioPlayerComponent({
     return (
       <>
         {sharedAudioElement}
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            position: "relative",
-            overflow: "hidden",
-            borderRadius: 8,
-            background:
-              isAudibleInReadonly && !isVolumeMuted
-                ? "linear-gradient(135deg, rgba(24,24,27,0.88), rgba(30,64,175,0.68))"
-                : "linear-gradient(135deg, rgba(24,24,27,0.88), rgba(63,63,70,0.72))",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "#fff",
-            fontFamily: "sans-serif",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              textAlign: "center",
-              maxWidth: "100%",
-            }}
-          >
-            <svg
-              width="44"
-              height="44"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                opacity: isAudibleInReadonly && !isVolumeMuted ? 1 : 0.72,
-              }}
-            >
-              <title>Audio source</title>
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-            <div
-              style={{ fontSize: 11, letterSpacing: "0.18em", opacity: 0.72 }}
-            >
-              {isAudibleInReadonly && !isVolumeMuted ? "LIVE AUDIO" : "AUDIO"}
-            </div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                maxWidth: "100%",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-              title={filename}
-            >
-              {filename}
-            </div>
-          </div>
-        </div>
+        <ReadonlyAudioCard
+          audible={isAudibleInReadonly && !isVolumeMuted}
+          filename={filename}
+        />
       </>
     );
   }
@@ -619,38 +674,10 @@ function AudioPlayerComponent({
             onPointerUpCapture={stopPropagation}
             onPointerMoveCapture={stopPropagation}
           >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePlayback();
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                e.stopPropagation();
-                togglePlayback();
-              }}
-              style={{
-                width: 48,
-                height: 48,
-                flexShrink: 0,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "rgba(255,255,255,0.18)",
-                border: "1px solid rgba(255,255,255,0.18)",
-                borderRadius: 999,
-                color: "#fff",
-                cursor: "pointer",
-                padding: 0,
-                fontSize: 24,
-                lineHeight: 1,
-              }}
-              title={syncedIsPlaying ? "Pause" : "Play"}
-            >
-              {syncedIsPlaying ? "⏸" : "▶"}
-            </button>
+            <AudioPlaybackButton
+              isPlaying={syncedIsPlaying}
+              togglePlayback={togglePlayback}
+            />
             <span
               style={{
                 flex: 1,
@@ -809,8 +836,8 @@ function AudioPlayerComponent({
 // ---------------------------------------------------------------------------
 
 export class AudioPlayerShapeUtil extends BaseBoxShapeUtil<AudioPlayerShape> {
-  static override type = "audio-player" as const;
-  static override props = audioPlayerShapeProps;
+  static override readonly type = "audio-player" as const;
+  static override readonly props = audioPlayerShapeProps;
 
   override getDefaultProps(): AudioPlayerShape["props"] {
     return {

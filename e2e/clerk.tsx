@@ -1,4 +1,8 @@
 import { useCallback } from "react";
+export function useClerk() {
+  return { openSignIn() {} };
+}
+
 export function useAuth() {
   const getToken = useCallback(async () => {
     const session = await (await fetch("/__test/session")).json();

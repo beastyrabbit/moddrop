@@ -72,15 +72,12 @@ class S3ObjectStore implements ObjectStore {
 
   constructor() {
     const endpoint = new URL(config.s3Endpoint);
+    const defaultPort = endpoint.protocol === "https:" ? 443 : 80;
     this.requests = new ObjectStoreTransport(endpoint.protocol === "https:");
     this.client = new MinioClient({
       transport: this.requests.transport,
       endPoint: endpoint.hostname,
-      port: endpoint.port
-        ? Number(endpoint.port)
-        : endpoint.protocol === "https:"
-          ? 443
-          : 80,
+      port: endpoint.port ? Number(endpoint.port) : defaultPort,
       useSSL: endpoint.protocol === "https:",
       accessKey: config.s3AccessKey,
       secretKey: config.s3SecretKey,

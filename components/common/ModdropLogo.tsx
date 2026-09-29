@@ -7,7 +7,10 @@ type ModdropLogoProps = {
   priority?: boolean;
 };
 
-export function ModdropLogo({ className, priority = false }: ModdropLogoProps) {
+export function ModdropLogo({
+  className,
+  priority = false,
+}: Readonly<ModdropLogoProps>) {
   return (
     <Link
       href="/"

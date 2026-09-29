@@ -100,14 +100,14 @@ export function extractYouTubeId(raw: string): string | null {
   } catch {
     return null;
   }
-  const id =
-    url.hostname === "youtu.be"
-      ? path[1]
-      : path[1] === "watch"
-        ? url.searchParams.get("v")
-        : ["embed", "shorts", "live"].includes(path[1])
-          ? path[2]
-          : null;
+  let id: string | null = null;
+  if (url.hostname === "youtu.be") {
+    id = path[1];
+  } else if (path[1] === "watch") {
+    id = url.searchParams.get("v");
+  } else if (["embed", "shorts", "live"].includes(path[1])) {
+    id = path[2];
+  }
   return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
 }
 
@@ -270,13 +270,13 @@ function YouTubeEmbedPlayer({
   isReadonly,
   onUpdateProps,
   isAudibleInReadonly,
-}: {
+}: Readonly<{
   editor: Editor;
   shape: YouTubeEmbedShape;
   isReadonly: boolean;
   onUpdateProps: (props: Partial<YouTubeEmbedShape["props"]>) => void;
   isAudibleInReadonly: boolean;
-}) {
+}>) {
   const { interactiveShapeId, setInteractiveShapeId } = useContext(
     YouTubeInteractionCtx,
   );
@@ -715,10 +715,10 @@ function YouTubeEmbedPlayer({
 function YouTubeEmbedShapeComponent({
   editor,
   shape,
-}: {
+}: Readonly<{
   editor: Editor;
   shape: YouTubeEmbedShape;
-}) {
+}>) {
   const youtubePolicy = useContext(YouTubePolicyCtx);
   const videoId = extractYouTubeId(shape.props.url);
   const isReadonly = useValue(
@@ -835,8 +835,8 @@ function YouTubeEmbedShapeComponent({
 }
 
 export class YouTubeEmbedShapeUtil extends BaseBoxShapeUtil<YouTubeEmbedShape> {
-  static override type = "youtube-embed" as const;
-  static override props = youtubeEmbedShapeProps;
+  static override readonly type = "youtube-embed" as const;
+  static override readonly props = youtubeEmbedShapeProps;
 
   override getDefaultProps(): YouTubeEmbedShape["props"] {
     return {
