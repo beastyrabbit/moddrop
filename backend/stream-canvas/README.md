@@ -116,11 +116,12 @@ same gate before deploying Convex and publishing both images to GHCR. Manual
 publication is restricted to `main`. The Forgejo workflow is retained as a legacy
 copy; its `personal` runner pool was retired on 2026-08-31.
 
-After a release succeeds, update all three image references in the Homelab
-Moddrop HelmRelease to the released tag and verified GHCR digests. Commit through
-the Homelab GitOps workflow, reconcile Flux, and verify frontend and backend
-readiness plus the public application. Cluster access is available through SSH
-on `bunux`. Backend rollout uses Recreate so the old leader flushes and exits
+Pushing a `vX.Y.Z` tag is the deployment. Once both images are published, Flux
+image automation in the Homelab repository pins the new tag and digest in the
+Moddrop HelmRelease. Do not edit those pins by hand, and fix a bad release
+forward with a new tag. Verify frontend and backend readiness plus the public
+application after the rollout. Cluster access is available through SSH on
+`bunux`. Backend rollout uses Recreate so the old leader flushes and exits
 before the new leader admits sessions.
 
 `pnpm run test` runs fast route and lifecycle unit tests and tears down its
