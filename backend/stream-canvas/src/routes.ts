@@ -799,7 +799,9 @@ function parseMultipartUpload(
 function parseMultipartBoundary(
   contentType: string | undefined,
 ): string | null {
-  const match = contentType?.match(/(?:^|;)\s*boundary=(?:"([^"]+)"|([^;]+))/i);
+  const match = /(?:^|;)\s*boundary=(?:"([^"]+)"|([^;]+))/i.exec(
+    contentType ?? "",
+  );
   const boundary = (match?.[1] ?? match?.[2])?.trim();
   if (!boundary || boundary.length > 200) return null;
   return boundary;
@@ -826,10 +828,11 @@ function parseDispositionValue(
   disposition: string,
   name: string,
 ): string | null {
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = disposition.match(
-    new RegExp(`(?:^|;)\\s*${escapedName}="([^"]*)"`, "i"),
-  );
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  const match = new RegExp(
+    String.raw`(?:^|;)\s*${escapedName}="([^"]*)"`,
+    "i",
+  ).exec(disposition);
   return match?.[1] ?? null;
 }
 

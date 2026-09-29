@@ -16,6 +16,23 @@ function parseStrictNonNegativeInteger(value: string): number | null {
   return parsedValue;
 }
 
+function parseRangeBounds(
+  startPart: string,
+  endPart: string,
+  fileSize: number,
+): { start: number; end: number } | null {
+  if (!startPart) {
+    const suffixLength = parseStrictNonNegativeInteger(endPart);
+    if (suffixLength === null || suffixLength <= 0) return null;
+    return { start: Math.max(0, fileSize - suffixLength), end: fileSize - 1 };
+  }
+
+  const start = parseStrictNonNegativeInteger(startPart);
+  const end = endPart ? parseStrictNonNegativeInteger(endPart) : fileSize - 1;
+  if (start === null || end === null) return null;
+  return { start, end: Math.min(end, fileSize - 1) };
+}
+
 export function parseSingleByteRange(
   rangeHeader: string | undefined,
   fileSize: number,
@@ -45,33 +62,9 @@ export function parseSingleByteRange(
     return { kind: "invalid" };
   }
 
-  let start = 0;
-  let end = fileSize - 1;
-
-  if (!startPart) {
-    const suffixLength = parseStrictNonNegativeInteger(endPart);
-    if (suffixLength === null || suffixLength <= 0) {
-      return { kind: "invalid" };
-    }
-
-    start = Math.max(0, fileSize - suffixLength);
-  } else {
-    const parsedStart = parseStrictNonNegativeInteger(startPart);
-    if (parsedStart === null) {
-      return { kind: "invalid" };
-    }
-    start = parsedStart;
-
-    if (endPart) {
-      const parsedEnd = parseStrictNonNegativeInteger(endPart);
-      if (parsedEnd === null) {
-        return { kind: "invalid" };
-      }
-      end = parsedEnd;
-    }
-  }
-
-  end = Math.min(end, fileSize - 1);
+  const bounds = parseRangeBounds(startPart, endPart, fileSize);
+  if (!bounds) return { kind: "invalid" };
+  const { start, end } = bounds;
 
   if (start >= fileSize || end < start) {
     return { kind: "invalid" };

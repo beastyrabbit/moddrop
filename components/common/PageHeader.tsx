@@ -6,7 +6,11 @@ type PageHeaderProps = {
   actions?: ReactNode;
 };
 
-export function PageHeader({ title, description, actions }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: Readonly<PageHeaderProps>) {
   return (
     <header className="flex flex-col gap-5 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">

@@ -116,7 +116,7 @@ interface CanvasEditorProps {
  * inside tldraw's background layer (behind shapes, moves with camera).
  * OBS mirror sets Background: null, so none of this shows there.
  */
-function CanvasBackground({ channel }: { channel?: string | null }) {
+function CanvasBackground({ channel }: Readonly<{ channel?: string | null }>) {
   const editor = useEditor();
   const containerRef = useRef<HTMLDivElement>(null);
   const streamChipRef = useRef<HTMLButtonElement>(null);
@@ -687,7 +687,7 @@ export function CanvasEditor({
   twitchChannel: initialTwitchChannel,
   youtubePolicy: initialYouTubePolicy,
   onMount,
-}: CanvasEditorProps) {
+}: Readonly<CanvasEditorProps>) {
   const [{ twitchChannel, youtubePolicy }, setRoomConfig] = useState({
     twitchChannel: initialTwitchChannel ?? null,
     youtubePolicy: initialYouTubePolicy,

@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { UserRecordBootstrap } from "@/components/user-record-bootstrap";
 import convex from "@/lib/convexClient";
 
-export function AppProviders({ children }: { children: ReactNode }) {
+export function AppProviders({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
       <UserRecordBootstrap />

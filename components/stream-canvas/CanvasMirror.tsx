@@ -73,7 +73,7 @@ function OBSSetup() {
   return null;
 }
 
-export function CanvasMirror(props: CanvasMirrorProps) {
+export function CanvasMirror(props: Readonly<CanvasMirrorProps>) {
   const [attempt, setAttempt] = useState(0);
   return (
     <ConnectedCanvasMirror

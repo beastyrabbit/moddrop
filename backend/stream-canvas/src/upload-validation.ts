@@ -127,14 +127,21 @@ function readUnsignedInt(buffer: Buffer): number {
   return value;
 }
 
+function trimFilenamePunctuation(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && /[-_.]/.test(value[start] ?? "")) start += 1;
+  while (end > start && /[-_.]/.test(value[end - 1] ?? "")) end -= 1;
+  return value.slice(start, end);
+}
+
 export function sanitizeUploadFilename(filename: string): string {
   const extension = extname(filename).slice(0, 12);
-  const base = basename(filename, extension)
+  const normalizedBase = basename(filename, extension)
     .normalize("NFKD")
     .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^[-_.]+|[-_.]+$/g, "")
-    .slice(0, 96);
+    .replace(/_+/g, "_");
+  const base = trimFilenamePunctuation(normalizedBase).slice(0, 96);
 
   const safeBase = base.length > 0 ? base : FALLBACK_FILENAME;
   const safeExtension = extension

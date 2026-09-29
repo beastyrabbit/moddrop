@@ -78,11 +78,11 @@ export function TwitchPreview({
   channel,
   hostname,
   interactive,
-}: {
+}: Readonly<{
   channel: string;
   hostname: string;
   interactive: boolean;
-}) {
+}>) {
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const hostRef = useRef<HTMLDivElement>(null);

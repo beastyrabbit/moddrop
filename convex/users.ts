@@ -27,7 +27,7 @@ async function getUserByToken(
 
 function clerkUserIdFromTokenIdentifier(tokenIdentifier: string) {
   const parts = tokenIdentifier.split("|");
-  return parts[parts.length - 1] ?? tokenIdentifier;
+  return parts.at(-1) ?? tokenIdentifier;
 }
 
 export function toPublicUser(user: Doc<"users">): PublicUserDto {
@@ -61,6 +61,22 @@ export function normalizeClerkUserIdList(userIds: string[]): string[] {
   return normalized;
 }
 
+function sanitizeUsername(raw: string): string {
+  const allowed = raw.replace(/[^a-zA-Z0-9_-]/g, "");
+  let start = 0;
+  let end = allowed.length;
+  while (start < end && (allowed[start] === "-" || allowed[start] === "_")) {
+    start += 1;
+  }
+  while (
+    end > start &&
+    (allowed[end - 1] === "-" || allowed[end - 1] === "_")
+  ) {
+    end -= 1;
+  }
+  return allowed.slice(start, end).slice(0, 30);
+}
+
 async function deriveUniqueUsername(
   ctx: MutationCtx,
   identity: {
@@ -71,10 +87,7 @@ async function deriveUniqueUsername(
   const raw = identity.nickname ?? identity.name;
 
   const sanitized =
-    raw
-      ?.replace(/[^a-zA-Z0-9_-]/g, "")
-      .replace(/^[-_]+|[-_]+$/g, "")
-      .slice(0, 30) || `user-${crypto.randomUUID().slice(0, 8)}`;
+    sanitizeUsername(raw ?? "") || `user-${crypto.randomUUID().slice(0, 8)}`;
 
   const taken = await ctx.db
     .query("users")

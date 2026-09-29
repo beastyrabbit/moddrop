@@ -24,7 +24,7 @@ export function UserMultiSelect({
   value,
   onChange,
   inputId,
-}: UserMultiSelectProps) {
+}: Readonly<UserMultiSelectProps>) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -43,12 +43,9 @@ export function UserMultiSelect({
     value.length > 0 ? { userIds: value } : "skip",
   );
 
-  const selectedMap = new Map<string, string>();
-  if (resolved) {
-    for (const user of resolved) {
-      selectedMap.set(user.userId, user.username);
-    }
-  }
+  const selectedMap = new Map(
+    resolved?.map((user) => [user.userId, user.username]),
+  );
 
   const handleSelect = useCallback(
     (entry: UserEntry) => {
@@ -207,57 +204,88 @@ export function UserMultiSelect({
           aria-live="polite"
           className="absolute z-50 mt-2 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
         >
-          {results === undefined ? (
-            <div
-              className="flex min-h-11 items-center gap-2 px-3 text-sm text-muted-foreground"
-              role="option"
-              aria-disabled="true"
-              aria-selected="false"
-              tabIndex={-1}
-            >
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              Searching…
-            </div>
-          ) : filteredResults.length === 0 ? (
-            <div
-              role="option"
-              aria-disabled="true"
-              aria-selected="false"
-              tabIndex={-1}
-              className="px-3 py-3 text-sm text-muted-foreground"
-            >
-              No users found for “{search.trim()}”.
-            </div>
-          ) : (
-            <div className="max-h-52 overflow-y-auto p-1">
-              {filteredResults.map((entry, index) => (
-                <div key={entry.userId} role="none">
-                  <button
-                    type="button"
-                    role="option"
-                    id={`${listboxId}-${index}`}
-                    aria-selected={index === activeOptionIndex}
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => handleSelect(entry)}
-                    className={cn(
-                      "flex min-h-11 w-full min-w-0 flex-col justify-center rounded-md px-3 py-2 text-left hover:bg-[var(--app-billiard-hover)]",
-                      index === activeOptionIndex &&
-                        "bg-[var(--app-billiard-hover)]",
-                    )}
-                  >
-                    <span className="font-semibold text-foreground">
-                      {entry.username}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {entry.userId}
-                    </span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <UserSearchResults
+            loading={results === undefined}
+            results={filteredResults}
+            search={search}
+            listboxId={listboxId}
+            activeOptionIndex={activeOptionIndex}
+            onActivate={setActiveIndex}
+            onSelect={handleSelect}
+          />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function UserSearchResults({
+  loading,
+  results,
+  search,
+  listboxId,
+  activeOptionIndex,
+  onActivate,
+  onSelect,
+}: Readonly<{
+  loading: boolean;
+  results: UserEntry[];
+  search: string;
+  listboxId: string;
+  activeOptionIndex: number;
+  onActivate: (index: number) => void;
+  onSelect: (entry: UserEntry) => void;
+}>) {
+  if (loading)
+    return (
+      <div
+        className="flex min-h-11 items-center gap-2 px-3 text-sm text-muted-foreground"
+        role="option"
+        aria-disabled="true"
+        aria-selected="false"
+        tabIndex={-1}
+      >
+        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        Searching…
+      </div>
+    );
+  if (results.length === 0)
+    return (
+      <div
+        role="option"
+        aria-disabled="true"
+        aria-selected="false"
+        tabIndex={-1}
+        className="px-3 py-3 text-sm text-muted-foreground"
+      >
+        No users found for “{search.trim()}”.
+      </div>
+    );
+  return (
+    <div className="max-h-52 overflow-y-auto p-1">
+      {results.map((entry, index) => (
+        <div key={entry.userId} role="none">
+          <button
+            type="button"
+            role="option"
+            id={`${listboxId}-${index}`}
+            aria-selected={index === activeOptionIndex}
+            onMouseEnter={() => onActivate(index)}
+            onClick={() => onSelect(entry)}
+            className={cn(
+              "flex min-h-11 w-full min-w-0 flex-col justify-center rounded-md px-3 py-2 text-left hover:bg-[var(--app-billiard-hover)]",
+              index === activeOptionIndex && "bg-[var(--app-billiard-hover)]",
+            )}
+          >
+            <span className="font-semibold text-foreground">
+              {entry.username}
+            </span>
+            <span className="truncate text-xs text-muted-foreground">
+              {entry.userId}
+            </span>
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

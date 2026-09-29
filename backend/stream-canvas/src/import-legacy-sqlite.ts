@@ -214,14 +214,15 @@ function parseMembers(value: string | null): string[] {
   }
 }
 
+function legacyRelativePath(storedPath: string): string {
+  if (storedPath.startsWith("/data/")) return storedPath.slice("/data/".length);
+  if (storedPath.startsWith("data/")) return storedPath.slice("data/".length);
+  if (isAbsolute(storedPath)) return join("uploads", basename(storedPath));
+  return storedPath;
+}
+
 function resolveLegacyUploadPath(storedPath: string): string {
-  const relativePath = storedPath.startsWith("/data/")
-    ? storedPath.slice("/data/".length)
-    : storedPath.startsWith("data/")
-      ? storedPath.slice("data/".length)
-      : isAbsolute(storedPath)
-        ? join("uploads", basename(storedPath))
-        : storedPath;
+  const relativePath = legacyRelativePath(storedPath);
   const resolvedRoot = resolve(legacyDataDir);
   const resolvedPath = resolve(resolvedRoot, relativePath);
   if (relative(resolvedRoot, resolvedPath).startsWith("..")) {

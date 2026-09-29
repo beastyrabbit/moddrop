@@ -11,7 +11,7 @@ class LeaderState {
   private timer: NodeJS.Timeout | null = null;
   private tickPromise: Promise<void> | null = null;
   private stopping = false;
-  private demoteHandlers = new Set<
+  private readonly demoteHandlers = new Set<
     (persist: boolean) => void | Promise<void>
   >();
   private demoting: Promise<void> | null = null;
@@ -20,8 +20,8 @@ class LeaderState {
   private readonly onClientError = (error: Error) => {
     console.error("[leader] retained PostgreSQL connection failed", error);
     this.connectionFailed = true;
-    void this.demote(false).catch((failure) =>
-      console.error("[leader] demotion failed", failure),
+    void this.demote(false).catch((error_) =>
+      console.error("[leader] demotion failed", error_),
     );
   };
 

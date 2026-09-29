@@ -11,9 +11,9 @@ export const metadata: Metadata = {
  */
 export default function StreamCanvasOBSLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <>
       <style>{`

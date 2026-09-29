@@ -13,7 +13,9 @@ const navItems = [
   { href: "/app/settings", label: "Settings" },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
 
   if (pathname.startsWith("/app/rooms/")) {
@@ -26,10 +28,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function ThemedAppShell({
   children,
   pathname,
-}: {
+}: Readonly<{
   children: React.ReactNode;
   pathname: string;
-}) {
+}>) {
   const clerk = useClerk();
   const { user } = useUser();
   const { isAuthenticated, isLoading } = useConvexAuth();

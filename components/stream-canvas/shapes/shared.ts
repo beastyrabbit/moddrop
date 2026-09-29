@@ -42,7 +42,7 @@ const MAX_REFRESH_TIMEOUT_MS = 2 ** 31 - 1;
 // Keep legacy records/schema readable while applying owner policy to every
 // default YouTube renderer. Newly pasted URLs use the custom shape.
 class PolicyEmbedShapeUtil extends EmbedShapeUtil {
-  static override type = "embed" as const;
+  static override readonly type = "embed" as const;
   override component(shape: TLEmbedShape) {
     if (!isYouTubeUrl(shape.props.url)) return super.component(shape);
     return createElement(PolicyEmbed, {}, super.component(shape));
@@ -62,7 +62,7 @@ function PolicyEmbed({ children }: { children?: ReactNode }) {
 }
 
 class RefreshingImageShapeUtil extends ImageShapeUtil {
-  static override type = "image" as const;
+  static override readonly type = "image" as const;
 
   override component(shape: TLImageShape) {
     return createElement(
@@ -74,7 +74,7 @@ class RefreshingImageShapeUtil extends ImageShapeUtil {
 }
 
 class RefreshingVideoShapeUtil extends VideoShapeUtil {
-  static override type = "video" as const;
+  static override readonly type = "video" as const;
 
   override component(shape: TLVideoShape) {
     return createElement(

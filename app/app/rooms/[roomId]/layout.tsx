@@ -3,9 +3,9 @@
  */
 export default function CanvasRoomLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <>
       <style>{`
