@@ -152,8 +152,10 @@ class LeaderState {
     if (!persist) this.client = null;
     if (client) {
       console.warn("[leader] relinquishing stream-canvas leadership");
+      // async wrapper turns synchronous throws into rejections, so the lock
+      // below is always released.
       const results = await Promise.allSettled(
-        [...this.demoteHandlers].map((handler) => handler(persist)),
+        [...this.demoteHandlers].map(async (handler) => handler(persist)),
       );
       for (const result of results) {
         if (result.status === "rejected") {
