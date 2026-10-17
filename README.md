@@ -44,6 +44,9 @@ the default Compose database alone. The default database port is loopback-only.
 See [the stream canvas backend guide](./backend/stream-canvas/README.md) for
 the data model, migration flow, and production storage design.
 
+See [the product and canvas design direction](./docs/design-direction.md) and
+[release notes](./docs/releasing.md) for durable UI and deployment guidance.
+
 ## Check
 
 ```bash
