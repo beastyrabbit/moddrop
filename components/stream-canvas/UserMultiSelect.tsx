@@ -74,7 +74,8 @@ export function UserMultiSelect({
   const filteredResults =
     results?.filter((user) => !value.includes(user.userId)) ?? [];
   const hasSearch = search.trim().length > 0;
-  const showResults = open && hasSearch;
+  const searchFailed = open && hasSearch && results === null;
+  const showResults = open && hasSearch && !searchFailed;
   const activeOptionIndex = Math.min(
     activeIndex,
     Math.max(0, filteredResults.length - 1),
@@ -188,6 +189,22 @@ export function UserMultiSelect({
         </p>
       ) : null}
 
+      {searchFailed ? (
+        <div
+          role="alert"
+          className="absolute z-50 mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-border bg-popover px-3 text-sm text-muted-foreground shadow-xl"
+        >
+          User search failed.
+          <button
+            type="button"
+            onClick={retrySearch}
+            className="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-xs font-semibold text-foreground hover:bg-[var(--app-billiard-hover)]"
+          >
+            Retry
+          </button>
+        </div>
+      ) : null}
+
       {showResults ? (
         <div
           id={listboxId}
@@ -198,8 +215,6 @@ export function UserMultiSelect({
         >
           <UserSearchResults
             loading={results === undefined}
-            failed={results === null}
-            onRetry={retrySearch}
             results={filteredResults}
             search={search}
             listboxId={listboxId}
@@ -215,8 +230,6 @@ export function UserMultiSelect({
 
 function UserSearchResults({
   loading,
-  failed,
-  onRetry,
   results,
   search,
   listboxId,
@@ -225,8 +238,6 @@ function UserSearchResults({
   onSelect,
 }: Readonly<{
   loading: boolean;
-  failed: boolean;
-  onRetry: () => void;
   results: UserEntry[];
   search: string;
   listboxId: string;
@@ -245,25 +256,6 @@ function UserSearchResults({
       >
         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         Searching…
-      </div>
-    );
-  if (failed)
-    return (
-      <div
-        className="flex min-h-11 items-center justify-between gap-3 px-3 text-sm text-muted-foreground"
-        role="option"
-        aria-disabled="true"
-        aria-selected="false"
-        tabIndex={-1}
-      >
-        User search failed.
-        <button
-          type="button"
-          onClick={onRetry}
-          className="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-xs font-semibold text-foreground hover:bg-[var(--app-billiard-hover)]"
-        >
-          Retry
-        </button>
       </div>
     );
   if (results.length === 0)
