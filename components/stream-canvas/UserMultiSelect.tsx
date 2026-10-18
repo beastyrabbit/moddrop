@@ -32,7 +32,7 @@ export function UserMultiSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const results = useUserSearch(search);
+  const { results, retry: retrySearch } = useUserSearch(search);
   const resolved = useResolvedUsers(value);
 
   const selectedMap = new Map(
@@ -198,6 +198,8 @@ export function UserMultiSelect({
         >
           <UserSearchResults
             loading={results === undefined}
+            failed={results === null}
+            onRetry={retrySearch}
             results={filteredResults}
             search={search}
             listboxId={listboxId}
@@ -213,6 +215,8 @@ export function UserMultiSelect({
 
 function UserSearchResults({
   loading,
+  failed,
+  onRetry,
   results,
   search,
   listboxId,
@@ -221,6 +225,8 @@ function UserSearchResults({
   onSelect,
 }: Readonly<{
   loading: boolean;
+  failed: boolean;
+  onRetry: () => void;
   results: UserEntry[];
   search: string;
   listboxId: string;
@@ -239,6 +245,25 @@ function UserSearchResults({
       >
         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         Searching…
+      </div>
+    );
+  if (failed)
+    return (
+      <div
+        className="flex min-h-11 items-center justify-between gap-3 px-3 text-sm text-muted-foreground"
+        role="option"
+        aria-disabled="true"
+        aria-selected="false"
+        tabIndex={-1}
+      >
+        User search failed.
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-xs font-semibold text-foreground hover:bg-[var(--app-billiard-hover)]"
+        >
+          Retry
+        </button>
       </div>
     );
   if (results.length === 0)

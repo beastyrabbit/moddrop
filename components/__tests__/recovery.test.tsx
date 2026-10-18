@@ -25,7 +25,10 @@ vi.mock("@/lib/stream-canvas/use-users", () => {
     { userId: "user_ava", username: "Ava" },
     { userId: "user_ben", username: "Ben" },
   ];
-  return { useUserSearch: () => users, useResolvedUsers: () => users };
+  return {
+    useUserSearch: () => ({ results: users, retry: () => {} }),
+    useResolvedUsers: () => users,
+  };
 });
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("../stream-canvas/media-preferences", () => ({

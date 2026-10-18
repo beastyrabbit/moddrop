@@ -4,7 +4,7 @@ const users = [
 ];
 
 export function useUserSearch() {
-  return users;
+  return { results: users, retry() {} };
 }
 
 export function useResolvedUsers() {
