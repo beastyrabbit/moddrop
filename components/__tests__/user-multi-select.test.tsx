@@ -81,9 +81,9 @@ test("a failed search is distinguishable from no matches and can be retried", ()
     "User search failed.",
   );
   expect(screen.queryByRole("listbox")).toBeNull();
-  expect(screen.getByRole("combobox").getAttribute("aria-expanded")).toBe(
-    "false",
-  );
+  const combobox = screen.getByRole("combobox");
+  expect(combobox.getAttribute("aria-expanded")).toBe("false");
+  expect(combobox.hasAttribute("aria-controls")).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(state.retry).toHaveBeenCalledOnce();
 });

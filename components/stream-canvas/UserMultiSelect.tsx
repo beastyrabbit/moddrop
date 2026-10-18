@@ -134,7 +134,7 @@ export function UserMultiSelect({
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={showResults}
-            aria-controls={listboxId}
+            aria-controls={showResults ? listboxId : undefined}
             aria-activedescendant={
               showResults && filteredResults.length
                 ? `${listboxId}-${activeOptionIndex}`
