@@ -1,7 +1,6 @@
 .git
 .github
 .next
-.convex
 .playwright-mcp
 .vscode
 node_modules

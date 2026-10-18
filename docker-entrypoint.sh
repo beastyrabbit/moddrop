@@ -8,8 +8,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const replacements = [
-  ["https://placeholder.convex.cloud", process.env.NEXT_PUBLIC_CONVEX_URL],
-  ["https://placeholder.convex.site", process.env.NEXT_PUBLIC_CONVEX_SITE_URL],
   ["pk_placeholder_CLERK_KEY", process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY],
   [
     "__NEXT_PUBLIC_CANVAS_API_URL__",

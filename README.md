@@ -15,7 +15,7 @@ Moddrop gives a stream one live canvas inside OBS. The streamer owns the room, i
 
 ## Stack
 
-`Next.js` `React` `Clerk` `Convex` `tldraw` `Hono` `WebSocket` `PostgreSQL` `Drizzle` `Garage/S3` `pnpm`
+`Next.js` `React` `Clerk` `tldraw` `Hono` `WebSocket` `PostgreSQL` `Drizzle` `Garage/S3` `pnpm`
 
 ## Run
 
@@ -26,7 +26,7 @@ pnpm dev
 
 `pnpm dev` owns the whole local lifecycle: it starts PostgreSQL, waits for its
 health check, applies the Drizzle migrations, and then launches the Portless
-frontend and canvas routes plus Convex. Pressing Ctrl-C stops the applications
+frontend and canvas routes. Pressing Ctrl-C stops the applications
 and removes the Compose container and network; the named database volume is
 kept for the next run. Clerk Development instance credentials are loaded from
 the shared Infisical development project into both applications without being

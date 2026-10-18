@@ -32,16 +32,13 @@ vi.mock("@clerk/nextjs", () => ({
       },
     };
   },
-}));
-
-vi.mock("convex/react", () => ({
-  useConvexAuth: () => {
+  useAuth: () => {
     if (testState.failIfAuthIsRead) {
-      throw new Error("Canvas routes must not read Convex auth state");
+      throw new Error("Canvas routes must not read shell auth state");
     }
     return {
-      isAuthenticated: testState.isAuthenticated,
-      isLoading: testState.isLoading,
+      isSignedIn: testState.isAuthenticated,
+      isLoaded: !testState.isLoading,
     };
   },
 }));

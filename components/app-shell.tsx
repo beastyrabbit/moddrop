@@ -1,7 +1,6 @@
 "use client";
 
-import { useClerk, useUser } from "@clerk/nextjs";
-import { useConvexAuth } from "convex/react";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
 import { LogIn, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -34,7 +33,7 @@ function ThemedAppShell({
 }>) {
   const clerk = useClerk();
   const { user } = useUser();
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const displayName =
     user?.username ??
     user?.firstName ??
@@ -71,14 +70,15 @@ function ThemedAppShell({
           </nav>
 
           <div className="flex min-h-14 min-w-0 items-center justify-end gap-2 sm:min-h-16">
-            {isLoading ? (
+            {!isLoaded ? (
               <span
                 className="h-5 w-20 animate-pulse rounded bg-secondary"
                 role="status"
               >
                 <span className="sr-only">Loading account</span>
               </span>
-            ) : isAuthenticated ? (
+            ) : null}
+            {isLoaded && isSignedIn ? (
               <>
                 {displayName ? (
                   <span className="hidden max-w-44 truncate text-sm text-muted-foreground md:block">
@@ -94,7 +94,8 @@ function ThemedAppShell({
                   Sign out
                 </button>
               </>
-            ) : (
+            ) : null}
+            {isLoaded && !isSignedIn ? (
               <button
                 type="button"
                 onClick={() => clerk.openSignIn()}
@@ -103,7 +104,7 @@ function ThemedAppShell({
                 <LogIn className="size-4" aria-hidden="true" />
                 Log in
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </header>

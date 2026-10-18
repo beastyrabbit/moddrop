@@ -5,21 +5,22 @@ import { UserMultiSelect } from "@/components/stream-canvas/UserMultiSelect";
 
 type User = { userId: string; username: string };
 const state = vi.hoisted(() => ({
-  results: undefined as User[] | undefined,
+  results: undefined as User[] | null | undefined,
   resolved: undefined as User[] | undefined,
+  retry: vi.fn(),
 }));
-vi.mock("convex/react", () => ({
-  useQuery: (
-    _query: unknown,
-    args: "skip" | { prefix: string } | { userIds: string[] },
-  ) => {
-    if (args === "skip") return undefined;
-    return "prefix" in args ? state.results : state.resolved;
-  },
+vi.mock("@/lib/stream-canvas/use-users", () => ({
+  useUserSearch: (prefix: string) => ({
+    results: prefix.trim() ? state.results : undefined,
+    retry: state.retry,
+  }),
+  useResolvedUsers: (userIds: string[]) =>
+    userIds.length > 0 ? state.resolved : undefined,
 }));
 beforeEach(() => {
   state.results = undefined;
   state.resolved = undefined;
+  state.retry.mockReset();
 });
 afterEach(cleanup);
 
@@ -70,4 +71,19 @@ test("keyboard navigation wraps, clamps after results change, and Escape dismiss
   fireEvent.focus(input);
   fireEvent.keyDown(input, { key: "Enter" });
   expect(select).toHaveBeenCalledWith(["user_ava"]);
+});
+
+test("a failed search is distinguishable from no matches and can be retried", () => {
+  state.results = null;
+  render(<UserMultiSelect value={[]} onChange={vi.fn()} inputId="members" />);
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "ava" } });
+  expect(screen.getByRole("alert").textContent).toContain(
+    "User search failed.",
+  );
+  expect(screen.queryByRole("listbox")).toBeNull();
+  const combobox = screen.getByRole("combobox");
+  expect(combobox.getAttribute("aria-expanded")).toBe("false");
+  expect(combobox.hasAttribute("aria-controls")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(state.retry).toHaveBeenCalledOnce();
 });

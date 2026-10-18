@@ -45,7 +45,7 @@ try {
   await run("pnpm", ["--dir", "backend/stream-canvas", "run", "db:migrate"]);
   throwIfStopping();
 
-  console.log("[dev] Starting Moddrop, Convex, and the canvas backend...");
+  console.log("[dev] Starting Moddrop and the canvas backend...");
   devProcess = spawn("pnpm", ["run", "dev:apps"], {
     cwd: projectRoot,
     env: childEnvironment,

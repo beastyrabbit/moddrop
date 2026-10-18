@@ -1,21 +1,20 @@
 "use client";
 
-import { useConvexAuth, useMutation } from "convex/react";
+import { useAuth } from "@clerk/nextjs";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { api } from "@/convex/_generated/api";
+import { syncCurrentUser } from "@/lib/stream-canvas/api";
 
 export function UserRecordBootstrap() {
-  const { isAuthenticated } = useConvexAuth();
-  const getOrCreateUser = useMutation(api.users.getOrCreateUser);
+  const { getToken, isSignedIn } = useAuth();
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isSignedIn) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
     const sync = async () => {
       try {
-        await getOrCreateUser();
+        await syncCurrentUser(getToken);
       } catch (error) {
         if (cancelled) return;
         if (++attempts < 3) {
@@ -41,7 +40,7 @@ export function UserRecordBootstrap() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [getOrCreateUser, isAuthenticated]);
+  }, [getToken, isSignedIn]);
 
   return null;
 }

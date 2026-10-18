@@ -17,10 +17,6 @@ on:
         description: "Build stream-canvas image"
         type: boolean
         default: true
-      deploy_convex:
-        description: "Deploy Convex backend (main branch only)"
-        type: boolean
-        default: false
 
 enable-openid-connect: true
 
@@ -75,7 +71,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
-      convex: ${{ steps.filter.outputs.convex }}
       stream_canvas: ${{ steps.filter.outputs.stream_canvas }}
     steps:
       - uses: actions/checkout@v7
@@ -96,100 +91,6 @@ jobs:
           fi
 
           git diff --name-only "$base" "$head" | bash scripts/delivery-changes.sh >> "$GITHUB_OUTPUT"
-
-  tag-convex-changes:
-    runs-on: personal
-    if: startsWith(github.ref, 'refs/tags/v')
-    outputs:
-      convex: ${{ steps.diff.outputs.convex }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: diff
-        env:
-          CURRENT_TAG: ${{ github.ref_name }}
-          CURRENT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          bash scripts/delivery-changes.sh tag >> "$GITHUB_OUTPUT"
-
-  deploy-convex:
-    needs: [verify, changes, tag-convex-changes]
-    if: |
-      always() && needs.verify.result == 'success' && github.event_name != 'pull_request' &&
-      ((github.ref == 'refs/heads/main' && needs.changes.outputs.convex == 'true') ||
-       (startsWith(github.ref, 'refs/tags/v') && needs.tag-convex-changes.outputs.convex == 'true') ||
-       (github.ref == 'refs/heads/main' && github.event.inputs.deploy_convex == 'true'))
-    runs-on: personal
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.5.0
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Fetch Convex deploy secrets from Infisical
-        id: ci-secrets
-        env:
-          REQUIRED_KEYS: CONVEX_DEPLOY_KEY CONVEX_DEPLOYMENT CLERK_JWT_ISSUER_DOMAIN
-        run: |
-          set -euo pipefail
-          : "${INFISICAL_API_URL:?Missing INFISICAL_API_URL Forgejo variable}"
-          : "${INFISICAL_PROJECT_ID:?Missing INFISICAL_PROJECT_ID Forgejo variable}"
-          : "${INFISICAL_ENV:?Missing INFISICAL_ENV Forgejo variable}"
-          : "${INFISICAL_MACHINE_IDENTITY_ID:?Missing INFISICAL_MACHINE_IDENTITY_ID Forgejo variable}"
-          : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?Missing Forgejo OIDC request token}"
-          : "${ACTIONS_ID_TOKEN_REQUEST_URL:?Missing Forgejo OIDC request URL}"
-
-          export npm_config_prefix="$RUNNER_TEMP/npm-global"
-          mkdir -p "$npm_config_prefix"
-          npm install --global @infisical/cli@0.43.113
-          export PATH="$npm_config_prefix/bin:$PATH"
-
-          oidc_response="$(curl -fsS \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://git.heerlab.com/beasty")"
-          forgejo_jwt="$(node -e 'const fs = require("fs"); const body = JSON.parse(fs.readFileSync(0, "utf8")); process.stdout.write(body.value || "");' <<< "$oidc_response")"
-          : "${forgejo_jwt:?Forgejo OIDC response did not include a token}"
-
-          infisical_token="$(infisical login \
-            --method oidc-auth \
-            --machine-identity-id "$INFISICAL_MACHINE_IDENTITY_ID" \
-            --jwt "$forgejo_jwt" \
-            --domain "$INFISICAL_API_URL" \
-            --plain \
-            --silent)"
-          : "${infisical_token:?Infisical OIDC login returned an empty token}"
-          echo "::add-mask::$infisical_token"
-
-          for key in $REQUIRED_KEYS; do
-            value="$(infisical secrets get "$key" \
-              --domain "$INFISICAL_API_URL" \
-              --token "$infisical_token" \
-              --projectId "$INFISICAL_PROJECT_ID" \
-              --env "$INFISICAL_ENV" \
-              --path /ci \
-              --plain \
-              --silent)"
-            : "${value:?Missing $key in Infisical prod /ci}"
-            echo "::add-mask::$value"
-            {
-              echo "$key<<EOF"
-              printf '%s\n' "$value"
-              echo "EOF"
-            } >> "$GITHUB_OUTPUT"
-          done
-
-      - run: pnpm exec convex deploy
-        env:
-          CONVEX_DEPLOY_KEY: ${{ steps.ci-secrets.outputs.CONVEX_DEPLOY_KEY }}
-          CONVEX_DEPLOYMENT: ${{ steps.ci-secrets.outputs.CONVEX_DEPLOYMENT }}
-          CLERK_JWT_ISSUER_DOMAIN: ${{ steps.ci-secrets.outputs.CLERK_JWT_ISSUER_DOMAIN }}
 
   build-frontend:
     needs: [verify, changes]
@@ -230,7 +131,7 @@ jobs:
       - name: Fetch frontend CI secrets from Infisical
         id: ci-secrets
         env:
-          REQUIRED_KEYS: CONVEX_DEPLOYMENT NEXT_PUBLIC_TLDRAW_LICENSE_KEY
+          REQUIRED_KEYS: NEXT_PUBLIC_TLDRAW_LICENSE_KEY
         run: |
           set -euo pipefail
           : "${INFISICAL_API_URL:?Missing INFISICAL_API_URL Forgejo variable}"
@@ -286,7 +187,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
-            CONVEX_DEPLOYMENT=${{ steps.ci-secrets.outputs.CONVEX_DEPLOYMENT }}
             NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${{ steps.ci-secrets.outputs.NEXT_PUBLIC_TLDRAW_LICENSE_KEY }}
 
   build-stream-canvas:

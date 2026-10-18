@@ -12,6 +12,13 @@ export interface CanvasRoom {
   obsSetupSecret?: string;
 }
 
+/** Public directory entry for a Clerk user. */
+export interface PublicUser {
+  userId: string;
+  username: string;
+  showProfilePic: boolean;
+}
+
 /** Room with ownership info, returned by the accessible rooms endpoint. */
 export interface AccessibleRoom {
   id: string;

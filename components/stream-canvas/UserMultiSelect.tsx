@@ -1,9 +1,8 @@
 "use client";
 
-import { useQuery } from "convex/react";
 import { Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { api } from "@/convex/_generated/api";
+import { useResolvedUsers, useUserSearch } from "@/lib/stream-canvas/use-users";
 import { cn } from "@/lib/utils";
 
 interface UserEntry {
@@ -33,15 +32,8 @@ export function UserMultiSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const results = useQuery(
-    api.users.searchByUsername,
-    search.trim().length > 0 ? { prefix: search.trim() } : "skip",
-  );
-
-  const resolved = useQuery(
-    api.users.resolveUsernames,
-    value.length > 0 ? { userIds: value } : "skip",
-  );
+  const { results, retry: retrySearch } = useUserSearch(search);
+  const resolved = useResolvedUsers(value);
 
   const selectedMap = new Map(
     resolved?.map((user) => [user.userId, user.username]),
@@ -82,7 +74,8 @@ export function UserMultiSelect({
   const filteredResults =
     results?.filter((user) => !value.includes(user.userId)) ?? [];
   const hasSearch = search.trim().length > 0;
-  const showResults = open && hasSearch;
+  const searchFailed = open && hasSearch && results === null;
+  const showResults = open && hasSearch && !searchFailed;
   const activeOptionIndex = Math.min(
     activeIndex,
     Math.max(0, filteredResults.length - 1),
@@ -141,7 +134,7 @@ export function UserMultiSelect({
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={showResults}
-            aria-controls={listboxId}
+            aria-controls={showResults ? listboxId : undefined}
             aria-activedescendant={
               showResults && filteredResults.length
                 ? `${listboxId}-${activeOptionIndex}`
@@ -194,6 +187,22 @@ export function UserMultiSelect({
         <p className="mt-2 text-xs text-muted-foreground">
           No collaborators added.
         </p>
+      ) : null}
+
+      {searchFailed ? (
+        <div
+          role="alert"
+          className="absolute z-50 mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-border bg-popover px-3 text-sm text-muted-foreground shadow-xl"
+        >
+          <span>User search failed.</span>
+          <button
+            type="button"
+            onClick={retrySearch}
+            className="inline-flex min-h-9 items-center rounded-md border border-border px-3 text-xs font-semibold text-foreground hover:bg-[var(--app-billiard-hover)]"
+          >
+            Retry
+          </button>
+        </div>
       ) : null}
 
       {showResults ? (

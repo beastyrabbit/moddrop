@@ -119,7 +119,10 @@ try {
     resolve: {
       alias: [
         { find: "@clerk/nextjs", replacement: join(root, "e2e/clerk.tsx") },
-        { find: "convex/react", replacement: join(root, "e2e/convex.ts") },
+        {
+          find: "@/lib/stream-canvas/use-users",
+          replacement: join(root, "e2e/users.ts"),
+        },
         { find: "@", replacement: root },
       ],
       dedupe: ["react", "react-dom"],
