@@ -39,6 +39,12 @@ interface UploadAccessResponse {
   url: string;
 }
 
+interface PublicUserResponse {
+  userId: string;
+  username: string;
+  showProfilePic: boolean;
+}
+
 const tempRoot = await mkdtemp(join(tmpdir(), "stream-canvas-routes-"));
 const { publicKey, privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -95,22 +101,32 @@ for (const statement of [
     object_key text NOT NULL UNIQUE,
     created_at timestamptz NOT NULL DEFAULT now()
   )`,
+  `CREATE TABLE users (
+    clerk_user_id text PRIMARY KEY,
+    username text NOT NULL,
+    username_search text NOT NULL UNIQUE,
+    show_profile_pic boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`,
 ]) {
   await pool.query(statement);
 }
 
 const [
   { api },
-  { rooms, roomMembers, uploads },
+  { rooms, roomMembers, uploads, users },
   { generateObsSecret, hashObsSecret, isHashedObsSecret, verifyObsSecret },
   { mintCanvasWsToken, mintUploadAccessToken },
   { authenticateWebSocketUpgrade },
+  { clerkProfiles },
 ] = await Promise.all([
   import("./routes.ts"),
   import("./schema.ts"),
   import("./obs-secret.ts"),
   import("./auth.ts"),
   import("./ws-handler.ts"),
+  import("./users.ts"),
 ]);
 
 const roomId = uuidv4();
@@ -558,6 +574,104 @@ test("uploads use sniffed MIME type and sanitized filenames", async () => {
     },
   );
   assert.equal(crossRoomObsAccess.status, 404);
+});
+
+test("user directory creates profiles once and keeps usernames unique by case", async (t) => {
+  const profiles = new Map([
+    ["user_dirAda", { username: "Ada", fullName: "Ada Lovelace" }],
+    ["user_dirAdaTwo", { username: "ada", fullName: null }],
+    ["user_dirEmpty", { username: null, fullName: "_-!!-_" }],
+  ]);
+  const load = t.mock.method(clerkProfiles, "load", async (userId: string) => {
+    const profile = profiles.get(userId);
+    if (!profile) throw new Error(`unexpected profile lookup for ${userId}`);
+    return profile;
+  });
+  const syncProfile = async (userId: string) => {
+    const response = await api.request("/api/users/me", {
+      method: "POST",
+      headers: authHeaders(userId),
+    });
+    assert.equal(response.status, 200);
+    return (await response.json()) as PublicUserResponse;
+  };
+
+  assert.equal(
+    (await api.request("/api/users/me", { method: "POST" })).status,
+    401,
+  );
+
+  const ada = await syncProfile("user_dirAda");
+  assert.deepEqual(ada, {
+    userId: "user_dirAda",
+    username: "Ada",
+    showProfilePic: true,
+  });
+  assert.deepEqual(await syncProfile("user_dirAda"), ada);
+  assert.equal(load.mock.callCount(), 1);
+
+  const second = await syncProfile("user_dirAdaTwo");
+  assert.match(second.username, /^ada-[0-9a-f]{4}$/);
+
+  const generated = await syncProfile("user_dirEmpty");
+  assert.match(generated.username, /^user-[0-9a-f]{8}$/);
+
+  const stored = await db
+    .select()
+    .from(users)
+    .where(eq(users.clerkUserId, "user_dirAda"));
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0]?.usernameSearch, "ada");
+});
+
+test("user directory search and resolution stay bounded and public", async () => {
+  await db.insert(users).values(
+    Array.from({ length: 15 }, (_, index) => ({
+      clerkUserId: `user_member${index}`,
+      username: `Member${index}`,
+      usernameSearch: `member${index}`,
+    })),
+  );
+  // LIKE wildcard escaping is covered against real PostgreSQL in users.test.ts.
+  const search = async (prefix: string) => {
+    const response = await api.request(
+      `/api/users/search?prefix=${encodeURIComponent(prefix)}`,
+      { headers: authHeaders(collaboratorUserId) },
+    );
+    assert.equal(response.status, 200);
+    return (await response.json()) as PublicUserResponse[];
+  };
+
+  assert.equal(
+    (await api.request("/api/users/search?prefix=member")).status,
+    401,
+  );
+  const members = await search(" MEMBER ");
+  assert.equal(members.length, 10);
+  assert.deepEqual(Object.keys(members[0] ?? {}).sort(), [
+    "showProfilePic",
+    "userId",
+    "username",
+  ]);
+  assert.deepEqual(await search("   "), []);
+
+  const query = [
+    "user_member1",
+    "user_unknown",
+    ...Array.from({ length: 60 }, (_, index) => `user_extra${index}`),
+  ]
+    .map((userId) => `userId=${encodeURIComponent(userId)}`)
+    .join("&");
+  const resolved = await api.request(`/api/users/resolve?${query}`, {
+    headers: authHeaders(collaboratorUserId),
+  });
+  assert.equal(resolved.status, 200);
+  const resolvedBody = (await resolved.json()) as PublicUserResponse[];
+  assert.equal(resolvedBody.length, 50);
+  assert.deepEqual(resolvedBody.slice(0, 2), [
+    { userId: "user_member1", username: "Member1", showProfilePic: true },
+    { userId: "user_unknown", username: "user_unknown", showProfilePic: true },
+  ]);
 });
 
 function authHeaders(userId: string) {

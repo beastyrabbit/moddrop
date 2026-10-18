@@ -8,6 +8,13 @@
       "when": 1784736110322,
       "tag": "0000_init-postgres",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792341546196,
+      "tag": "0001_users",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import {
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -16,6 +17,30 @@ export const youtubePolicy = pgEnum("youtube_policy", [
   "preview_only",
   "allow_on_air",
 ]);
+
+/** Public profile for a Clerk user, used for collaborator search and display. */
+export const users = pgTable(
+  "users",
+  {
+    clerkUserId: text("clerk_user_id").primaryKey(),
+    username: text("username").notNull(),
+    /** Lowercased username; unique so names cannot collide by case. */
+    usernameSearch: text("username_search").notNull().unique(),
+    showProfilePic: boolean("show_profile_pic").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Pattern ops let `LIKE 'prefix%'` use the index under any collation.
+    index("users_username_search_prefix_idx").on(
+      table.usernameSearch.op("text_pattern_ops"),
+    ),
+  ],
+);
 
 /** One room per streamer. Clerk remains the identity authority. */
 export const rooms = pgTable(

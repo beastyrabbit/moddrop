@@ -12,14 +12,21 @@ import { UserMultiSelect } from "../stream-canvas/UserMultiSelect";
 import { TwitchPreview } from "../stream-canvas/TwitchPreview";
 
 const state = vi.hoisted(() => ({ bootstrap: vi.fn(), authenticated: true }));
-vi.mock("convex/react", () => ({
-  useConvexAuth: () => ({ isAuthenticated: state.authenticated }),
-  useMutation: () => state.bootstrap,
-  useQuery: () => [
+const getToken = vi.hoisted(() => async () => "test-token");
+vi.mock("@clerk/nextjs", () => ({
+  useAuth: () => ({ getToken, isSignedIn: state.authenticated }),
+}));
+vi.mock("@/lib/stream-canvas/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/stream-canvas/api")>()),
+  syncCurrentUser: () => state.bootstrap(),
+}));
+vi.mock("@/lib/stream-canvas/use-users", () => {
+  const users = [
     { userId: "user_ava", username: "Ava" },
     { userId: "user_ben", username: "Ben" },
-  ],
-}));
+  ];
+  return { useUserSearch: () => users, useResolvedUsers: () => users };
+});
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("../stream-canvas/media-preferences", () => ({
   useMediaPreference: () => ({ enabled: false, volume: 1 }),

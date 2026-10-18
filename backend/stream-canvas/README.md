@@ -1,12 +1,16 @@
 # Stream canvas backend
 
-The stream canvas backend is the authoritative home for rooms, collaboration,
-canvas snapshots, OBS access, and uploaded asset metadata. Convex remains the
-app-facing scaffold; these real-time records live in PostgreSQL because every
-backend replica must see the same state.
+The stream canvas backend is the application's only backend. It owns the user
+directory, rooms, collaboration, canvas snapshots, OBS access, and uploaded
+asset metadata. All records live in PostgreSQL, so every backend replica sees
+the same state.
 
 ## Data model
 
+- `users` is the public user directory: one row per Clerk user with a unique,
+  case-insensitive username. The frontend creates the row on sign-in through
+  `POST /api/users/me`, which reads the initial name from the Clerk Backend API
+  (`CLERK_SECRET_KEY`); the collaborator picker searches it by prefix.
 - `rooms` stores one room per Clerk owner, its Twitch channel, owner-selected
   YouTube policy, and a one-way hash of the OBS bootstrap secret.
 - `room_members` stores invited Clerk users as normalized rows. Membership is
@@ -112,7 +116,7 @@ deleted by this change.
 GitHub verification runs on the homelab `arc-moddrop` Docker-backed runner.
 The pinned Node Bookworm container runs as root so Playwright can install browser
 dependencies; PostgreSQL is an isolated service container. Release tags run this
-same gate before deploying Convex and publishing both images to GHCR. Manual
+same gate before publishing both images to GHCR. Manual
 publication is restricted to `main`. The Forgejo workflow is retained as a legacy
 copy; its `personal` runner pool was retired on 2026-08-31.
 

@@ -57,7 +57,6 @@
       "!test-results",
       "!playwright-report",
       "!node_modules",
-      "!convex/_generated",
       "!backend/stream-canvas/data",
       "!public/img/brands/*.svg",
       "!**/*.css"

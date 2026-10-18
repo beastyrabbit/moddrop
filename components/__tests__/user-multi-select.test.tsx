@@ -8,14 +8,11 @@ const state = vi.hoisted(() => ({
   results: undefined as User[] | undefined,
   resolved: undefined as User[] | undefined,
 }));
-vi.mock("convex/react", () => ({
-  useQuery: (
-    _query: unknown,
-    args: "skip" | { prefix: string } | { userIds: string[] },
-  ) => {
-    if (args === "skip") return undefined;
-    return "prefix" in args ? state.results : state.resolved;
-  },
+vi.mock("@/lib/stream-canvas/use-users", () => ({
+  useUserSearch: (prefix: string) =>
+    prefix.trim() ? state.results : undefined,
+  useResolvedUsers: (userIds: string[]) =>
+    userIds.length > 0 ? state.resolved : undefined,
 }));
 beforeEach(() => {
   state.results = undefined;

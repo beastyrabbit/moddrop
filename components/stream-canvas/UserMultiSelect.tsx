@@ -1,9 +1,8 @@
 "use client";
 
-import { useQuery } from "convex/react";
 import { Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { api } from "@/convex/_generated/api";
+import { useResolvedUsers, useUserSearch } from "@/lib/stream-canvas/use-users";
 import { cn } from "@/lib/utils";
 
 interface UserEntry {
@@ -33,15 +32,8 @@ export function UserMultiSelect({
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const results = useQuery(
-    api.users.searchByUsername,
-    search.trim().length > 0 ? { prefix: search.trim() } : "skip",
-  );
-
-  const resolved = useQuery(
-    api.users.resolveUsernames,
-    value.length > 0 ? { userIds: value } : "skip",
-  );
+  const results = useUserSearch(search);
+  const resolved = useResolvedUsers(value);
 
   const selectedMap = new Map(
     resolved?.map((user) => [user.userId, user.username]),

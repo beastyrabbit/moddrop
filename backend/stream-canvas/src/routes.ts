@@ -36,6 +36,7 @@ import {
   sniffUploadMime,
   validateUploadedMedia,
 } from "./upload-validation.ts";
+import { getOrCreateUser, resolveUsers, searchUsers } from "./users.ts";
 import { revokeObsSessions, roomConfigChanged } from "./ws-handler.ts";
 
 // ---------------------------------------------------------------------------
@@ -239,6 +240,21 @@ api.post("/obs/uploads/:uploadId/access-url", async (c) => {
 });
 
 // --- Authenticated routes ---------------------------------------------------
+
+// Create or fetch the caller's directory entry so collaborators can find them
+authed.post("/users/me", async (c) => {
+  return c.json(await getOrCreateUser(c.get("clerkUser").sub));
+});
+
+// Username prefix search for the collaborator picker
+authed.get("/users/search", async (c) => {
+  return c.json(await searchUsers(c.req.query("prefix") ?? ""));
+});
+
+// Resolve Clerk user IDs (`?userId=a&userId=b`) to display names
+authed.get("/users/resolve", async (c) => {
+  return c.json(await resolveUsers(c.req.queries("userId") ?? []));
+});
 
 // Create a room
 authed.post("/rooms", async (c) => {

@@ -1,4 +1,9 @@
-import type { AccessibleRoom, CanvasRoom, YouTubePolicy } from "./types";
+import type {
+  AccessibleRoom,
+  CanvasRoom,
+  PublicUser,
+  YouTubePolicy,
+} from "./types";
 
 /** Canvas backend base URL. Use `/canvas-api` in production (same-origin, no CORS). */
 const configuredCanvasApi = normalizeConfiguredCanvasApi(
@@ -86,6 +91,35 @@ async function fetchApi(
     throw new Error(await parseApiError(res));
   }
   return res.json();
+}
+
+/** Create or fetch the signed-in user's directory entry. */
+export function syncCurrentUser(
+  getToken: ClerkTokenGetter,
+): Promise<PublicUser> {
+  return fetchApi("/api/users/me", getToken, { method: "POST" });
+}
+
+/** Search the user directory by username prefix. */
+export function searchUsers(
+  prefix: string,
+  getToken: ClerkTokenGetter,
+): Promise<PublicUser[]> {
+  return fetchApi(
+    `/api/users/search?${new URLSearchParams({ prefix })}`,
+    getToken,
+  );
+}
+
+/** Resolve Clerk user IDs to directory entries, in input order. */
+export function resolveUsers(
+  userIds: readonly string[],
+  getToken: ClerkTokenGetter,
+): Promise<PublicUser[]> {
+  const query = new URLSearchParams(
+    userIds.map((userId) => ["userId", userId]),
+  );
+  return fetchApi(`/api/users/resolve?${query}`, getToken);
 }
 
 /** Create or get the current user's room. */
