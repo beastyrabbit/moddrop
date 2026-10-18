@@ -77,7 +77,8 @@ function ThemedAppShell({
               >
                 <span className="sr-only">Loading account</span>
               </span>
-            ) : isSignedIn ? (
+            ) : null}
+            {isLoaded && isSignedIn ? (
               <>
                 {displayName ? (
                   <span className="hidden max-w-44 truncate text-sm text-muted-foreground md:block">
@@ -93,7 +94,8 @@ function ThemedAppShell({
                   Sign out
                 </button>
               </>
-            ) : (
+            ) : null}
+            {isLoaded && !isSignedIn ? (
               <button
                 type="button"
                 onClick={() => clerk.openSignIn()}
@@ -102,7 +104,7 @@ function ThemedAppShell({
                 <LogIn className="size-4" aria-hidden="true" />
                 Log in
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </header>

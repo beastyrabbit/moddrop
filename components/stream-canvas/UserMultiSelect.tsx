@@ -194,7 +194,7 @@ export function UserMultiSelect({
           role="alert"
           className="absolute z-50 mt-2 flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-border bg-popover px-3 text-sm text-muted-foreground shadow-xl"
         >
-          User search failed.
+          <span>User search failed.</span>
           <button
             type="button"
             onClick={retrySearch}
