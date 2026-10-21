@@ -51,6 +51,7 @@
   "files": {
     "includes": [
       "**",
+      "!.claude",
       "!.next",
       "!build",
       "!**/dist",
