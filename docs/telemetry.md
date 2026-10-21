@@ -125,6 +125,7 @@ WebSocket failures and console errors are covered. Dev/start and Docker use Node
 `--import` preload so instrumentation is registered before application modules load.
 Shutdown flushes for two seconds.
 Next's `instrumentation.ts` registers Node reporting and `onRequestError`.
+The Next.js server and backend also send sampled performance transactions to GlitchTip for about 5 % of requests by default (`GLITCHTIP_TRACES_SAMPLE_RATE=0.05`), containing routes with identifiers removed, timings and technical descriptions of internal database and network calls, scrubbed by the same `scrubTelemetry` function and retained for 90 days under Art. 6(1)(f) GDPR to diagnose failures and keep the service fast and reliable; the browser SDK sends no performance transactions.
 
 Every SDK sets environment, release, `sendDefaultPii: false`, and shared pure
 `beforeSend`, `beforeSendTransaction` and `beforeBreadcrumb` scrubbers. User objects,
