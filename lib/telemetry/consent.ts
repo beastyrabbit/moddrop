@@ -37,7 +37,21 @@ export function showCookieSettings() {
   CookieConsent.showPreferences();
 }
 
-export async function startConsent(onAnalytics: (accepted: boolean) => void) {
+export async function startConsent(
+  onAnalytics: (accepted: boolean) => void,
+  signal?: AbortSignal,
+) {
+  let stopped = false;
+  const notify = () => {
+    if (!stopped && !signal?.aborted)
+      onAnalytics(CookieConsent.acceptedCategory("analytics"));
+  };
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    setConsentRunning(false);
+    CookieConsent.reset(false);
+  };
   await CookieConsent.run({
     cookie: {
       name: CONSENT_COOKIE,
@@ -57,8 +71,8 @@ export async function startConsent(onAnalytics: (accepted: boolean) => void) {
       preferencesModal: { layout: "box", equalWeightButtons: true },
     },
     categories: { necessary: { enabled: true, readOnly: true }, analytics: {} },
-    onConsent: () => onAnalytics(CookieConsent.acceptedCategory("analytics")),
-    onChange: () => onAnalytics(CookieConsent.acceptedCategory("analytics")),
+    onConsent: notify,
+    onChange: notify,
     language: {
       default: consentLanguage(),
       translations: {
@@ -127,10 +141,10 @@ export async function startConsent(onAnalytics: (accepted: boolean) => void) {
       },
     },
   });
-  setConsentRunning(true);
-  onAnalytics(CookieConsent.acceptedCategory("analytics"));
-  return () => {
-    setConsentRunning(false);
-    CookieConsent.reset(false);
-  };
+  if (signal?.aborted) stop();
+  else {
+    setConsentRunning(true);
+    notify();
+  }
+  return stop;
 }

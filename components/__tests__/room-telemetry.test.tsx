@@ -6,7 +6,11 @@ import ErrorPage from "@/app/error";
 import GlobalError from "@/app/global-error";
 import OBSError from "@/app/obs/error";
 import { getAccessibleRooms } from "@/lib/stream-canvas/api";
-import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
+import {
+  ReportedError,
+  reportBoundaryError,
+  reportError,
+} from "@/lib/telemetry/browser-errors";
 import { track } from "@/lib/telemetry/events";
 
 const mocks = vi.hoisted(() => ({
@@ -31,6 +35,7 @@ vi.mock("@/components/legal/legal-footer", () => ({ LegalFooter: () => null }));
 vi.mock("@/lib/telemetry/browser-errors", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/telemetry/browser-errors")>()),
   reportError: vi.fn(),
+  reportBoundaryError: vi.fn(),
   startErrorReporting: vi.fn(),
 }));
 vi.mock("@/lib/telemetry/events", () => ({ track: vi.fn() }));
@@ -124,7 +129,7 @@ test.each([
   ["global boundary", GlobalError],
   ["OBS boundary", OBSError],
 ] as const)(
-  "%s skips API errors already reported and still reports new errors",
+  "%s delegates API, client and server errors to the shared boundary reporter",
   async (_label, Boundary) => {
     mocks.fetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     const error = await getAccessibleRooms(mocks.getToken).catch(
@@ -139,10 +144,18 @@ test.each([
       container,
     });
     expect(reportError).toHaveBeenCalledTimes(1);
+    expect(reportBoundaryError).toHaveBeenCalledExactlyOnceWith(error);
     expect(track).toHaveBeenCalledTimes(1);
     const unexpected = new Error("Unexpected rendering failure");
     rerender(<Boundary error={unexpected} reset={() => {}} />);
-    expect(reportError).toHaveBeenCalledTimes(2);
-    expect(reportError).toHaveBeenLastCalledWith(unexpected);
+    expect(reportBoundaryError).toHaveBeenCalledTimes(2);
+    expect(reportBoundaryError).toHaveBeenLastCalledWith(unexpected);
+    const serverError = Object.assign(new Error("Server rendering failure"), {
+      digest: "fixture",
+    });
+    rerender(<Boundary error={serverError} reset={() => {}} />);
+    expect(reportBoundaryError).toHaveBeenCalledTimes(3);
+    expect(reportBoundaryError).toHaveBeenLastCalledWith(serverError);
+    expect(reportError).toHaveBeenCalledTimes(1);
   },
 );

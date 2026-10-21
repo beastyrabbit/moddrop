@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { getEditorWsToken, uploadFile } from "@/lib/stream-canvas/api";
 import {
   ReportedError,
+  reportBoundaryError,
   reportError,
   startErrorReporting,
 } from "../browser-errors";
@@ -49,6 +50,27 @@ afterEach(async () => {
 afterAll(async () => {
   stopReporting();
   await Sentry.close();
+});
+
+it("does not report server render errors with a Next.js digest from a client boundary", async () => {
+  reportBoundaryError(
+    Object.assign(new Error("Server render failed"), { digest: "fixture" }),
+  );
+  await Sentry.flush(2_000);
+  expect(telemetry.events).toHaveLength(0);
+});
+
+it("reports a client boundary error without a digest once", async () => {
+  reportBoundaryError(new Error("Client render failed"));
+  await Sentry.flush(2_000);
+  expect(telemetry.events).toHaveLength(1);
+  expect(JSON.stringify(telemetry.events)).toContain("Client render failed");
+});
+
+it("does not report an already reported error from a client boundary", async () => {
+  reportBoundaryError(new ReportedError("Already reported"));
+  await Sentry.flush(2_000);
+  expect(telemetry.events).toHaveLength(0);
 });
 
 it.each(["upload", "api"] as const)(

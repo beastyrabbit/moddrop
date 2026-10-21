@@ -201,6 +201,47 @@ describe("privacy scrubber", () => {
   });
 });
 describe("consent and analytics", () => {
+  it("cannot restart analytics when consent arrives after disposal", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("{}"));
+    vi.stubGlobal("fetch", fetch);
+    const analytics = createAnalytics(config, vi.fn());
+    const ready = Promise.withResolvers<boolean>();
+    const starting = ready.promise.then(analytics.setConsent);
+    analytics.dispose();
+    const restoredFetch = window.fetch;
+    const tracker = vi.fn();
+    window.umami = { track: tracker };
+    ready.resolve(true);
+    await starting;
+    analytics.pageview();
+    track("room_created", {});
+    expect(document.querySelectorAll("script")).toHaveLength(0);
+    expect(window.fetch).toBe(restoredFetch);
+    expect(tracker).not.toHaveBeenCalled();
+    await window.fetch("/unrelated");
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/unrelated");
+  });
+  it("ignores late script loads and keeps the fetch guard after loaded analytics are disposed", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const analytics = createAnalytics(config, vi.fn());
+    analytics.setConsent(true);
+    const script = document.querySelector("script");
+    expect(script).not.toBeNull();
+    const guardedFetch = window.fetch;
+    analytics.dispose();
+    const tracker = vi.fn();
+    window.umami = { track: tracker };
+    analytics.setConsent(true);
+    script?.dispatchEvent(new Event("load"));
+    analytics.pageview();
+    track("room_created", {});
+    expect(document.querySelectorAll("script")).toHaveLength(0);
+    expect(window.fetch).toBe(guardedFetch);
+    expect(tracker).not.toHaveBeenCalled();
+    await window.fetch(`${config.host}/api/record`, { body: "private" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("blocks late flushes on generic unmount without reloading, and reloads only on overlay entry", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);

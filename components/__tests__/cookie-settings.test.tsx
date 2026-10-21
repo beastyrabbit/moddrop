@@ -18,9 +18,12 @@ import {
 import { CookieSettings } from "../cookie-settings";
 
 const mocks = vi.hoisted(() => ({
-  run: vi.fn<() => Promise<void>>(),
+  run: vi.fn<
+    (options: { onConsent: () => void; onChange: () => void }) => Promise<void>
+  >(),
   reset: vi.fn(),
   showPreferences: vi.fn(),
+  acceptedCategory: vi.fn(() => false),
   pathname: "/privacy",
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
@@ -28,7 +31,7 @@ vi.mock("vanilla-cookieconsent", () => ({
   run: mocks.run,
   reset: mocks.reset,
   showPreferences: mocks.showPreferences,
-  acceptedCategory: () => false,
+  acceptedCategory: mocks.acceptedCategory,
 }));
 let stop: (() => void) | undefined;
 afterEach(() => {
@@ -36,6 +39,7 @@ afterEach(() => {
   stop = undefined;
   cleanup();
   vi.clearAllMocks();
+  mocks.acceptedCategory.mockReturnValue(false);
   mocks.pathname = "/privacy";
   window.history.replaceState(null, "", "/");
   document.documentElement.lang = "";
@@ -112,4 +116,36 @@ it("omits dead settings from the global-error fallback and uses a false SSR snap
   stop = await startConsent(vi.fn());
   expect(isConsentRunning()).toBe(true);
   expect(fallback()).not.toContain("Cookie settings");
+});
+
+it("ignores previously accepted consent when startup finishes after abort", async () => {
+  mocks.acceptedCategory.mockReturnValue(true);
+  const ready = Promise.withResolvers<void>();
+  mocks.run.mockReturnValue(ready.promise);
+  const abort = new AbortController();
+  const notify = vi.fn();
+  const starting = startConsent(notify, abort.signal);
+  abort.abort();
+  const options = mocks.run.mock.calls[0][0];
+  options.onConsent();
+  ready.resolve();
+  stop = await starting;
+  options.onChange();
+  expect(notify).not.toHaveBeenCalled();
+  expect(isConsentRunning()).toBe(false);
+  expect(mocks.reset).toHaveBeenCalledExactlyOnceWith(false);
+});
+
+it("forwards consent while running and ignores callbacks after teardown", async () => {
+  mocks.run.mockResolvedValue(undefined);
+  const notify = vi.fn();
+  stop = await startConsent(notify);
+  const options = mocks.run.mock.calls[0][0];
+  options.onConsent();
+  options.onChange();
+  expect(notify).toHaveBeenCalledTimes(3);
+  stop();
+  options.onConsent();
+  options.onChange();
+  expect(notify).toHaveBeenCalledTimes(3);
 });

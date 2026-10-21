@@ -124,10 +124,12 @@ export function createAnalytics(
   reload = () => window.location.reload(),
 ) {
   let consent = false;
+  let disposed = false;
   let loaded = false;
   let route = "";
   const originalFetch = window.fetch.bind(window);
   const allowed = () =>
+    !disposed &&
     analyticsAllowed(config, consent, window.location, navigator.userAgent);
   const scripts: HTMLScriptElement[] = [];
   const payload = () => ({
@@ -146,6 +148,7 @@ export function createAnalytics(
     void window.umami.track(payload());
   }
   function loadScript(name: string) {
+    if (disposed) return;
     const script = document.createElement("script");
     script.src = `${config.host}/${name}.js`;
     script.async = true;
@@ -227,6 +230,7 @@ export function createAnalytics(
   return {
     pageview,
     setConsent(accepted: boolean) {
+      if (disposed) return;
       const withdrawing = consent && !accepted && loaded;
       consent = accepted;
       setAnalyticsTracker(
@@ -249,6 +253,7 @@ export function createAnalytics(
       }
     },
     dispose(enteringOverlay = false) {
+      disposed = true;
       consent = false;
       setAnalyticsTracker();
       scripts.forEach((script) => {

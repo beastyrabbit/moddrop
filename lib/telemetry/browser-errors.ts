@@ -33,6 +33,12 @@ export function reportError(error: unknown) {
   else if (pending.length < 20) pending.push(error);
 }
 
+export function reportBoundaryError(error: Error & { digest?: string }) {
+  // Next.js server render errors are already captured by onRequestError.
+  if (error.digest !== undefined) return;
+  reportError(error);
+}
+
 export function startErrorReporting(config: TelemetryConfig["errors"]) {
   if (!config.dsn) {
     stopBuffer?.();

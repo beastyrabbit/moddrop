@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   createAnalytics: vi.fn(),
   stopConsent: vi.fn(),
   dispose: vi.fn(),
+  setConsent: vi.fn(),
   clerk: { addListener: () => () => {} },
 }));
 vi.mock("@clerk/nextjs", () => ({
@@ -41,7 +42,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.startConsent.mockResolvedValue(mocks.stopConsent);
   mocks.createAnalytics.mockReturnValue({
-    setConsent: vi.fn(),
+    setConsent: mocks.setConsent,
     pageview: vi.fn(),
     dispose: mocks.dispose,
   });
@@ -72,11 +73,38 @@ it("does not start consent when all telemetry settings are absent", () => {
 });
 
 it("starts and tears down consent and analytics when Umami is configured", async () => {
+  mocks.startConsent.mockImplementation(
+    async (notify: (accepted: boolean) => void) => {
+      notify(true);
+      return mocks.stopConsent;
+    },
+  );
   const { unmount } = render(<Telemetry config={telemetryConfig(env)} />);
   await act(async () => {});
   expect(mocks.startConsent).toHaveBeenCalledOnce();
   expect(mocks.createAnalytics).toHaveBeenCalledOnce();
+  expect(mocks.setConsent).toHaveBeenCalledExactlyOnceWith(true);
   unmount();
   expect(mocks.stopConsent).toHaveBeenCalledOnce();
   expect(mocks.dispose).toHaveBeenCalledOnce();
+});
+
+it("ignores consent callbacks after unmount even before consent startup resolves", async () => {
+  const ready = Promise.withResolvers<void>();
+  mocks.startConsent.mockImplementation(
+    async (notify: (accepted: boolean) => void) => {
+      await ready.promise;
+      notify(true);
+      return mocks.stopConsent;
+    },
+  );
+  const { unmount } = render(<Telemetry config={telemetryConfig(env)} />);
+  unmount();
+  expect(mocks.dispose).toHaveBeenCalledOnce();
+  await act(async () => {
+    ready.resolve();
+    await ready.promise;
+  });
+  expect(mocks.setConsent).not.toHaveBeenCalled();
+  expect(mocks.stopConsent).toHaveBeenCalledOnce();
 });

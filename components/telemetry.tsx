@@ -48,15 +48,16 @@ export function Telemetry({ config }: Readonly<{ config: TelemetryConfig }>) {
     }
     if (!stableConfig.umami) return;
     let disposed = false;
+    const consentAbort = new AbortController();
     let cleanup: (() => void) | undefined;
     const instance = createAnalytics(stableConfig.umami);
     analytics.current = instance;
-    void startConsent((accepted) => instance.setConsent(accepted)).then(
-      (stop) => {
-        if (disposed) stop();
-        else cleanup = stop;
-      },
-    );
+    void startConsent((accepted) => {
+      if (!disposed) instance.setConsent(accepted);
+    }, consentAbort.signal).then((stop) => {
+      if (disposed) stop();
+      else cleanup = stop;
+    });
     const onClick = (event: MouseEvent) => {
       const host = outboundHost(event.target, window.location.origin);
       if (host) track("outbound_link", { host });
@@ -64,6 +65,7 @@ export function Telemetry({ config }: Readonly<{ config: TelemetryConfig }>) {
     document.addEventListener("click", onClick);
     return () => {
       disposed = true;
+      consentAbort.abort();
       cleanup?.();
       instance.dispose();
       document.removeEventListener("click", onClick);

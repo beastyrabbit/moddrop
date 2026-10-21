@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { LegalFooter } from "@/components/legal/legal-footer";
-import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
+import { reportBoundaryError } from "@/lib/telemetry/browser-errors";
 
 export default function ErrorPage({
   error,
@@ -12,7 +12,7 @@ export default function ErrorPage({
   reset: () => void;
 }>) {
   useEffect(() => {
-    if (!(error instanceof ReportedError)) reportError(error);
+    reportBoundaryError(error);
   }, [error]);
   return (
     <div className="app-shell flex min-h-screen flex-col bg-background text-foreground">
