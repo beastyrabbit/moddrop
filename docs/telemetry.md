@@ -178,6 +178,7 @@ Only the newest generation receives callbacks or resets the singleton.
 | Abort pending consent without a replacement | Reset after initialization settles; no analytics callback |
 | Accept, withdraw, reload pending | Scripts removed; final flush blocked; accepting again cannot restart the retired recorder |
 | Enter `/obs` before scripts load or after they load | No reload before load; one reload after load, including across remounts |
-| Global error, reset without reload, saved consent | Analytics resumes; payloads scrubbed; recorder settings overridden; credentials omitted; no referrer |
+| Global error, reset without reload, saved consent | Exactly one tracker and recorder script appended per document; existing tracker and recorder reused; one pageview per navigation; replay and heatmap payloads scrubbed; recorder settings overridden; credentials omitted; no referrer |
+| Unmount while tracker loads, completion before or after remount | Pending tracker reused; no requests without an active consented instance; recorder appended once |
 | Replacement analytics, stale disposal/script callback/config/global | Captured current tracker survives; retired endpoints stay blocked |
 | Recorder settings resolve after replacement | Retired recorder receives no enabled settings |

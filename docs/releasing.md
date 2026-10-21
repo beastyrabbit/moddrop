@@ -26,6 +26,8 @@ Both images retain that release in their runtime environment. A release build
 does not need live telemetry environment variables; those are supplied by the
 production deployment.
 
+The Forgejo mirror passes the same release to both images and skips source-map upload without a GlitchTip secret, then deletes the maps.
+
 The frontend generates production browser source maps. A separate Docker build
 step uses `@sentry/cli` to inject debug IDs and upload `.next/static` artifacts for
 that exact release to GlitchTip's `beasty-rabbit/moddrop` project. The upload URL is

@@ -75,6 +75,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.head.innerHTML = "";
   delete window.umami;
@@ -147,7 +148,6 @@ it("mount → accept → unmount → remount resumes through the same native tra
   expect(nativeFetch).toHaveBeenCalledOnce();
   const second = mount();
   await finishConsent();
-  loadTracker();
   expect(window.fetch).toBe(guard);
   expect(nativeFetch).toHaveBeenCalledTimes(2);
   expect(screen.getByRole("button", { name: "Cookie settings" })).toBeTruthy();
@@ -266,6 +266,7 @@ it.each([false, true])(
 it("OBS entry after recovery still reloads for a recorder loaded by an earlier mount", () => {
   const first = analytics.createAnalytics(config, vi.fn());
   first.setConsent(true);
+  loadTracker();
   first.dispose();
   const reload = vi.fn();
   const second = analytics.createAnalytics(config, reload);
@@ -273,26 +274,74 @@ it("OBS entry after recovery still reloads for a recorder loaded by an earlier m
   expect(reload).toHaveBeenCalledOnce();
 });
 
-it("global-error reset with saved consent resumes analytics and preserves scrubbing and recorder settings", async () => {
+it("withdrawal after recovery reloads to stop the reused recorder and blocks its flush", async () => {
+  const first = analytics.createAnalytics(config, vi.fn());
+  first.setConsent(true);
+  loadTracker();
+  first.dispose();
+  const reload = vi.fn();
+  const second = analytics.createAnalytics(config, reload);
+  second.setConsent(true);
+  second.setConsent(false);
+  expect(reload).toHaveBeenCalledOnce();
+  expect(document.querySelectorAll("script")).toHaveLength(0);
+  nativeFetch.mockClear();
+  await window.fetch(`${config.host}/api/record`, { body: "private" });
+  second.setConsent(true);
+  await sendEvent();
+  expect(nativeFetch).not.toHaveBeenCalled();
+  second.dispose();
+});
+
+it("global-error reset with saved consent reuses loaded scripts and preserves pageviews, events and recorder scrubbing", async () => {
+  const append = vi.spyOn(document.head, "append");
   const first = mount();
   await finishConsent();
   loadTracker();
+  const tracker = window.umami;
   const guard = window.fetch;
+  const record = () =>
+    window.fetch(`${config.host}/api/record`, {
+      body: JSON.stringify({
+        type: "record",
+        payload: {
+          events: [
+            { textContent: "private", attributes: { value: "private" } },
+            { type: "click", url: "/privacy?token=private", x: 10, y: 20 },
+          ],
+        },
+      }),
+    });
   first.unmount();
   nativeFetch.mockClear();
   await sendEvent();
+  await record();
+  await window.fetch(`${config.host}/api/websites/fixture/recorder`);
   expect(nativeFetch).not.toHaveBeenCalled();
-  mount();
+  const second = mount();
   await finishConsent();
-  loadTracker();
-  await sendEvent();
-  await window.fetch(`${config.host}/api/record`, {
-    body: JSON.stringify({
-      type: "record",
-      payload: {
-        events: [{ textContent: "private", attributes: { value: "private" } }],
-      },
-    }),
+  expect(window.umami).toBe(tracker);
+  navigation.pathname = "/legal-notice";
+  window.history.pushState(null, "", navigation.pathname);
+  second.rerender(<Telemetry config={appConfig} />);
+  second.rerender(<Telemetry config={appConfig} />);
+  const pageviews = nativeFetch.mock.calls.map(([, init]) =>
+    JSON.parse(String(init?.body)),
+  );
+  expect(pageviews.map(({ payload }) => new URL(payload.url).pathname)).toEqual(
+    ["/privacy", "/legal-notice"],
+  );
+  events.track("room_created", {});
+  expect(JSON.parse(String(nativeFetch.mock.calls[2][1]?.body))).toMatchObject({
+    payload: { name: "room_created" },
+  });
+  await record();
+  const recording = JSON.parse(String(nativeFetch.mock.calls[3][1]?.body));
+  expect(recording.payload.events[1]).toEqual({
+    type: "click",
+    url: `${window.location.origin}/privacy`,
+    x: 10,
+    y: 20,
   });
   const response = await window.fetch(
     `${config.host}/api/websites/fixture/recorder`,
@@ -303,7 +352,16 @@ it("global-error reset with saved consent resumes analytics and preserves scrubb
     blockSelector: expect.stringContaining("[data-telemetry-private]"),
   });
   expect(window.fetch).toBe(guard);
-  expect(nativeFetch).toHaveBeenCalledTimes(4);
+  expect(nativeFetch).toHaveBeenCalledTimes(5);
+  const appendedScripts = append.mock.calls
+    .flat()
+    .filter(
+      (node): node is HTMLScriptElement => node instanceof HTMLScriptElement,
+    );
+  expect(appendedScripts.map((script) => script.src)).toEqual([
+    `${config.host}/script.js`,
+    `${config.host}/recorder.js`,
+  ]);
   for (const [, init] of nativeFetch.mock.calls) {
     expect(init).toMatchObject({
       credentials: "omit",
@@ -325,9 +383,7 @@ it("stale analytics disposal, callbacks and config cannot disturb the active own
   second.setConsent(true);
   const tracker = vi.fn().mockResolvedValue(undefined);
   window.umami = { track: tracker };
-  document
-    .querySelector('script[src^="https://successor.invalid/"]')
-    ?.dispatchEvent(new Event("load"));
+  script?.dispatchEvent(new Event("load"));
   tracker.mockClear();
   first.dispose(true);
   first.setConsent(false);
@@ -343,20 +399,39 @@ it("stale analytics disposal, callbacks and config cannot disturb the active own
   second.dispose();
 });
 
-it("a late retired script cannot replace the active instance's captured tracker", () => {
+it.each(["before-remount", "after-remount"])(
+  "a pending tracker completing %s is reused by the successor",
+  (timing) => {
+    const append = vi.spyOn(document.head, "append");
+    const first = analytics.createAnalytics(config, vi.fn());
+    first.setConsent(true);
+    first.dispose();
+    if (timing === "before-remount") loadTracker();
+    expect(nativeFetch).not.toHaveBeenCalled();
+    const second = analytics.createAnalytics(config, vi.fn());
+    second.setConsent(true);
+    if (timing === "after-remount") loadTracker();
+    second.pageview();
+    expect(nativeFetch).toHaveBeenCalledOnce();
+    expect(append).toHaveBeenCalledTimes(2);
+    second.dispose();
+  },
+);
+
+it("a duplicate script callback cannot replace the document's captured tracker", () => {
   const first = analytics.createAnalytics(config, vi.fn());
   first.setConsent(true);
   const oldScript = document.querySelector("script");
+  loadTracker();
   first.dispose();
   const second = analytics.createAnalytics(config, vi.fn());
   second.setConsent(true);
-  loadTracker();
   const currentTracker = window.umami?.track;
   const staleTracker = vi.fn().mockResolvedValue(undefined);
   window.umami = { track: staleTracker };
   oldScript?.dispatchEvent(new Event("load"));
   events.track("room_created", {});
-  expect(currentTracker).toHaveBeenCalledTimes(2);
+  expect(currentTracker).toHaveBeenCalledTimes(3);
   expect(staleTracker).not.toHaveBeenCalled();
   second.dispose();
 });

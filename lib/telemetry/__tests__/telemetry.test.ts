@@ -234,7 +234,7 @@ describe("consent and analytics", () => {
     await window.fetch("/unrelated");
     expect(fetch).toHaveBeenCalledExactlyOnceWith("/unrelated", undefined);
   });
-  it("ignores late script loads and keeps the fetch guard after loaded analytics are disposed", async () => {
+  it("keeps pending scripts and the fetch guard without activating disposed analytics", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
     const analytics = createAnalytics(config, vi.fn());
@@ -249,7 +249,7 @@ describe("consent and analytics", () => {
     script?.dispatchEvent(new Event("load"));
     analytics.pageview();
     track("room_created", {});
-    expect(document.querySelectorAll("script")).toHaveLength(0);
+    expect(document.querySelectorAll("script")).toHaveLength(1);
     expect(window.fetch).toBe(guardedFetch);
     expect(tracker).not.toHaveBeenCalled();
     await window.fetch(`${config.host}/api/record`, { body: "private" });

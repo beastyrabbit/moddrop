@@ -123,10 +123,13 @@ type AnalyticsTransport = {
   readonly config: NonNullable<TelemetryConfig["umami"]>;
   readonly allowed: () => boolean;
   readonly payload: () => Record<string, unknown>;
+  readonly resume: () => void;
 };
 let activeInstance: AnalyticsTransport | undefined;
 let transportInstalled = false;
 let analyticsLoaded = false;
+let tracker: Umami | undefined;
+const scripts = new Map<string, HTMLScriptElement>();
 const guardedEndpoints = new Set<string>();
 const blockedResponse = () => new Response("{}", { status: 200 });
 
@@ -205,9 +208,7 @@ export function createAnalytics(
 ) {
   let consent = false;
   let disposed = false;
-  let loaded = false;
   let stopping = false;
-  let tracker: Umami | undefined;
   let route = "";
   const ownsTransport = () => activeInstance === instance;
   const allowed = () =>
@@ -215,7 +216,6 @@ export function createAnalytics(
     !stopping &&
     ownsTransport() &&
     analyticsAllowed(config, consent, window.location, navigator.userAgent);
-  const scripts: HTMLScriptElement[] = [];
   const payload = () => ({
     website: config.website,
     hostname: window.location.hostname,
@@ -232,7 +232,7 @@ export function createAnalytics(
     void tracker.track(payload());
   }
   function loadScript(name: string) {
-    if (!allowed()) return;
+    if (!allowed() || scripts.has(name)) return;
     const script = document.createElement("script");
     script.src = `${config.host}/${name}.js`;
     script.async = true;
@@ -243,16 +243,23 @@ export function createAnalytics(
     script.dataset.excludeSearch = "true";
     script.dataset.excludeHash = "true";
     script.onload = () => {
-      if (name === "script" && allowed()) {
-        tracker = window.umami;
-        pageview();
-        loadScript("recorder");
+      if (name === "script") {
+        tracker ??= window.umami;
+        activeInstance?.resume();
       }
     };
-    scripts.push(script);
+    scripts.set(name, script);
+    analyticsLoaded = true;
     document.head.append(script);
   }
-  const instance = { config, allowed, payload };
+  function resume() {
+    if (!allowed()) return;
+    if (tracker) {
+      pageview();
+      loadScript("recorder");
+    } else loadScript("script");
+  }
+  const instance = { config, allowed, payload, resume };
   installTransport(config);
   activeInstance = instance;
   setAnalyticsTracker();
@@ -260,7 +267,7 @@ export function createAnalytics(
     pageview,
     setConsent(accepted: boolean) {
       if (disposed || stopping || !ownsTransport()) return;
-      const withdrawing = consent && !accepted && loaded;
+      const withdrawing = consent && !accepted && analyticsLoaded;
       consent = accepted;
       setAnalyticsTracker(
         accepted
@@ -269,11 +276,7 @@ export function createAnalytics(
             }
           : undefined,
       );
-      if (allowed() && !loaded) {
-        loaded = true;
-        analyticsLoaded = true;
-        loadScript("script");
-      }
+      resume();
       if (withdrawing) {
         stopping = true;
         scripts.forEach((script) => {
@@ -290,9 +293,8 @@ export function createAnalytics(
         activeInstance = undefined;
         setAnalyticsTracker();
       }
-      scripts.forEach((script) => {
-        script.remove();
-      });
+      // Scripts and their running observers belong to the document. A successor
+      // reuses them, including a tracker that finishes loading during recovery.
       // A fresh document is necessary to remove recorder/history listeners.
       if (analyticsLoaded && enteringOverlay && (current || !activeInstance)) {
         analyticsLoaded = false;
