@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { LegalFooter } from "@/components/legal/legal-footer";
 import {
+  ReportedError,
   reportError,
   startErrorReporting,
 } from "@/lib/telemetry/browser-errors";
@@ -16,7 +17,7 @@ export default function GlobalError({
   reset: () => void;
 }>) {
   useEffect(() => {
-    reportError(error);
+    if (!(error instanceof ReportedError)) reportError(error);
   }, [error]);
   useEffect(() => {
     let stop: (() => void) | undefined;

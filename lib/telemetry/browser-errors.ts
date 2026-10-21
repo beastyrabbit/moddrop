@@ -1,5 +1,8 @@
 import type { TelemetryConfig } from "./config";
 
+/** An error whose error report and failure event have already been emitted. */
+export class ReportedError extends Error {}
+
 type Reporter = (error: unknown) => void;
 let report: Reporter | undefined;
 const pending: unknown[] = [];
@@ -19,6 +22,7 @@ export function bufferEarlyErrors() {
   };
 }
 export function reportError(error: unknown) {
+  if (error instanceof ReportedError) return;
   if (report) report(error);
   else if (pending.length < 20) pending.push(error);
 }

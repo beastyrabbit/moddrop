@@ -62,7 +62,7 @@ import {
   ViewSubmenu,
   XBoxToolbarItem,
 } from "tldraw";
-import { reportError } from "@/lib/telemetry/browser-errors";
+import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
 import { track } from "@/lib/telemetry/events";
 import "tldraw/tldraw.css";
 import {
@@ -791,7 +791,7 @@ export function CanvasEditor({
   const connectionError =
     storeWithStatus.status === "error" ? storeWithStatus.error : null;
   useEffect(() => {
-    if (connectionError) {
+    if (connectionError && !(connectionError instanceof ReportedError)) {
       reportError(connectionError);
       track("failure", { operation: "canvas", reason: "network" });
     }

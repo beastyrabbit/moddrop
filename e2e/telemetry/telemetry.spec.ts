@@ -144,33 +144,35 @@ test("TTFB is reported once after two client navigations", async ({ page }) => {
   expect(ttfbEvents()).toBe(1);
 });
 
-test("German policy uses German consent and settings, English navigation changes it back", async ({
-  page,
-}) => {
-  await fixture(page);
-  await page.goto("/datenschutz");
-  await expect(
-    page.getByRole("button", { name: "Alle ablehnen", exact: true }),
-  ).toBeVisible();
-  await expect(page.locator('#cc-main a[href="/datenschutz"]')).toBeVisible();
-  await page
-    .getByRole("button", { name: "Alle ablehnen", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Cookie-Einstellungen", exact: true })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Cookie-Einstellungen", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Schließen", exact: true }).click();
-  await page.getByRole("link", { name: "Privacy", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Cookie settings", exact: true })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Cookie settings", exact: true }),
-  ).toBeVisible();
-});
+for (const path of ["/datenschutz", "/datenschutz/", "/impressum/"]) {
+  test(`German legal page ${path} uses German consent and settings, English navigation changes it back`, async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.goto(path);
+    await expect(
+      page.getByRole("button", { name: "Alle ablehnen", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('#cc-main a[href="/datenschutz"]')).toBeVisible();
+    await page
+      .getByRole("button", { name: "Alle ablehnen", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Cookie-Einstellungen", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Cookie-Einstellungen", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Schließen", exact: true }).click();
+    await page.getByRole("link", { name: "Privacy", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Cookie settings", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Cookie settings", exact: true }),
+    ).toBeVisible();
+  });
+}
 
 test("consent gates scripts and recording, navigation has one safe pageview, withdrawal stops tracking", async ({
   page,

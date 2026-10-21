@@ -19,9 +19,13 @@ function setConsentRunning(value: boolean) {
   for (const listener of listeners) listener();
 }
 
+export function isGermanLegalPath(pathname: string) {
+  const path = pathname.replace(/\/+$/, "");
+  return path === "/datenschutz" || path === "/impressum";
+}
+
 export function consentLanguage() {
-  if (["/datenschutz", "/impressum"].includes(window.location.pathname))
-    return "de";
+  if (isGermanLegalPath(window.location.pathname)) return "de";
   return document.documentElement.lang.startsWith("de") ? "de" : "en";
 }
 export function syncConsentLanguage() {

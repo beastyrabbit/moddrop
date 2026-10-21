@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { CanvasEditor } from "@/components/stream-canvas/CanvasEditor";
 import { getAccessibleRooms } from "@/lib/stream-canvas/api";
 import type { YouTubePolicy } from "@/lib/stream-canvas/types";
-import { reportError } from "@/lib/telemetry/browser-errors";
+import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
 import { track } from "@/lib/telemetry/events";
 
 export default function StreamCanvasRoomPage() {
@@ -30,10 +30,12 @@ export default function StreamCanvasRoomPage() {
     getAccessibleRooms(getToken)
       .then((rooms) => {
         const room = rooms.find((r) => r.id === roomId);
-        if (!room)
-          throw new Error(
-            "This room is unavailable or you no longer have access.",
-          );
+        if (!room) {
+          track("failure", { operation: "room", reason: "rejected" });
+          if (!cancelled)
+            setError("This room is unavailable or you no longer have access.");
+          return;
+        }
         if (!cancelled) {
           setTwitchChannel(room.twitchChannel);
           setYouTubePolicy(room.youtubePolicy);
@@ -42,8 +44,10 @@ export default function StreamCanvasRoomPage() {
         }
       })
       .catch((err) => {
-        reportError(err);
-        track("failure", { operation: "room", reason: "rejected" });
+        if (!(err instanceof ReportedError)) {
+          reportError(err);
+          track("failure", { operation: "room", reason: "rejected" });
+        }
         if (!cancelled)
           setError(err instanceof Error ? err.message : "Failed to load room");
       });

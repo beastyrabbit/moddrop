@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { reportError } from "@/lib/telemetry/browser-errors";
+import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
 
 export default function OBSError({
   error,
@@ -11,7 +11,7 @@ export default function OBSError({
   reset: () => void;
 }>) {
   useEffect(() => {
-    reportError(error);
+    if (!(error instanceof ReportedError)) reportError(error);
   }, [error]);
   return (
     <div

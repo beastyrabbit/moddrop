@@ -9,15 +9,21 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import GlobalError from "@/app/global-error";
-import { isConsentRunning, startConsent } from "@/lib/telemetry/consent";
+import {
+  consentLanguage,
+  isConsentRunning,
+  isGermanLegalPath,
+  startConsent,
+} from "@/lib/telemetry/consent";
 import { CookieSettings } from "../cookie-settings";
 
 const mocks = vi.hoisted(() => ({
   run: vi.fn<() => Promise<void>>(),
   reset: vi.fn(),
   showPreferences: vi.fn(),
+  pathname: "/privacy",
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/privacy" }));
+vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("vanilla-cookieconsent", () => ({
   run: mocks.run,
   reset: mocks.reset,
@@ -30,7 +36,36 @@ afterEach(() => {
   stop = undefined;
   cleanup();
   vi.clearAllMocks();
+  mocks.pathname = "/privacy";
+  window.history.replaceState(null, "", "/");
+  document.documentElement.lang = "";
 });
+
+it.each([
+  ["/datenschutz", true, "de", "Cookie-Einstellungen"],
+  ["/datenschutz/", true, "de", "Cookie-Einstellungen"],
+  ["/impressum//", true, "de", "Cookie-Einstellungen"],
+  ["/privacy", false, "en", "Cookie settings"],
+  ["/", false, "en", "Cookie settings"],
+] as const)(
+  "uses consistent legal-page language on %s",
+  async (pathname, german, language, label) => {
+    mocks.pathname = pathname;
+    window.history.replaceState(null, "", pathname);
+    document.documentElement.lang = "en";
+    expect(isGermanLegalPath(pathname)).toBe(german);
+    expect(consentLanguage()).toBe(language);
+    mocks.run.mockResolvedValue(undefined);
+    stop = await startConsent(vi.fn());
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        language: expect.objectContaining({ default: language }),
+      }),
+    );
+    render(<CookieSettings />);
+    expect(screen.getByRole("button", { name: label })).toBeTruthy();
+  },
+);
 
 it("hides settings until consent finishes starting and hides them after teardown", async () => {
   let ready: () => void = () => {};

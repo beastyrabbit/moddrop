@@ -3,6 +3,7 @@ import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import {
   isConsentRunning,
+  isGermanLegalPath,
   showCookieSettings,
   subscribeConsent,
 } from "@/lib/telemetry/consent";
@@ -21,9 +22,7 @@ export function CookieSettings({
   if (!running) return null;
   return (
     <button type="button" onClick={showCookieSettings} className={className}>
-      {pathname === "/datenschutz" || pathname === "/impressum"
-        ? "Cookie-Einstellungen"
-        : "Cookie settings"}
+      {isGermanLegalPath(pathname) ? "Cookie-Einstellungen" : "Cookie settings"}
     </button>
   );
 }

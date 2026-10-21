@@ -1,4 +1,4 @@
-import { reportError } from "@/lib/telemetry/browser-errors";
+import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
 import { track } from "@/lib/telemetry/events";
 import type {
   AccessibleRoom,
@@ -79,7 +79,11 @@ async function fetchApi(
     }).catch((error: unknown) => {
       track("failure", { operation: "api", reason: "network" });
       reportError(new Error("Canvas API network request failed"));
-      throw error;
+      throw new ReportedError(
+        error instanceof Error
+          ? error.message
+          : "Canvas API network request failed",
+      );
     });
 
   let res = await makeRequest(token);
@@ -94,11 +98,13 @@ async function fetchApi(
   }
 
   if (!res.ok) {
+    const message = await parseApiError(res);
     if (res.status >= 500) {
       track("failure", { operation: "api", reason: "rejected" });
       reportError(new Error(`Canvas API failed (${res.status})`));
+      throw new ReportedError(message);
     }
-    throw new Error(await parseApiError(res));
+    throw new Error(message);
   }
   return res.json();
 }
