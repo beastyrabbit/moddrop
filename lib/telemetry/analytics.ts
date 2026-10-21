@@ -125,58 +125,105 @@ type AnalyticsTransport = {
   readonly payload: () => Record<string, unknown>;
   readonly resume: () => void;
 };
-let activeInstance: AnalyticsTransport | undefined;
-let transportInstalled = false;
-let analyticsLoaded = false;
-let tracker: Umami | undefined;
-const scripts = new Map<string, HTMLScriptElement>();
-const guardedEndpoints = new Set<string>();
+type ScriptState = {
+  readonly element: HTMLScriptElement;
+  status: "loading" | "loaded";
+};
+const documentState = {
+  config: undefined as AnalyticsTransport["config"] | undefined,
+  activeInstance: undefined as AnalyticsTransport | undefined,
+  tracker: undefined as Umami | undefined,
+  scripts: new Map<string, ScriptState>(),
+  recorderRunning: false,
+  transportInstalled: false,
+  reloading: false,
+  guardedEndpoints: new Set<string>(),
+};
 const blockedResponse = () => new Response("{}", { status: 200 });
+
+function sameConfig(
+  first: AnalyticsTransport["config"] | undefined,
+  second: AnalyticsTransport["config"],
+) {
+  return (
+    first?.host === second.host &&
+    first.website === second.website &&
+    first.domains === second.domains
+  );
+}
 
 function recorderEndpoint(website: string) {
   return `/api/websites/${website}/recorder`;
 }
 
+function currentTransport(url: URL) {
+  const { activeInstance, config, reloading } = documentState;
+  if (
+    reloading ||
+    !config ||
+    !activeInstance?.allowed() ||
+    !sameConfig(config, activeInstance.config) ||
+    url.origin !== config.host
+  )
+    return undefined;
+  if (
+    ["/api/send", "/api/record", recorderEndpoint(config.website)].includes(
+      url.pathname,
+    )
+  )
+    return activeInstance;
+  return undefined;
+}
+
+async function recorderSettings(response: Response, url: URL) {
+  if (!currentTransport(url)) return blockedResponse();
+  if (!response.ok) return response;
+  const settings = await response.json();
+  if (!currentTransport(url)) return blockedResponse();
+  // Sampling/enabled flags remain controlled by the self-hosted Umami admin.
+  return Response.json({
+    ...settings,
+    maskLevel: "strict",
+    blockSelector:
+      "[data-telemetry-private],.cl-rootBox,.cl-modalBackdrop,canvas,iframe,video,audio,img,svg",
+  });
+}
+
 async function sendAnalytics(
-  instance: AnalyticsTransport,
   nativeFetch: typeof fetch,
-  path: string,
+  url: URL,
   input: RequestInfo | URL,
   init?: RequestInit,
 ) {
+  const instance = currentTransport(url);
+  if (!instance) return blockedResponse();
   const options: RequestInit = {
     ...init,
     referrerPolicy: "no-referrer",
     credentials: "omit",
   };
-  if (path === recorderEndpoint(instance.config.website)) {
+  if (url.pathname === recorderEndpoint(instance.config.website)) {
     const response = await nativeFetch(input, options);
-    if (!response.ok) return response;
-    const settings = await response.json();
-    if (activeInstance !== instance || !instance.allowed())
-      return blockedResponse();
-    // Sampling/enabled flags remain controlled by the self-hosted Umami admin.
-    return Response.json({
-      ...settings,
-      maskLevel: "strict",
-      blockSelector:
-        "[data-telemetry-private],.cl-rootBox,.cl-modalBackdrop,canvas,iframe,video,audio,img,svg",
-    });
+    return recorderSettings(response, url);
   }
   if (typeof init?.body !== "string") return blockedResponse();
   const body = JSON.parse(init.body) as {
     type: string;
     payload: Record<string, unknown>;
   };
-  if (path === "/api/send" && body.type === "event") {
+  if (url.pathname === "/api/send" && body.type === "event") {
     body.payload = { ...body.payload, ...instance.payload() };
-  } else if (path === "/api/record") {
+  } else if (url.pathname === "/api/record") {
     body.payload = {
       ...body.payload,
       events: scrubRecording(body.payload.events),
     };
   } else return blockedResponse();
-  return nativeFetch(input, { ...options, body: JSON.stringify(body) });
+  const response = await nativeFetch(input, {
+    ...options,
+    body: JSON.stringify(body),
+  });
+  return currentTransport(url) ? response : blockedResponse();
 }
 
 function installTransport(config: AnalyticsTransport["config"]) {
@@ -185,21 +232,59 @@ function installTransport(config: AnalyticsTransport["config"]) {
     "/api/record",
     recorderEndpoint(config.website),
   ])
-    guardedEndpoints.add(`${config.host}${path}`);
-  if (transportInstalled) return;
-  transportInstalled = true;
+    documentState.guardedEndpoints.add(`${config.host}${path}`);
+  if (documentState.transportInstalled) return;
+  documentState.transportInstalled = true;
   const nativeFetch = window.fetch.bind(window);
   // One document-wide guard survives unmounts and boundary recovery. Keep old
   // endpoints guarded too, so a retired recorder cannot flush after config changes.
   window.fetch = async (input, init) => {
     const url = new URL(fetchInputUrl(input), window.location.href);
-    if (!guardedEndpoints.has(`${url.origin}${url.pathname}`))
+    if (!documentState.guardedEndpoints.has(`${url.origin}${url.pathname}`))
       return nativeFetch(input, init);
-    const instance = activeInstance;
-    if (!instance?.allowed() || url.origin !== instance.config.host)
-      return blockedResponse();
-    return sendAnalytics(instance, nativeFetch, url.pathname, input, init);
+    return sendAnalytics(nativeFetch, url, input, init);
   };
+}
+
+function reloadDocument(reload: () => void) {
+  if (documentState.reloading) return;
+  documentState.reloading = true;
+  setAnalyticsTracker();
+  documentState.scripts.forEach(({ element }) => {
+    element.remove();
+  });
+  reload();
+}
+
+function loadScript(name: "script" | "recorder") {
+  const { config, activeInstance, scripts } = documentState;
+  if (!config || !activeInstance?.allowed()) return;
+  const src = `${config.host}/${name}.js`;
+  if (scripts.has(src)) return;
+  const script = document.createElement("script");
+  script.src = src;
+  script.async = true;
+  script.referrerPolicy = "no-referrer";
+  script.dataset.websiteId = config.website;
+  script.dataset.domains = config.domains;
+  script.dataset.autoTrack = "false";
+  script.dataset.excludeSearch = "true";
+  script.dataset.excludeHash = "true";
+  const state: ScriptState = { element: script, status: "loading" };
+  script.onload = () => {
+    if (scripts.get(src) !== state || state.status !== "loading") return;
+    state.status = "loaded";
+    if (name === "script") documentState.tracker ??= window.umami;
+    else documentState.recorderRunning = true;
+    documentState.activeInstance?.resume();
+  };
+  script.onerror = () => {
+    if (scripts.get(src) !== state || state.status !== "loading") return;
+    script.remove();
+    scripts.delete(src);
+  };
+  scripts.set(src, state);
+  document.head.append(script);
 }
 
 export function createAnalytics(
@@ -208,13 +293,13 @@ export function createAnalytics(
 ) {
   let consent = false;
   let disposed = false;
-  let stopping = false;
   let route = "";
-  const ownsTransport = () => activeInstance === instance;
+  const ownsTransport = () => documentState.activeInstance === instance;
   const allowed = () =>
     !disposed &&
-    !stopping &&
+    !documentState.reloading &&
     ownsTransport() &&
+    sameConfig(documentState.config, config) &&
     analyticsAllowed(config, consent, window.location, navigator.userAgent);
   const payload = () => ({
     website: config.website,
@@ -226,80 +311,63 @@ export function createAnalytics(
     screen: `${screen.width}x${screen.height}`,
   });
   function pageview() {
-    const next = safePath(window.location.href);
-    if (!allowed() || !tracker || route === next) return;
+    const next = window.location.pathname;
+    if (!allowed() || !documentState.tracker || route === next) return;
     route = next;
-    void tracker.track(payload());
-  }
-  function loadScript(name: string) {
-    if (!allowed() || scripts.has(name)) return;
-    const script = document.createElement("script");
-    script.src = `${config.host}/${name}.js`;
-    script.async = true;
-    script.referrerPolicy = "no-referrer";
-    script.dataset.websiteId = config.website;
-    script.dataset.domains = config.domains;
-    script.dataset.autoTrack = "false";
-    script.dataset.excludeSearch = "true";
-    script.dataset.excludeHash = "true";
-    script.onload = () => {
-      if (name === "script") {
-        tracker ??= window.umami;
-        activeInstance?.resume();
-      }
-    };
-    scripts.set(name, script);
-    analyticsLoaded = true;
-    document.head.append(script);
+    void documentState.tracker.track(payload());
   }
   function resume() {
     if (!allowed()) return;
-    if (tracker) {
+    if (documentState.tracker) {
       pageview();
-      loadScript("recorder");
+      if (!documentState.recorderRunning) loadScript("recorder");
     } else loadScript("script");
   }
   const instance = { config, allowed, payload, resume };
   installTransport(config);
-  activeInstance = instance;
+  documentState.activeInstance = instance;
   setAnalyticsTracker();
+  if (
+    documentState.scripts.size > 0 &&
+    !sameConfig(documentState.config, config)
+  )
+    reloadDocument(reload);
+  else if (!documentState.reloading) documentState.config = { ...config };
   return {
     pageview,
     setConsent(accepted: boolean) {
-      if (disposed || stopping || !ownsTransport()) return;
-      const withdrawing = consent && !accepted && analyticsLoaded;
+      if (disposed || documentState.reloading || !ownsTransport()) return;
+      const withdrawing =
+        consent && !accepted && documentState.scripts.size > 0;
       consent = accepted;
       setAnalyticsTracker(
         accepted
           ? (name, data) => {
-              if (allowed()) void tracker?.track({ ...payload(), name, data });
+              if (allowed())
+                void documentState.tracker?.track({ ...payload(), name, data });
             }
           : undefined,
       );
       resume();
-      if (withdrawing) {
-        stopping = true;
-        scripts.forEach((script) => {
-          script.remove();
-        });
-        reload();
-      }
+      if (withdrawing) reloadDocument(reload);
     },
     dispose(enteringOverlay = false) {
       disposed = true;
       consent = false;
       const current = ownsTransport();
       if (current) {
-        activeInstance = undefined;
+        documentState.activeInstance = undefined;
         setAnalyticsTracker();
       }
       // Scripts and their running observers belong to the document. A successor
       // reuses them, including a tracker that finishes loading during recovery.
       // A fresh document is necessary to remove recorder/history listeners.
-      if (analyticsLoaded && enteringOverlay && (current || !activeInstance)) {
-        analyticsLoaded = false;
-        reload();
-      }
+      if (
+        documentState.scripts.size > 0 &&
+        enteringOverlay &&
+        (current || !documentState.activeInstance)
+      )
+        reloadDocument(reload);
     },
   };
 }

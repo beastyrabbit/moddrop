@@ -88,3 +88,34 @@ test("delivery requires successful verification outside pull requests", () => {
     expect(evaluate("success", "refs/heads/main")).toBe(true);
   }
 });
+
+test.each([
+  ["instrumentation.ts", false],
+  ["instrumentation-client.ts", false],
+  ["backend/stream-canvas/src/telemetry/config.ts", true],
+  ["backend/stream-canvas/src/telemetry/scrub.ts", true],
+  ["backend/stream-canvas/src/telemetry/nested/helper.ts", true],
+] as const)(
+  "frontend telemetry input %s rebuilds the frontend",
+  (path, backend) => {
+    const output = execFileSync("bash", ["scripts/delivery-changes.sh"], {
+      input: path,
+      encoding: "utf8",
+    });
+    expect(output).toContain("frontend=true");
+    expect(output).toContain(`stream_canvas=${backend}`);
+  },
+);
+
+test.each([
+  "docs/telemetry.md",
+  "backend/stream-canvas/src/telemetry.ts",
+  "backend/stream-canvas/src/server.ts",
+  "instrumentation-client.ts.bak",
+])("unrelated input %s does not rebuild the frontend", (path) => {
+  const output = execFileSync("bash", ["scripts/delivery-changes.sh"], {
+    input: path,
+    encoding: "utf8",
+  });
+  expect(output).toContain("frontend=false");
+});

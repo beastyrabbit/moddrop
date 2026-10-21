@@ -371,15 +371,12 @@ it("global-error reset with saved consent reuses loaded scripts and preserves pa
   }
 });
 
-it("stale analytics disposal, callbacks and config cannot disturb the active owner", async () => {
+it("stale analytics disposal and callbacks cannot disturb the active owner", async () => {
   const staleReload = vi.fn();
   const first = analytics.createAnalytics(config, staleReload);
   first.setConsent(true);
   const script = document.querySelector("script");
-  const second = analytics.createAnalytics(
-    { ...config, host: "https://successor.invalid" },
-    vi.fn(),
-  );
+  const second = analytics.createAnalytics({ ...config }, vi.fn());
   second.setConsent(true);
   const tracker = vi.fn().mockResolvedValue(undefined);
   window.umami = { track: tracker };
@@ -393,8 +390,6 @@ it("stale analytics disposal, callbacks and config cannot disturb the active own
   expect(staleReload).not.toHaveBeenCalled();
   nativeFetch.mockClear();
   await sendEvent();
-  expect(nativeFetch).not.toHaveBeenCalled();
-  await sendEvent("https://successor.invalid");
   expect(nativeFetch).toHaveBeenCalledOnce();
   second.dispose();
 });
@@ -436,16 +431,127 @@ it("a duplicate script callback cannot replace the document's captured tracker",
   second.dispose();
 });
 
-it("recorder settings resolving after replacement cannot enable a retired recorder", async () => {
+it("recorder settings resolving after same-config replacement initialise the reused recorder once", async () => {
+  const append = vi.spyOn(document.head, "append");
   const response = Promise.withResolvers<Response>();
-  nativeFetch.mockReturnValueOnce(response.promise);
   const first = analytics.createAnalytics(config, vi.fn());
   first.setConsent(true);
-  const pending = window.fetch(`${config.host}/api/websites/fixture/recorder`);
+  loadTracker();
+  document
+    .querySelector('script[src$="/recorder.js"]')
+    ?.dispatchEvent(new Event("load"));
+  nativeFetch.mockReturnValueOnce(response.promise);
+  const initialise = vi.fn();
+  const pending = window
+    .fetch(`${config.host}/api/websites/fixture/recorder`)
+    .then((result) => result.json())
+    .then((settings) => {
+      if (settings.enabled) initialise(settings);
+    });
   const second = analytics.createAnalytics(config, vi.fn());
   first.dispose();
   second.setConsent(true);
   response.resolve(Response.json({ enabled: true }));
-  expect(await (await pending).json()).toEqual({});
+  await pending;
+  expect(initialise).toHaveBeenCalledExactlyOnceWith({
+    enabled: true,
+    maskLevel: "strict",
+    blockSelector: expect.stringContaining("[data-telemetry-private]"),
+  });
+  expect(append).toHaveBeenCalledTimes(2);
   second.dispose();
+});
+
+it.each([
+  { host: "https://successor.invalid" },
+  { website: "successor" },
+  { domains: "localhost,moddrop.live" },
+])("configuration change after load → reload for %j", async (change) => {
+  const append = vi.spyOn(document.head, "append");
+  const first = analytics.createAnalytics(config, vi.fn());
+  first.setConsent(true);
+  loadTracker();
+  const reload = vi.fn();
+  const second = analytics.createAnalytics({ ...config, ...change }, reload);
+  second.setConsent(true);
+  first.dispose(true);
+  expect(reload).toHaveBeenCalledOnce();
+  expect(append).toHaveBeenCalledTimes(2);
+  nativeFetch.mockClear();
+  await sendEvent();
+  await sendEvent(change.host);
+  expect(nativeFetch).not.toHaveBeenCalled();
+  second.dispose();
+});
+
+it.each(["script", "recorder"])(
+  "%s error → later recovery appends one new script",
+  (name) => {
+    const append = vi.spyOn(document.head, "append");
+    const first = analytics.createAnalytics(config, vi.fn());
+    first.setConsent(true);
+    if (name === "recorder") loadTracker();
+    const failed = document.querySelector(`script[src$="/${name}.js"]`);
+    expect(failed).not.toBeNull();
+    failed?.dispatchEvent(new Event("error"));
+    expect(document.querySelector(`script[src$="/${name}.js"]`)).toBeNull();
+    first.dispose();
+    const second = analytics.createAnalytics(config, vi.fn());
+    const count = append.mock.calls.length;
+    second.setConsent(true);
+    second.setConsent(true);
+    expect(append).toHaveBeenCalledTimes(count + 1);
+    const retried = document.querySelector(`script[src$="/${name}.js"]`);
+    expect(retried).not.toBe(failed);
+    failed?.dispatchEvent(new Event("error"));
+    expect(document.querySelector(`script[src$="/${name}.js"]`)).toBe(retried);
+    if (name === "script") loadTracker();
+    else retried?.dispatchEvent(new Event("load"));
+    second.setConsent(true);
+    expect(
+      document.querySelectorAll(`script[src$="/${name}.js"]`),
+    ).toHaveLength(1);
+    second.dispose();
+  },
+);
+
+it.each(["unmount", "withdraw", "config-change"])(
+  "pending recorder settings are blocked after %s",
+  async (action) => {
+    const first = analytics.createAnalytics(config, vi.fn());
+    first.setConsent(true);
+    const response = Promise.withResolvers<Response>();
+    nativeFetch.mockReturnValueOnce(response.promise);
+    const pending = window.fetch(
+      `${config.host}/api/websites/fixture/recorder`,
+    );
+    if (action === "unmount") first.dispose();
+    if (action === "withdraw") first.setConsent(false);
+    if (action === "config-change") {
+      analytics
+        .createAnalytics({ ...config, website: "new-site" }, vi.fn())
+        .setConsent(true);
+    }
+    response.resolve(Response.json({ enabled: true }));
+    expect(await (await pending).json()).toEqual({});
+  },
+);
+
+it("room → room sends both pageviews with only the scrubbed path", () => {
+  window.history.replaceState(null, "", "/app/rooms/room-a");
+  const instance = analytics.createAnalytics(config, vi.fn());
+  instance.setConsent(true);
+  loadTracker();
+  window.history.pushState(null, "", "/app/rooms/room-b");
+  instance.pageview();
+  instance.pageview();
+  window.history.pushState(null, "", "/app/rooms/room-b?token=fixture#secret");
+  instance.pageview();
+  expect(nativeFetch).toHaveBeenCalledTimes(2);
+  for (const [, init] of nativeFetch.mock.calls) {
+    const payload = JSON.parse(String(init?.body)).payload;
+    expect(new URL(payload.url).pathname).toBe("/app/rooms/[redacted]");
+    expect(JSON.stringify(payload)).not.toMatch(/room-a|room-b|token|secret/);
+  }
+  instance.dispose();
 });

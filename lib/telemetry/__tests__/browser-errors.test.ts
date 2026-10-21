@@ -173,3 +173,51 @@ it("still captures new console errors and scrubs their private paths", async () 
   );
   expect(JSON.stringify(telemetry.events)).not.toContain("private/members");
 });
+
+it("DSN removal clears the reporter and disables automatic and explicit GlitchTip sends", async () => {
+  reportError(new Error("Before DSN removal"));
+  await Sentry.flush(2_000);
+  expect(telemetry.events).toHaveLength(1);
+  telemetry.events.length = 0;
+  const client = Sentry.getClient();
+  expect(client).toBeDefined();
+  if (!client) throw new Error("Expected initialized client");
+  const close = vi.spyOn(client, "close");
+  startErrorReporting({
+    dsn: undefined,
+    environment: "test",
+    release: undefined,
+    tracesSampleRate: 0,
+  });
+  expect(client.getOptions().enabled).toBe(false);
+  expect(close).toHaveBeenCalledOnce();
+  reportError(new Error("After DSN removal"));
+  reportBoundaryError(new Error("Boundary after DSN removal"));
+  console.error("Console after DSN removal");
+  Sentry.captureException(new Error("SDK after DSN removal"));
+  await Sentry.flush(2_000);
+  expect(telemetry.events).toHaveLength(0);
+});
+
+it("DSN removal also cancels an earlier pending SDK initialization", async () => {
+  vi.useFakeTimers();
+  const init = vi.spyOn(Sentry, "init");
+  try {
+    const config = {
+      dsn: "https://public@errors.invalid/10",
+      environment: "test",
+      release: undefined,
+      tracesSampleRate: 0,
+    };
+    const stop = startErrorReporting(config);
+    reportError(new Error("Buffered before DSN removal"));
+    startErrorReporting({ ...config, dsn: undefined });
+    await vi.runAllTimersAsync();
+    expect(init).not.toHaveBeenCalled();
+    expect(telemetry.events).toHaveLength(0);
+    stop();
+  } finally {
+    init.mockRestore();
+    vi.useRealTimers();
+  }
+});

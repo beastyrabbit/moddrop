@@ -11,6 +11,9 @@ function containsReportedError(args: unknown) {
 
 type Reporter = (error: unknown) => void;
 let report: Reporter | undefined;
+let disableClient: (() => void) | undefined;
+let reportingDisabled = false;
+let generation = 0;
 const pending: unknown[] = [];
 let stopBuffer: (() => void) | undefined;
 export function bufferEarlyErrors() {
@@ -28,7 +31,7 @@ export function bufferEarlyErrors() {
   };
 }
 export function reportError(error: unknown) {
-  if (error instanceof ReportedError) return;
+  if (reportingDisabled || error instanceof ReportedError) return;
   if (report) report(error);
   else if (pending.length < 20) pending.push(error);
 }
@@ -40,7 +43,12 @@ export function reportBoundaryError(error: Error & { digest?: string }) {
 }
 
 export function startErrorReporting(config: TelemetryConfig["errors"]) {
+  const currentGeneration = ++generation;
+  reportingDisabled = !config.dsn;
   if (!config.dsn) {
+    report = undefined;
+    disableClient?.();
+    disableClient = undefined;
     stopBuffer?.();
     pending.length = 0;
     return () => {};
@@ -54,7 +62,7 @@ export function startErrorReporting(config: TelemetryConfig["errors"]) {
         import("@sentry/browser"),
         import("@/backend/stream-canvas/src/telemetry/scrub"),
       ]);
-      if (cancelled) return;
+      if (cancelled || currentGeneration !== generation) return;
       Sentry.init({
         ...config,
         sendDefaultPii: false,
@@ -73,6 +81,7 @@ export function startErrorReporting(config: TelemetryConfig["errors"]) {
           Sentry.captureConsoleIntegration({ levels: ["error"] }),
         ],
         beforeSend: (event, hint) => {
+          if (currentGeneration !== generation) return null;
           const context = hint.captureContext;
           // Sentry normalizes event.extra before beforeSend; captureContext
           // retains the original console arguments, including Error instances.
@@ -92,6 +101,13 @@ export function startErrorReporting(config: TelemetryConfig["errors"]) {
         beforeSendTransaction: scrubTelemetry,
         beforeBreadcrumb: scrubTelemetry,
       });
+      const client = Sentry.getClient();
+      disableClient = () => {
+        if (!client) return;
+        // close() flushes asynchronously. Disable new sends immediately first.
+        client.getOptions().enabled = false;
+        void client.close();
+      };
       stopBuffer?.();
       report = (error) => {
         Sentry.captureException(error);

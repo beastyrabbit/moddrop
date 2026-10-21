@@ -89,6 +89,35 @@ async function assertStorage(page: Page, consent: boolean) {
   ).toEqual({ local: [], session: [] });
 }
 
+test("room to room history navigation sends two scrubbed pageviews", async ({
+  page,
+}) => {
+  const stub = await fixture(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Accept all", exact: true }).click();
+  await expect.poll(() => stub.requests).toContain("/api/send");
+  const roomPageviews = () =>
+    stub.bodies.filter((body) => {
+      const event = JSON.parse(body);
+      return (
+        event.type === "event" &&
+        !event.payload.name &&
+        new URL(event.payload.url).pathname === "/app/rooms/[redacted]"
+      );
+    });
+  // Next.js synchronizes native history navigation with usePathname. This
+  // exercises the root telemetry consumer without a signed-in room fixture.
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/app/rooms/room-a");
+  });
+  await expect.poll(() => roomPageviews().length).toBe(1);
+  await page.evaluate(() => {
+    window.history.pushState(null, "", "/app/rooms/room-b");
+  });
+  await expect.poll(() => roomPageviews().length).toBe(2);
+  expect(roomPageviews().join("\n")).not.toMatch(/room-a|room-b/);
+});
+
 test("TTFB is reported once after two client navigations", async ({ page }) => {
   const stub = await fixture(page);
   await page.goto("/");
