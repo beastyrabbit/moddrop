@@ -24,6 +24,7 @@ jobs:
         include:
           - image: moddrop-frontend
             dockerfile: Dockerfile
+            sourcemap_upload_required: '1'
           - image: moddrop-stream-canvas
             dockerfile: backend/stream-canvas/Dockerfile
     steps:
@@ -62,6 +63,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APP_RELEASE=${{ steps.release.outputs.value }}
+            SOURCEMAP_UPLOAD_REQUIRED=${{ matrix.sourcemap_upload_required }}
             NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_CANVAS_API_URL=/canvas-api
             NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${{ secrets.NEXT_PUBLIC_TLDRAW_LICENSE_KEY }}

@@ -1,31 +1,44 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   safePath,
   scrubTelemetry,
 } from "@/backend/stream-canvas/src/telemetry/scrub";
 import {
   analyticsAllowed,
-  createAnalytics,
   isBot,
   isOverlay,
   scrubRecording,
 } from "../analytics";
 import { telemetryConfig } from "../config";
-import {
+
+let {
   beginAuth,
   completeAuth,
   outboundHost,
   setAnalyticsTracker,
   track,
   vitalEvent,
-} from "../events";
+} = await import("../events");
+let { createAnalytics } = await import("../analytics");
 
 const config = {
   host: "https://analytics.invalid",
   website: "fixture",
   domains: "localhost",
 };
+beforeEach(async () => {
+  vi.resetModules();
+  ({ createAnalytics } = await import("../analytics"));
+  ({
+    beginAuth,
+    completeAuth,
+    outboundHost,
+    setAnalyticsTracker,
+    track,
+    vitalEvent,
+  } = await import("../events"));
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   setAnalyticsTracker();
@@ -219,7 +232,7 @@ describe("consent and analytics", () => {
     expect(window.fetch).toBe(restoredFetch);
     expect(tracker).not.toHaveBeenCalled();
     await window.fetch("/unrelated");
-    expect(fetch).toHaveBeenCalledExactlyOnceWith("/unrelated");
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("/unrelated", undefined);
   });
   it("ignores late script loads and keeps the fetch guard after loaded analytics are disposed", async () => {
     const fetch = vi.fn();

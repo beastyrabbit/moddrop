@@ -119,6 +119,86 @@ function recordingAttributes(value: unknown): Record<string, string> {
   return result;
 }
 
+type AnalyticsTransport = {
+  readonly config: NonNullable<TelemetryConfig["umami"]>;
+  readonly allowed: () => boolean;
+  readonly payload: () => Record<string, unknown>;
+};
+let activeInstance: AnalyticsTransport | undefined;
+let transportInstalled = false;
+let analyticsLoaded = false;
+const guardedEndpoints = new Set<string>();
+const blockedResponse = () => new Response("{}", { status: 200 });
+
+function recorderEndpoint(website: string) {
+  return `/api/websites/${website}/recorder`;
+}
+
+async function sendAnalytics(
+  instance: AnalyticsTransport,
+  nativeFetch: typeof fetch,
+  path: string,
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) {
+  const options: RequestInit = {
+    ...init,
+    referrerPolicy: "no-referrer",
+    credentials: "omit",
+  };
+  if (path === recorderEndpoint(instance.config.website)) {
+    const response = await nativeFetch(input, options);
+    if (!response.ok) return response;
+    const settings = await response.json();
+    if (activeInstance !== instance || !instance.allowed())
+      return blockedResponse();
+    // Sampling/enabled flags remain controlled by the self-hosted Umami admin.
+    return Response.json({
+      ...settings,
+      maskLevel: "strict",
+      blockSelector:
+        "[data-telemetry-private],.cl-rootBox,.cl-modalBackdrop,canvas,iframe,video,audio,img,svg",
+    });
+  }
+  if (typeof init?.body !== "string") return blockedResponse();
+  const body = JSON.parse(init.body) as {
+    type: string;
+    payload: Record<string, unknown>;
+  };
+  if (path === "/api/send" && body.type === "event") {
+    body.payload = { ...body.payload, ...instance.payload() };
+  } else if (path === "/api/record") {
+    body.payload = {
+      ...body.payload,
+      events: scrubRecording(body.payload.events),
+    };
+  } else return blockedResponse();
+  return nativeFetch(input, { ...options, body: JSON.stringify(body) });
+}
+
+function installTransport(config: AnalyticsTransport["config"]) {
+  for (const path of [
+    "/api/send",
+    "/api/record",
+    recorderEndpoint(config.website),
+  ])
+    guardedEndpoints.add(`${config.host}${path}`);
+  if (transportInstalled) return;
+  transportInstalled = true;
+  const nativeFetch = window.fetch.bind(window);
+  // One document-wide guard survives unmounts and boundary recovery. Keep old
+  // endpoints guarded too, so a retired recorder cannot flush after config changes.
+  window.fetch = async (input, init) => {
+    const url = new URL(fetchInputUrl(input), window.location.href);
+    if (!guardedEndpoints.has(`${url.origin}${url.pathname}`))
+      return nativeFetch(input, init);
+    const instance = activeInstance;
+    if (!instance?.allowed() || url.origin !== instance.config.host)
+      return blockedResponse();
+    return sendAnalytics(instance, nativeFetch, url.pathname, input, init);
+  };
+}
+
 export function createAnalytics(
   config: NonNullable<TelemetryConfig["umami"]>,
   reload = () => window.location.reload(),
@@ -126,10 +206,14 @@ export function createAnalytics(
   let consent = false;
   let disposed = false;
   let loaded = false;
+  let stopping = false;
+  let tracker: Umami | undefined;
   let route = "";
-  const originalFetch = window.fetch.bind(window);
+  const ownsTransport = () => activeInstance === instance;
   const allowed = () =>
     !disposed &&
+    !stopping &&
+    ownsTransport() &&
     analyticsAllowed(config, consent, window.location, navigator.userAgent);
   const scripts: HTMLScriptElement[] = [];
   const payload = () => ({
@@ -143,12 +227,12 @@ export function createAnalytics(
   });
   function pageview() {
     const next = safePath(window.location.href);
-    if (!allowed() || !window.umami || route === next) return;
+    if (!allowed() || !tracker || route === next) return;
     route = next;
-    void window.umami.track(payload());
+    void tracker.track(payload());
   }
   function loadScript(name: string) {
-    if (disposed) return;
+    if (!allowed()) return;
     const script = document.createElement("script");
     script.src = `${config.host}/${name}.js`;
     script.async = true;
@@ -160,6 +244,7 @@ export function createAnalytics(
     script.dataset.excludeHash = "true";
     script.onload = () => {
       if (name === "script" && allowed()) {
+        tracker = window.umami;
         pageview();
         loadScript("recorder");
       }
@@ -167,85 +252,30 @@ export function createAnalytics(
     scripts.push(script);
     document.head.append(script);
   }
-  // The recorder has neither a before-send hook nor URL exclusions. Restrict
-  // this guard to the configured Umami origin, and keep it installed until reload
-  // so unload flushes cannot send data after withdrawal or navigation to OBS.
-  window.fetch = async (input, init) => {
-    const url = new URL(fetchInputUrl(input), window.location.href);
-    if (
-      url.origin !== config.host ||
-      ![
-        "/api/send",
-        "/api/record",
-        `/api/websites/${config.website}/recorder`,
-      ].includes(url.pathname)
-    )
-      return originalFetch(input, init);
-    if (!allowed()) return new Response("{}", { status: 200 });
-    if (url.pathname === "/api/send" && typeof init?.body === "string") {
-      const body = JSON.parse(init.body) as {
-        type: string;
-        payload: Record<string, unknown>;
-      };
-      if (body.type !== "event") return new Response("{}");
-      body.payload = { ...body.payload, ...payload() };
-      return originalFetch(input, {
-        ...init,
-        referrerPolicy: "no-referrer",
-        credentials: "omit",
-        body: JSON.stringify(body),
-      });
-    }
-    if (url.pathname === "/api/record" && typeof init?.body === "string") {
-      const body = JSON.parse(init.body) as {
-        type: string;
-        payload: { website: string; timestamp: number; events: unknown[] };
-      };
-      const events = scrubRecording(body.payload.events);
-      return originalFetch(input, {
-        ...init,
-        referrerPolicy: "no-referrer",
-        credentials: "omit",
-        body: JSON.stringify({ ...body, payload: { ...body.payload, events } }),
-      });
-    }
-    if (url.pathname === `/api/websites/${config.website}/recorder`) {
-      const response = await originalFetch(input, {
-        ...init,
-        referrerPolicy: "no-referrer",
-        credentials: "omit",
-      });
-      if (!response.ok) return response;
-      const settings = await response.json();
-      // Sampling/enabled flags remain controlled by the self-hosted Umami admin.
-      return Response.json({
-        ...settings,
-        maskLevel: "strict",
-        blockSelector:
-          "[data-telemetry-private],.cl-rootBox,.cl-modalBackdrop,canvas,iframe,video,audio,img,svg",
-      });
-    }
-    return new Response("{}", { status: 200 });
-  };
+  const instance = { config, allowed, payload };
+  installTransport(config);
+  activeInstance = instance;
+  setAnalyticsTracker();
   return {
     pageview,
     setConsent(accepted: boolean) {
-      if (disposed) return;
+      if (disposed || stopping || !ownsTransport()) return;
       const withdrawing = consent && !accepted && loaded;
       consent = accepted;
       setAnalyticsTracker(
         accepted
           ? (name, data) => {
-              if (allowed())
-                void window.umami?.track({ ...payload(), name, data });
+              if (allowed()) void tracker?.track({ ...payload(), name, data });
             }
           : undefined,
       );
       if (allowed() && !loaded) {
         loaded = true;
+        analyticsLoaded = true;
         loadScript("script");
       }
       if (withdrawing) {
+        stopping = true;
         scripts.forEach((script) => {
           script.remove();
         });
@@ -255,13 +285,19 @@ export function createAnalytics(
     dispose(enteringOverlay = false) {
       disposed = true;
       consent = false;
-      setAnalyticsTracker();
+      const current = ownsTransport();
+      if (current) {
+        activeInstance = undefined;
+        setAnalyticsTracker();
+      }
       scripts.forEach((script) => {
         script.remove();
       });
       // A fresh document is necessary to remove recorder/history listeners.
-      if (loaded && enteringOverlay) reload();
-      else if (!loaded) window.fetch = originalFetch;
+      if (analyticsLoaded && enteringOverlay && (current || !activeInstance)) {
+        analyticsLoaded = false;
+        reload();
+      }
     },
   };
 }

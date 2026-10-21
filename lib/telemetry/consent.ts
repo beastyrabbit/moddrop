@@ -3,6 +3,12 @@ import * as CookieConsent from "vanilla-cookieconsent";
 export const CONSENT_COOKIE = "moddrop_consent";
 export const CONSENT_DAYS = 180;
 let running = false;
+let generation = 0;
+let owner:
+  | { readonly generation: number; readonly notify: () => void }
+  | undefined;
+let startup: Promise<unknown> | undefined;
+let starting = false;
 const listeners = new Set<() => void>();
 
 export function isConsentRunning() {
@@ -37,22 +43,11 @@ export function showCookieSettings() {
   CookieConsent.showPreferences();
 }
 
-export async function startConsent(
-  onAnalytics: (accepted: boolean) => void,
-  signal?: AbortSignal,
-) {
-  let stopped = false;
-  const notify = () => {
-    if (!stopped && !signal?.aborted)
-      onAnalytics(CookieConsent.acceptedCategory("analytics"));
-  };
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    setConsentRunning(false);
-    CookieConsent.reset(false);
-  };
-  await CookieConsent.run({
+function runConsent() {
+  // CookieConsent is a singleton: overlapping callers share initialization and
+  // its callbacks always address the current owner, including after remount.
+  const notify = () => owner?.notify();
+  return CookieConsent.run({
     cookie: {
       name: CONSENT_COOKIE,
       expiresAfterDays: CONSENT_DAYS,
@@ -141,10 +136,52 @@ export async function startConsent(
       },
     },
   });
-  if (signal?.aborted) stop();
-  else {
-    setConsentRunning(true);
-    notify();
+}
+
+function resetConsent() {
+  if (starting) return;
+  startup = undefined;
+  CookieConsent.reset(false);
+}
+
+export async function startConsent(
+  onAnalytics: (accepted: boolean) => void,
+  signal?: AbortSignal,
+) {
+  if (signal?.aborted) return () => {};
+  const current = ++generation;
+  let stopped = false;
+  const notify = () => {
+    if (owner?.generation === current && !stopped && !signal?.aborted)
+      onAnalytics(CookieConsent.acceptedCategory("analytics"));
+  };
+  const stop = () => {
+    signal?.removeEventListener("abort", stop);
+    if (stopped) return;
+    stopped = true;
+    if (owner?.generation !== current) return;
+    owner = undefined;
+    resetConsent();
+    setConsentRunning(false);
+  };
+  owner = { generation: current, notify };
+  signal?.addEventListener("abort", stop, { once: true });
+  if (!startup) {
+    starting = true;
+    startup = runConsent().finally(() => {
+      starting = false;
+      if (!owner) resetConsent();
+    });
+  }
+  try {
+    await startup;
+    if (owner?.generation === current) {
+      setConsentRunning(true);
+      notify();
+    }
+  } catch (error) {
+    stop();
+    throw error;
   }
   return stop;
 }

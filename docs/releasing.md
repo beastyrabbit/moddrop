@@ -42,13 +42,17 @@ production `/ci` path. The script reads the mount and passes the value only in t
 CLI child's environment. It is never a build argument, Docker ENV, copied file,
 layer or log entry. CLI output is suppressed because failure responses may echo
 credentials. Failures report only the failed step and exit status. When the secret
-exists, injection/upload failure fails the build.
+exists, injection/upload failure fails the build. The workflow also sets
+`SOURCEMAP_UPLOAD_REQUIRED=1` for the frontend image. With this build argument,
+a missing or empty upload secret fails the build with an explicit error. The
+builder passes the argument to the upload script through its environment.
 Before injection or upload, the script rejects any Clerk, canvas API or tldraw
 runtime placeholder anywhere under `.next/static`. Runtime replacement changes
 JavaScript columns and invalidates uploaded source maps. CI images must therefore
 contain the final public values; the entrypoint remains available for local and
 Compose builds that skip upload. It does not rewrite CI browser artifacts.
-When absent, local and PR builds skip upload cleanly. The step always removes
+Local and PR builds leave `SOURCEMAP_UPLOAD_REQUIRED` unset and skip upload cleanly
+when the secret is absent. The step always removes
 every `.map` under `.next`, including standalone dependency maps, before copying
 the runner image. Source maps must never be served publicly.
 

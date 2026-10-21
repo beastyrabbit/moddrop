@@ -20,6 +20,11 @@ try {
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
+  if (process.env.SOURCEMAP_UPLOAD_REQUIRED === "1" && !token) {
+    step =
+      "required source-map upload: GLITCHTIP_AUTH_TOKEN BuildKit secret is missing or empty";
+    throw new Error("Required source-map upload has no token");
+  }
   if (token) {
     step = "validate browser artifacts contain no runtime placeholders";
     assertNoRuntimePlaceholders(".next/static");

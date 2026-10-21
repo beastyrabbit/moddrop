@@ -160,3 +160,24 @@ Browser source maps upload to `https://glitchtip.heerlab.com` by default, with
 `SENTRY_URL` as an override. The upload creates no deploys and does not call
 `set-commits`. See [releasing.md](releasing.md) for BuildKit secret handling,
 failure behavior and map removal.
+
+### Lifecycle matrix
+
+`lib/telemetry/__tests__/lifecycle.test.tsx` uses deferred CookieConsent startup
+and a fake native fetch. It mounts the real telemetry and Cookie settings
+components where UI state matters. Overlapping consent starts share one pending
+singleton initialization, so independent `run()` completion orders cannot occur.
+Only the newest generation receives callbacks or resets the singleton.
+
+| Sequence | Expected result |
+| --- | --- |
+| Mount, accept, unmount, remount | Same fetch guard; analytics resumes after saved consent |
+| Mount, unmount before consent resolves, remount | Old completion does nothing; new analytics works; Cookie settings stays visible |
+| Overlapping consent starts, old cleanup first or new cleanup first | One initialization; only current owner notifies and resets |
+| Completed consent, replacement, old abort/cleanup | Replacement UI and callbacks remain active |
+| Abort pending consent without a replacement | Reset after initialization settles; no analytics callback |
+| Accept, withdraw, reload pending | Scripts removed; final flush blocked; accepting again cannot restart the retired recorder |
+| Enter `/obs` before scripts load or after they load | No reload before load; one reload after load, including across remounts |
+| Global error, reset without reload, saved consent | Analytics resumes; payloads scrubbed; recorder settings overridden; credentials omitted; no referrer |
+| Replacement analytics, stale disposal/script callback/config/global | Captured current tracker survives; retired endpoints stay blocked |
+| Recorder settings resolve after replacement | Retired recorder receives no enabled settings |
