@@ -3,6 +3,12 @@ import type { TelemetryConfig } from "./config";
 /** An error whose error report and failure event have already been emitted. */
 export class ReportedError extends Error {}
 
+function containsReportedError(args: unknown) {
+  return (
+    Array.isArray(args) && args.some((arg) => arg instanceof ReportedError)
+  );
+}
+
 type Reporter = (error: unknown) => void;
 let report: Reporter | undefined;
 const pending: unknown[] = [];
@@ -60,7 +66,23 @@ export function startErrorReporting(config: TelemetryConfig["errors"]) {
           Sentry.breadcrumbsIntegration({ dom: false, console: false }),
           Sentry.captureConsoleIntegration({ levels: ["error"] }),
         ],
-        beforeSend: scrubTelemetry,
+        beforeSend: (event, hint) => {
+          const context = hint.captureContext;
+          // Sentry normalizes event.extra before beforeSend; captureContext
+          // retains the original console arguments, including Error instances.
+          const args =
+            context && typeof context === "object" && "extra" in context
+              ? context.extra?.arguments
+              : undefined;
+          if (
+            hint.originalException instanceof ReportedError ||
+            containsReportedError(event.extra?.arguments) ||
+            containsReportedError(args)
+          ) {
+            return null;
+          }
+          return scrubTelemetry(event);
+        },
         beforeSendTransaction: scrubTelemetry,
         beforeBreadcrumb: scrubTelemetry,
       });

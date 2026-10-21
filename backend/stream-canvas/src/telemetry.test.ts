@@ -54,7 +54,39 @@ test("privacy scrubber parses sensitive assignments without leaking quoted or ma
 });
 
 for (const [input, expected] of [
+  [
+    "GET /app/rooms/12345678-1234-1234-1234-123456789abc",
+    "GET /app/rooms/[redacted]",
+  ],
+  ["GET /api/rooms/abc123/members", "GET /api/rooms/[redacted]"],
+  [
+    "upload /data/uploads/room-private/filename.png",
+    "upload /data/uploads/[redacted]",
+  ],
+  ["fetch /api/users/user_2abc/settings", "fetch /api/users/[redacted]"],
+  ["GET /uploads/filename.png", "GET /uploads/[redacted]"],
+  ["GET /_next/static/chunks/app.js", "GET /_next/static/chunks/app.js"],
+  [
+    "GET /profile/person%40example.com/user_2abc/abcdefghijklmnopqrstuvwxyz?token=private#fragment",
+    "GET /profile/[redacted]/[redacted]/[redacted]",
+  ],
+] as const) {
+  test(`privacy scrubber sanitizes relative paths in error text: ${input}`, () => {
+    assert.equal(scrubText(input), expected);
+    assert.equal(
+      scrubTelemetry({ exception: { values: [{ value: input }] } }).exception
+        .values[0]?.value,
+      expected,
+    );
+  });
+}
+
+for (const [input, expected] of [
   ['{"token":"opaque-credential"}', '{"token":[redacted]}'],
+  [
+    JSON.stringify(JSON.stringify({ token: "a/b", ok: 1 })),
+    String.raw`"{\"token\":[redacted],\"ok\":1}"`,
+  ],
   ['{"access_token": "abc", "ok": 1}', '{"access_token": [redacted], "ok": 1}'],
   ["{'password':'p'}", "{'password':[redacted]}"],
   [String.raw`{\"apiKey\":\"k\"}`, String.raw`{\"apiKey\":[redacted]}`],

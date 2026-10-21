@@ -83,6 +83,7 @@ async function fetchApi(
         error instanceof Error
           ? error.message
           : "Canvas API network request failed",
+        { cause: error },
       );
     });
 
@@ -101,8 +102,9 @@ async function fetchApi(
     const message = await parseApiError(res);
     if (res.status >= 500) {
       track("failure", { operation: "api", reason: "rejected" });
-      reportError(new Error(`Canvas API failed (${res.status})`));
-      throw new ReportedError(message);
+      const error = new Error(`Canvas API failed (${res.status})`);
+      reportError(error);
+      throw new ReportedError(message, { cause: error });
     }
     throw new Error(message);
   }
@@ -312,8 +314,10 @@ export async function uploadFile(
     track("upload_failed", {
       reason: uploadFailureReason(error),
     });
-    if (error instanceof TypeError)
+    if (error instanceof TypeError) {
       reportError(new Error("Canvas upload network request failed"));
+      throw new ReportedError(error.message, { cause: error });
+    }
     throw error;
   }
 }

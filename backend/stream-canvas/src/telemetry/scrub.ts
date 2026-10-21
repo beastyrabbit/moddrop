@@ -58,7 +58,8 @@ export function safeDescription(value: string): string {
 export function scrubText(value: string): string {
   const text = value
     .replace(/(\bparams:)[\s\S]*/gi, "$1 [redacted]")
-    .replace(/(?:https?|wss?):\/\/[^\s<>"')]+/gi, (url) => {
+    .replace(/(?:(?:https?|wss?):\/\/|\/)[^\s<>"')\\]*/gi, (url) => {
+      if (url.startsWith("/")) return safePath(url);
       try {
         const parsed = new URL(url);
         return `${parsed.protocol}//${parsed.host}${safePath(url)}`;
@@ -69,8 +70,7 @@ export function scrubText(value: string): string {
     .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
     .replace(/\beyJ[\w-]+(?:\.[\w-]+){1,2}\b/g, "[redacted]")
     // Scan disjoint tokens/domains once, rather than retrying at each character.
-    .replace(/[\w.+%@-]+/g, scrubEmailToken)
-    .replace(/\/[^\s'"<>]*/g, (path) => path.split(/[?#]/, 1)[0] ?? "");
+    .replace(/[\w.+%@-]+/g, scrubEmailToken);
   return scrubAssignments(text).slice(0, 2_000);
 }
 
