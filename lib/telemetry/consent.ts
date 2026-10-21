@@ -20,7 +20,9 @@ function setConsentRunning(value: boolean) {
 }
 
 export function isGermanLegalPath(pathname: string) {
-  const path = pathname.replace(/\/+$/, "");
+  let end = pathname.length;
+  while (end > 0 && pathname[end - 1] === "/") end--;
+  const path = pathname.slice(0, end);
   return path === "/datenschutz" || path === "/impressum";
 }
 

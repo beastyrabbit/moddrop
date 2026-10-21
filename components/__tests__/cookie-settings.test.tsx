@@ -67,6 +67,15 @@ it.each([
   },
 );
 
+it("rejects a 100 KB adversarial legal path in under 50 ms", () => {
+  const pathname = `${"/".repeat(100_000)}x`;
+  const start = performance.now();
+  const result = isGermanLegalPath(pathname);
+  const elapsed = performance.now() - start;
+  expect(result).toBe(false);
+  expect(elapsed).toBeLessThan(50);
+});
+
 it("hides settings until consent finishes starting and hides them after teardown", async () => {
   let ready: () => void = () => {};
   mocks.run.mockReturnValue(
