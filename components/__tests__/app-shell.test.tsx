@@ -63,6 +63,10 @@ describe("AppShell", () => {
     expect(html).toContain("Sign out");
     expect(html.match(/Sign out/g)).toHaveLength(1);
     expect(html).not.toContain(">Log in<");
+    expect(html).toContain('<div class="app-shell ');
+    expect(html).toMatch(
+      /<span data-telemetry-private="true" class="rr-block [^"]*">greenroom_mod<\/span>/,
+    );
   });
 
   it("marks Settings as current on the settings route", () => {

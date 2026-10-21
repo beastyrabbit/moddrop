@@ -368,6 +368,37 @@ export const privacyDE: readonly LegalSection[] = [
     ),
   },
   {
+    id: "telemetry",
+    title: "Reichweitenmessung und Fehlerberichte",
+    content: (
+      <>
+        <p>
+          {
+            "Umami wird auf eigenen Servern des Betreibers in Deutschland betrieben. Erst nach Ihrer Einwilligung erfasst es Seitenaufrufe, Funktionsereignisse, Hostnamen ausgehender Links und Web Vitals sowie maskierte Seiteninteraktionen für Sitzungsaufzeichnungen und Heatmaps, abhängig von der serverseitigen Stichprobe. Texte und Eingaben werden maskiert; Kontobereiche, Canvas und Medien werden gesperrt. URL-Parameter, Fragmente, Referrer und Raumkennungen werden entfernt. Ihr Konto wird Umami gegenüber nicht identifiziert. OBS-Overlays sind ausgenommen."
+          }
+        </p>
+        <p>
+          {
+            "Rechtsgrundlage ist Ihre Einwilligung nach Art. 6 Abs. 1 lit. a DSGVO und für Zugriffe auf Ihr Endgerät § 25 Abs. 1 TDDDG. Umami schreibt keine Cookies und keine Einträge in localStorage oder sessionStorage. Analysedaten werden nach 25 Monaten, Sitzungsaufzeichnungen und Heatmap-Daten nach 30 Tagen automatisch gelöscht. Sie können Ihre Einwilligung jederzeit über Cookie-Einstellungen widerrufen. Dabei wird Ihre Auswahl gespeichert und die Seite neu geladen, um die Aufzeichnung zu beenden. Die Verarbeitung vor dem Widerruf bleibt unberührt."
+          }
+        </p>
+        <p>
+          {
+            "GlitchTip wird auf eigenen Servern des Betreibers in Deutschland betrieben. Es empfängt bereinigte Fehlerberichte aus Browser, Next.js-Server und Backend einschließlich des OBS-Overlays. Die Berichte enthalten technische Fehler, Stacktraces, Release- und Umgebungsangaben sowie bereinigte Routen. Kontodaten, Zugangsdaten und Anfrageinhalte werden entfernt. Bei der Übertragung erhält der empfangende Server Verbindungsdaten. GlitchTip schreibt keine Cookies und nutzt weder localStorage noch sessionStorage. Die Aufbewahrungsfrist beträgt 90 Tage. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; unser berechtigtes Interesse ist die Fehlerdiagnose und ein zuverlässiger Betrieb. Fehlerberichte erfolgen unabhängig von der Analyse-Einwilligung."
+          }
+        </p>
+        <p>
+          Sie haben ein Widerspruchsrecht bei Verarbeitungen auf Grundlage
+          berechtigter Interessen. Wenden Sie sich dazu an{" "}
+          <a href={`mailto:${controller.privacyEmail}`}>
+            {controller.privacyEmail}
+          </a>
+          .
+        </p>
+      </>
+    ),
+  },
+  {
     id: "privacyDE-11",
     title: "Cookies und lokale Speicherung",
     content: (

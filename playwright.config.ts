@@ -3,8 +3,9 @@ import { legalWebServer } from "./e2e/legal.config";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/telemetry/**",
   projects: [
-    { name: "canvas", testIgnore: "legal.spec.ts" },
+    { name: "canvas", testIgnore: ["**/legal.spec.ts", "**/telemetry/**"] },
     {
       name: "legal",
       testMatch: "legal.spec.ts",

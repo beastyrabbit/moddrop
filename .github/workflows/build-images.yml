@@ -28,6 +28,15 @@ jobs:
             dockerfile: backend/stream-canvas/Dockerfile
     steps:
       - uses: actions/checkout@v7
+      - name: Set application release
+        id: release
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "value=moddrop@${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=moddrop@$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/setup-buildx-action@v4
         with:
           driver: remote
@@ -52,4 +61,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
+            APP_RELEASE=${{ steps.release.outputs.value }}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_CANVAS_API_URL=/canvas-api
             NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${{ secrets.NEXT_PUBLIC_TLDRAW_LICENSE_KEY }}
+          secrets: |
+            glitchtip_auth_token=${{ secrets.GLITCHTIP_AUTH_TOKEN }}

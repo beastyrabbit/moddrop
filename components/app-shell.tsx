@@ -5,6 +5,7 @@ import { LogIn, LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ModdropLogo } from "@/components/common/ModdropLogo";
+import { beginAuth } from "@/lib/telemetry/events";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -81,7 +82,10 @@ function ThemedAppShell({
             {isLoaded && isSignedIn ? (
               <>
                 {displayName ? (
-                  <span className="hidden max-w-44 truncate text-sm text-muted-foreground md:block">
+                  <span
+                    data-telemetry-private
+                    className="rr-block hidden max-w-44 truncate text-sm text-muted-foreground md:block"
+                  >
                     {displayName}
                   </span>
                 ) : null}
@@ -97,6 +101,7 @@ function ThemedAppShell({
             ) : null}
             {isLoaded && !isSignedIn ? (
               <Link
+                onClick={() => beginAuth("sign_in")}
                 href={`/sign-in?redirect_url=${encodeURIComponent(pathname)}`}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
               >

@@ -46,6 +46,8 @@ the data model, migration flow, and production storage design.
 
 See [the product and canvas design direction](./docs/design-direction.md) and
 [release notes](./docs/releasing.md) for durable UI and deployment guidance.
+See [telemetry and privacy](./docs/telemetry.md) for production analytics/error
+settings, consent behavior, device storage and the event catalogue.
 
 ## Check
 

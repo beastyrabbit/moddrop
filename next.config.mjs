@@ -4,6 +4,7 @@ const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
 const nextConfig = {
   output: "standalone",
+  productionBrowserSourceMaps: true,
   skipTrailingSlashRedirect: true,
   turbopack: {
     root: projectRoot,

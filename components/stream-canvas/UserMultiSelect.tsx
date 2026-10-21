@@ -82,7 +82,11 @@ export function UserMultiSelect({
   );
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      data-telemetry-private
+      className="rr-block relative"
+    >
       <div
         className={cn(
           "flex min-h-11 flex-wrap items-center gap-1.5 rounded-lg border border-input",

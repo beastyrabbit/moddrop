@@ -1,15 +1,20 @@
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { sql } from "drizzle-orm";
 import { config } from "./config.ts";
-import { withDeadline } from "./deadline.ts";
 import { db } from "./db.ts";
+import { withDeadline } from "./deadline.ts";
 import { leaderState } from "./leader.ts";
 import { objectStore } from "./object-store.ts";
 import { api } from "./routes.ts";
 
 // Importable HTTP wiring, without starting listeners or leadership timers.
 export const app = new Hono();
+app.onError((error, c) => {
+  // The console integration reports this once while preserving server logs.
+  console.error("[stream-canvas] request failed", error);
+  return c.json({ error: "Internal server error" }, 500);
+});
 app.use("*", cors({ origin: config.corsOrigins }));
 app.get("/health", (c) => c.json({ status: "ok" }));
 app.get("/ready", async (c) => {

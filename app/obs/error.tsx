@@ -1,10 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportError } from "@/lib/telemetry/browser-errors";
+
 export default function OBSError({
+  error,
   reset,
 }: Readonly<{
+  error: Error;
   reset: () => void;
 }>) {
+  useEffect(() => {
+    reportError(error);
+  }, [error]);
   return (
     <div
       role="alert"

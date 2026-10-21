@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CookieSettings } from "@/components/cookie-settings";
 
 export function LegalLinks() {
   return (
@@ -32,6 +33,7 @@ export function LegalLinks() {
       >
         Datenschutz
       </Link>
+      <CookieSettings />
     </nav>
   );
 }

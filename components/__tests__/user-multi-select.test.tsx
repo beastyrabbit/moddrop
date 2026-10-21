@@ -30,6 +30,7 @@ test("search transitions through loading, empty, and filtered results without lo
   const { rerender } = render(<UserMultiSelect {...props} />);
   expect(screen.getByText("Loading user…")).toBeTruthy();
   const input = screen.getByRole("combobox");
+  expect(input.closest("[data-telemetry-private].rr-block")).not.toBeNull();
   fireEvent.change(input, { target: { value: " a " } });
   expect(screen.getByRole("option").getAttribute("aria-disabled")).toBe("true");
   expect(screen.getByText("Searching…")).toBeTruthy();
@@ -40,6 +41,9 @@ test("search transitions through loading, empty, and filtered results without lo
   state.results = [...state.resolved, { userId: "user_ben", username: "Ben" }];
   rerender(<UserMultiSelect {...props} />);
   expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(
+    screen.getByRole("option").closest("[data-telemetry-private].rr-block"),
+  ).toBe(input.closest("[data-telemetry-private].rr-block"));
   fireEvent.click(screen.getByRole("option", { name: /^Ben/ }));
   expect(select).toHaveBeenCalledWith(["user_ava", "user_ben"]);
   expect(input.getAttribute("aria-expanded")).toBe("false");

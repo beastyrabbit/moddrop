@@ -1,3 +1,5 @@
+import { reportError } from "@/lib/telemetry/browser-errors";
+import { track } from "@/lib/telemetry/events";
 import type {
   AccessibleRoom,
   CanvasRoom,
@@ -74,6 +76,10 @@ async function fetchApi(
           ? { "Content-Type": "application/json" }
           : {}),
       },
+    }).catch((error: unknown) => {
+      track("failure", { operation: "api", reason: "network" });
+      reportError(new Error("Canvas API network request failed"));
+      throw error;
     });
 
   let res = await makeRequest(token);
@@ -88,6 +94,10 @@ async function fetchApi(
   }
 
   if (!res.ok) {
+    if (res.status >= 500) {
+      track("failure", { operation: "api", reason: "rejected" });
+      reportError(new Error(`Canvas API failed (${res.status})`));
+    }
     throw new Error(await parseApiError(res));
   }
   return res.json();
@@ -123,8 +133,14 @@ export function resolveUsers(
 }
 
 /** Create or get the current user's room. */
-export function createRoom(getToken: ClerkTokenGetter): Promise<CanvasRoom> {
-  return fetchApi("/api/rooms", getToken, { method: "POST" });
+export async function createRoom(
+  getToken: ClerkTokenGetter,
+): Promise<CanvasRoom> {
+  const room: CanvasRoom = await fetchApi("/api/rooms", getToken, {
+    method: "POST",
+  });
+  if (room.obsSetupSecret) track("room_created", {});
+  return room;
 }
 
 /** Get the current user's room. */
@@ -140,7 +156,7 @@ export function getAccessibleRooms(
 }
 
 /** Update room config. */
-export function updateRoom(
+export async function updateRoom(
   roomId: string,
   data: {
     twitchChannel?: string | null;
@@ -150,20 +166,32 @@ export function updateRoom(
   },
   getToken: ClerkTokenGetter,
 ): Promise<CanvasRoom> {
-  return fetchApi(`/api/rooms/${roomId}`, getToken, {
+  const room: CanvasRoom = await fetchApi(`/api/rooms/${roomId}`, getToken, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
+  track("settings_changed", {
+    moderators: data.allowedUsers !== undefined,
+    youtube: data.youtubePolicy !== undefined,
+    twitch: data.twitchChannel !== undefined,
+  });
+  return room;
 }
 
 /** Regenerate the OBS room secret. */
-export function regenerateSecret(
+export async function regenerateSecret(
   roomId: string,
   getToken: ClerkTokenGetter,
 ): Promise<{ ok: boolean; obsSecret: string }> {
-  return fetchApi(`/api/rooms/${roomId}/regenerate-secret`, getToken, {
-    method: "POST",
-  });
+  const result: { ok: boolean; obsSecret: string } = await fetchApi(
+    `/api/rooms/${roomId}/regenerate-secret`,
+    getToken,
+    {
+      method: "POST",
+    },
+  );
+  track("obs_link_regenerated", {});
+  return result;
 }
 
 /** Mint a short-lived editor WebSocket token. */
@@ -265,6 +293,37 @@ export async function getObsUploadAccessUrl(
 
 /** Upload a file to a room. Returns the upload URL. */
 export async function uploadFile(
+  roomId: string,
+  file: File,
+  getToken: ClerkTokenGetter,
+): Promise<{ id: string; url: string; filename: string }> {
+  try {
+    const result = await performUpload(roomId, file, getToken);
+    const type = file.type.startsWith("image/")
+      ? "image"
+      : file.type.startsWith("video/")
+        ? "video"
+        : file.type.startsWith("audio/")
+          ? "audio"
+          : "other";
+    track("upload_succeeded", { type });
+    return result;
+  } catch (error) {
+    track("upload_failed", {
+      reason:
+        error instanceof TypeError
+          ? "network"
+          : error instanceof Error && error.message === "Not authenticated"
+            ? "authentication"
+            : "rejected",
+    });
+    if (error instanceof TypeError)
+      reportError(new Error("Canvas upload network request failed"));
+    throw error;
+  }
+}
+
+async function performUpload(
   roomId: string,
   file: File,
   getToken: ClerkTokenGetter,

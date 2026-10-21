@@ -8,12 +8,16 @@ import {
 } from "next/font/google";
 import { Toaster } from "sonner";
 import { AppProviders } from "@/components/providers";
+import { Telemetry } from "@/components/telemetry";
 import {
   buildClerkScriptProps,
   clerkAppearance,
   getClerkPublishableKey,
 } from "@/lib/clerk-config";
+import { telemetryConfig } from "@/lib/telemetry/config";
 import "./globals.css";
+import "vanilla-cookieconsent/dist/cookieconsent.css";
+import "./consent.css";
 
 const sans = Unbounded({
   variable: "--font-sans",
@@ -46,6 +50,7 @@ const productDisplay = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
+  referrer: "strict-origin",
   title: "Moddrop",
   description:
     "Collaborative stream canvases for live overlays and browser-source control.",
@@ -76,10 +81,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${sans.variable} ${mono.variable} ${display.variable} ${productSans.variable} ${productDisplay.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
+        className={`rr-mask ${sans.variable} ${mono.variable} ${display.variable} ${productSans.variable} ${productDisplay.variable} min-h-screen bg-background font-sans text-foreground antialiased`}
       >
         <ClerkProvider {...clerkProviderProps}>
           <AppProviders>
+            <Telemetry config={telemetryConfig(process.env)} />
             {children}
             <Toaster position="bottom-right" />
           </AppProviders>

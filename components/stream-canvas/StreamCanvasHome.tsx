@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { createRoom, getAccessibleRooms } from "@/lib/stream-canvas/api";
 import type { AccessibleRoom } from "@/lib/stream-canvas/types";
+import { beginAuth } from "@/lib/telemetry/events";
 import { cn } from "@/lib/utils";
 
 const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
@@ -96,6 +97,7 @@ export function StreamCanvasHome() {
             collaborator access stay private.
           </p>
           <Link
+            onClick={() => beginAuth("sign_in")}
             href="/sign-in"
             className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
           >
@@ -151,7 +153,11 @@ export function StreamCanvasHome() {
           </div>
         </section>
       ) : (
-        <section aria-labelledby="room-list-title">
+        <section
+          data-telemetry-private
+          className="rr-block"
+          aria-labelledby="room-list-title"
+        >
           <h2 id="room-list-title" className="sr-only">
             Accessible rooms
           </h2>

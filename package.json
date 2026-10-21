@@ -18,7 +18,8 @@
     "start": "infisical run --silent --domain=http://192.168.60.11:8080 --projectId=b474ca10-dd7c-48d7-823c-ff9b92c6ccc1 --env=prod --path=/ -- next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:browser": "playwright test",
+    "test:browser": "playwright test && playwright test --config playwright.telemetry.config.ts",
+    "test:telemetry": "playwright test --config playwright.telemetry.config.ts",
     "test:runtime-config": "node scripts/test-runtime-config.ts",
     "lint": "biome lint .",
     "format": "biome format --write ."
@@ -26,6 +27,8 @@
   "dependencies": {
     "@clerk/nextjs": "^7.6.1",
     "@clerk/themes": "^2.4.57",
+    "@sentry/browser": "^10.76.2",
+    "@sentry/node": "^10.76.2",
     "@tldraw/sync": "^5.2.5",
     "clsx": "^2.1.1",
     "lucide-react": "^1.26.0",
@@ -34,11 +37,13 @@
     "react-dom": "19.2.8",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
-    "tldraw": "^5.2.5"
+    "tldraw": "^5.2.5",
+    "vanilla-cookieconsent": "^3.1.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",
     "@playwright/test": "^1.62.1",
+    "@sentry/cli": "^3.8.0",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.3",

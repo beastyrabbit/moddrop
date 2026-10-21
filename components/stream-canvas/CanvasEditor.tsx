@@ -62,6 +62,8 @@ import {
   ViewSubmenu,
   XBoxToolbarItem,
 } from "tldraw";
+import { reportError } from "@/lib/telemetry/browser-errors";
+import { track } from "@/lib/telemetry/events";
 import "tldraw/tldraw.css";
 import {
   buildEditorWsUrl,
@@ -786,6 +788,15 @@ export function CanvasEditor({
     },
   });
 
+  const connectionError =
+    storeWithStatus.status === "error" ? storeWithStatus.error : null;
+  useEffect(() => {
+    if (connectionError) {
+      reportError(connectionError);
+      track("failure", { operation: "canvas", reason: "network" });
+    }
+  }, [connectionError]);
+
   if (storeWithStatus.status === "loading") {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -803,7 +814,7 @@ export function CanvasEditor({
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div data-telemetry-private className="rr-block relative h-full w-full">
       <MediaPreferencesProvider roomId={roomId} userId={userId}>
         <CanvasMediaRefreshContext.Provider value={mediaRefreshCtx}>
           <AudioUploadCtx.Provider value={audioUploadCtx}>
@@ -811,6 +822,27 @@ export function CanvasEditor({
               <YouTubePolicyCtx.Provider value={youtubePolicy}>
                 <Tldraw
                   onMount={(editor) => {
+                    const stopMediaEvents = editor.store.listen(
+                      ({ changes }) => {
+                        for (const record of Object.values(changes.added)) {
+                          if (record.typeName !== "shape") continue;
+                          const type =
+                            record.type === "youtube-embed"
+                              ? "youtube"
+                              : record.type === "audio-player"
+                                ? "audio"
+                                : record.type === "image"
+                                  ? "image"
+                                  : record.type === "video"
+                                    ? "video"
+                                    : record.type === "embed"
+                                      ? "embed"
+                                      : undefined;
+                          if (type) track("media_added", { type });
+                        }
+                      },
+                      { source: "user", scope: "document" },
+                    );
                     editor.registerExternalContentHandler(
                       "embed",
                       (content) => {
@@ -832,7 +864,11 @@ export function CanvasEditor({
                         );
                       },
                     );
-                    return onMount?.(editor);
+                    const cleanup = onMount?.(editor);
+                    return () => {
+                      stopMediaEvents();
+                      if (typeof cleanup === "function") cleanup();
+                    };
                   }}
                   store={storeWithStatus.store}
                   shapeUtils={customShapeUtils}
