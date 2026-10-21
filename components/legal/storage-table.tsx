@@ -55,7 +55,9 @@ const rows = {
   ],
 } as const;
 
-export function StorageTable({ language }: { language: LegalLanguage }) {
+export function StorageTable({
+  language,
+}: Readonly<{ language: LegalLanguage }>) {
   const headings =
     language === "de"
       ? ["Anbieter", "Zweck", "Dauer", "Einordnung"]

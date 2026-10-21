@@ -157,9 +157,7 @@ describe("legal routes", () => {
 
 describe("legal navigation", () => {
   it("keeps the OBS error state transparent and free of legal links", () => {
-    const html = renderToStaticMarkup(
-      <OBSError error={new Error("fixture")} reset={() => {}} />,
-    );
+    const html = renderToStaticMarkup(<OBSError reset={() => {}} />);
     expect(html).toContain("OBS output unavailable.");
     expect(html).toContain("Try again");
     expect(html).not.toContain("href=");
@@ -172,12 +170,8 @@ describe("legal navigation", () => {
       <AppLayout key="app">Rooms</AppLayout>,
       <SignInPage key="sign-in" />,
       <NotFound key="404" />,
-      <ErrorPage key="error" error={new Error("fixture")} reset={() => {}} />,
-      <GlobalError
-        key="global"
-        error={new Error("fixture")}
-        reset={() => {}}
-      />,
+      <ErrorPage key="error" reset={() => {}} />,
+      <GlobalError key="global" reset={() => {}} />,
     ])
       expectLinks(renderToStaticMarkup(element));
   });

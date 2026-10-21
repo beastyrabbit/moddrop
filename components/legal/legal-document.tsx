@@ -10,12 +10,12 @@ export function LegalDocument({
   title,
   sections,
   updated,
-}: {
+}: Readonly<{
   language: LegalLanguage;
   title: string;
   sections: readonly LegalSection[];
   updated?: string;
-}) {
+}>) {
   return (
     <div
       lang={language}

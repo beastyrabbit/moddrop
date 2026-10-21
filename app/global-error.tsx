@@ -4,10 +4,9 @@ import { LegalFooter } from "@/components/legal/legal-footer";
 
 export default function GlobalError({
   reset,
-}: {
-  error: Error & { digest?: string };
+}: Readonly<{
   reset: () => void;
-}) {
+}>) {
   return (
     <html lang="en">
       <body>

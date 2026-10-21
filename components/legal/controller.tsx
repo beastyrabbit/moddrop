@@ -12,7 +12,9 @@ export const controller = {
   updated: "2026-10-21",
 } as const;
 
-export function ControllerAddress({ language }: { language: LegalLanguage }) {
+export function ControllerAddress({
+  language,
+}: Readonly<{ language: LegalLanguage }>) {
   return (
     <address className="not-italic">
       {controller.name}

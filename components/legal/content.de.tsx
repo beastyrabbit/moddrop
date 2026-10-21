@@ -6,51 +6,37 @@ export const noticeDE: readonly LegalSection[] = [
   {
     id: "noticeDE-1",
     title: "Anbieter",
-    content: (
-      <>
-        <ControllerAddress language="de" />
-      </>
-    ),
+    content: <ControllerAddress language="de" />,
   },
   {
     id: "noticeDE-2",
     title: "Kontakt",
     content: (
-      <>
-        <p>
-          {"E-Mail: "}
-          <a href={`mailto:${controller.legalEmail}`}>
-            {controller.legalEmail}
-          </a>
-          <br />
-          {"Kontaktformular: "}
-          <a href={controller.contactUrl}>{"beastyrabbit.com/kontakt"}</a>
-        </p>
-      </>
+      <p>
+        {"E-Mail: "}
+        <a href={`mailto:${controller.legalEmail}`}>{controller.legalEmail}</a>
+        <br />
+        {"Kontaktformular: "}
+        <a href={controller.contactUrl}>{"beastyrabbit.com/kontakt"}</a>
+      </p>
     ),
   },
   {
     id: "noticeDE-3",
     title: "Hinweis",
-    content: (
-      <>
-        <p>{"Moddrop ist ein privates, nicht-kommerzielles Projekt."}</p>
-      </>
-    ),
+    content: <p>{"Moddrop ist ein privates, nicht-kommerzielles Projekt."}</p>,
   },
   {
     id: "noticeDE-4",
     title: "Datenschutz",
     content: (
-      <>
-        <p>
-          {
-            "Informationen zur Verarbeitung personenbezogener Daten finden Sie in der "
-          }
-          <a href="/datenschutz">{"Datenschutzerklärung"}</a>
-          {"."}
-        </p>
-      </>
+      <p>
+        {
+          "Informationen zur Verarbeitung personenbezogener Daten finden Sie in der "
+        }
+        <a href="/datenschutz">{"Datenschutzerklärung"}</a>
+        {"."}
+      </p>
     ),
   },
 ];
@@ -225,7 +211,7 @@ export const privacyDE: readonly LegalSection[] = [
           <a href={`mailto:${controller.privacyEmail}`}>
             {controller.privacyEmail}
           </a>
-          . Das Löschen des Clerk-Kontos allein entfernt diese Daten nicht.
+          {"."} Das Löschen des Clerk-Kontos allein entfernt diese Daten nicht.
         </p>
       </>
     ),
@@ -252,7 +238,7 @@ export const privacyDE: readonly LegalSection[] = [
           </a>{" "}
           und{" "}
           <a href="https://clerk.com/legal/dpa">Auftragsverarbeitungsvertrag</a>
-          .
+          {"."}
         </p>
         <p>
           Discord nennt für Personen im EWR die Discord Netherlands BV, Schiphol
@@ -261,7 +247,7 @@ export const privacyDE: readonly LegalSection[] = [
           Discord beschreibt Standardvertragsklauseln und das Data Privacy
           Framework für internationale Übermittlungen. Details:{" "}
           <a href="https://discord.com/privacy">Discord-Datenschutzerklärung</a>
-          . Für Twitch gelten die Angaben im folgenden Abschnitt.
+          {"."} Für Twitch gelten die Angaben im folgenden Abschnitt.
         </p>
       </>
     ),
@@ -289,7 +275,7 @@ export const privacyDE: readonly LegalSection[] = [
           <a href="https://legal.twitch.com/en/legal/privacy-notice/">
             Datenschutzerklärung von Twitch
           </a>
-          .
+          {"."}
         </p>
         <p>
           Für YouTube ist bei Nutzern im EWR Google Ireland Limited, Gordon
@@ -301,11 +287,11 @@ export const privacyDE: readonly LegalSection[] = [
           <a href="https://policies.google.com/privacy/frameworks">
             Übermittlungsregeln
           </a>
-          . Weitere Verarbeitung und Aufbewahrung richten sich nach der{" "}
+          {"."} Weitere Verarbeitung und Aufbewahrung richten sich nach der{" "}
           <a href="https://policies.google.com/privacy">
             Google-Datenschutzerklärung
           </a>
-          .
+          {"."}
         </p>
       </>
     ),
@@ -337,7 +323,7 @@ export const privacyDE: readonly LegalSection[] = [
           <a href="https://tldraw.dev/sdk-features/license-key">
             Lizenzinformationen
           </a>
-          .
+          {"."}
         </p>
       </>
     ),
@@ -442,26 +428,22 @@ export const privacyDE: readonly LegalSection[] = [
     id: "privacyDE-13",
     title: "Pflicht zur Bereitstellung",
     content: (
-      <>
-        <p>
-          {
-            "Sie sind nicht verpflichtet, personenbezogene Daten bereitzustellen. Ohne die technisch notwendigen Verbindungsdaten kann die Website jedoch nicht ausgeliefert werden, und ohne Anmeldung sind die geschützten Bereiche nicht nutzbar."
-          }
-        </p>
-      </>
+      <p>
+        {
+          "Sie sind nicht verpflichtet, personenbezogene Daten bereitzustellen. Ohne die technisch notwendigen Verbindungsdaten kann die Website jedoch nicht ausgeliefert werden, und ohne Anmeldung sind die geschützten Bereiche nicht nutzbar."
+        }
+      </p>
     ),
   },
   {
     id: "privacyDE-14",
     title: "Änderungen",
     content: (
-      <>
-        <p>
-          {
-            "Diese Datenschutzerklärung wird angepasst, wenn sich die Website oder die Rechtslage ändert. Es gilt die jeweils hier veröffentlichte Fassung."
-          }
-        </p>
-      </>
+      <p>
+        {
+          "Diese Datenschutzerklärung wird angepasst, wenn sich die Website oder die Rechtslage ändert. Es gilt die jeweils hier veröffentlichte Fassung."
+        }
+      </p>
     ),
   },
 ];

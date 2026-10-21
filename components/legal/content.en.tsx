@@ -6,49 +6,35 @@ export const noticeEN: readonly LegalSection[] = [
   {
     id: "noticeEN-1",
     title: "Provider",
-    content: (
-      <>
-        <ControllerAddress language="en" />
-      </>
-    ),
+    content: <ControllerAddress language="en" />,
   },
   {
     id: "noticeEN-2",
     title: "Contact",
     content: (
-      <>
-        <p>
-          {"E-mail: "}
-          <a href={`mailto:${controller.legalEmail}`}>
-            {controller.legalEmail}
-          </a>
-          <br />
-          {"Contact form: "}
-          <a href={controller.contactUrl}>{"beastyrabbit.com/kontakt"}</a>
-        </p>
-      </>
+      <p>
+        {"E-mail: "}
+        <a href={`mailto:${controller.legalEmail}`}>{controller.legalEmail}</a>
+        <br />
+        {"Contact form: "}
+        <a href={controller.contactUrl}>{"beastyrabbit.com/kontakt"}</a>
+      </p>
     ),
   },
   {
     id: "noticeEN-3",
     title: "Note",
-    content: (
-      <>
-        <p>{"Moddrop is a private, non-commercial project."}</p>
-      </>
-    ),
+    content: <p>{"Moddrop is a private, non-commercial project."}</p>,
   },
   {
     id: "noticeEN-4",
     title: "Privacy",
     content: (
-      <>
-        <p>
-          {"For information on how personal data is processed, see the "}
-          <a href="/privacy">{"Privacy Policy"}</a>
-          {"."}
-        </p>
-      </>
+      <p>
+        {"For information on how personal data is processed, see the "}
+        <a href="/privacy">{"Privacy Policy"}</a>
+        {"."}
+      </p>
     ),
   },
 ];
@@ -225,7 +211,7 @@ export const privacyEN: readonly LegalSection[] = [
           <a href={`mailto:${controller.privacyEmail}`}>
             {controller.privacyEmail}
           </a>
-          . Deleting your Clerk account alone does not remove this data.
+          {"."} Deleting your Clerk account alone does not remove this data.
         </p>
       </>
     ),
@@ -296,11 +282,11 @@ export const privacyEN: readonly LegalSection[] = [
           <a href="https://policies.google.com/privacy/frameworks">
             transfer frameworks
           </a>
-          . Further processing and retention follow the{" "}
+          {"."} Further processing and retention follow the{" "}
           <a href="https://policies.google.com/privacy">
             Google privacy policy
           </a>
-          .
+          {"."}
         </p>
       </>
     ),
@@ -332,7 +318,7 @@ export const privacyEN: readonly LegalSection[] = [
           <a href="https://tldraw.dev/sdk-features/license-key">
             licence information
           </a>
-          .
+          {"."}
         </p>
       </>
     ),
@@ -433,26 +419,22 @@ export const privacyEN: readonly LegalSection[] = [
     id: "privacyEN-13",
     title: "Obligation to provide data",
     content: (
-      <>
-        <p>
-          {
-            "You are not obliged to provide personal data. However, the website cannot be delivered without the technically necessary connection data, and the protected areas cannot be used without signing in."
-          }
-        </p>
-      </>
+      <p>
+        {
+          "You are not obliged to provide personal data. However, the website cannot be delivered without the technically necessary connection data, and the protected areas cannot be used without signing in."
+        }
+      </p>
     ),
   },
   {
     id: "privacyEN-14",
     title: "Changes",
     content: (
-      <>
-        <p>
-          {
-            "This privacy policy is updated when the website or the legal situation changes. The version published here applies."
-          }
-        </p>
-      </>
+      <p>
+        {
+          "This privacy policy is updated when the website or the legal situation changes. The version published here applies."
+        }
+      </p>
     ),
   },
 ];

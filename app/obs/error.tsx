@@ -2,10 +2,9 @@
 
 export default function OBSError({
   reset,
-}: {
-  error: Error & { digest?: string };
+}: Readonly<{
   reset: () => void;
-}) {
+}>) {
   return (
     <div
       role="alert"

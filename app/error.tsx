@@ -4,10 +4,9 @@ import { LegalFooter } from "@/components/legal/legal-footer";
 
 export default function ErrorPage({
   reset,
-}: {
-  error: Error & { digest?: string };
+}: Readonly<{
   reset: () => void;
-}) {
+}>) {
   return (
     <div className="app-shell flex min-h-screen flex-col bg-background text-foreground">
       <main className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center">
