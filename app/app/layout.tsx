@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
+import { ControlLegalFooter } from "@/components/legal/control-legal-footer";
 
 export const metadata: Metadata = {
   title: "Rooms | Moddrop",
@@ -11,5 +12,10 @@ export default function AuthenticatedAppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AppShell>
+      {children}
+      <ControlLegalFooter />
+    </AppShell>
+  );
 }

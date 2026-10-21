@@ -6,6 +6,7 @@ import { ModdropLogo } from "@/components/common/ModdropLogo";
 import { LandingAuthActions } from "@/components/landing/LandingAuthActions";
 import { contentTypeIcons } from "@/components/landing/LandingPrimitives";
 import { SharedCanvasDemo } from "@/components/landing/SharedCanvasDemo";
+import { LegalLinks } from "@/components/legal/legal-footer";
 import { landingContent } from "@/lib/landing-content";
 import "./landing.css";
 
@@ -463,6 +464,7 @@ export function Landing() {
           </p>
           <p className="aa-footnote">© {new Date().getFullYear()} Moddrop</p>
         </div>
+        <LegalLinks />
       </footer>
     </div>
   );

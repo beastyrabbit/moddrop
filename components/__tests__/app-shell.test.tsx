@@ -77,14 +77,21 @@ describe("AppShell", () => {
     );
   });
 
-  it("shows one sign-in control when signed out", () => {
-    testState.isAuthenticated = false;
-    const html = renderShell();
+  it.each(["/app", "/app/settings"])(
+    "preserves %s when signing in",
+    (pathname) => {
+      testState.pathname = pathname;
+      testState.isAuthenticated = false;
+      const html = renderShell();
 
-    expect(html).toContain(">Log in<");
-    expect(html).not.toContain("Sign out");
-    expect(html).not.toContain("greenroom_mod");
-  });
+      expect(html).toContain(">Log in<");
+      expect(html).toContain(
+        `href="/sign-in?redirect_url=${encodeURIComponent(pathname)}"`,
+      );
+      expect(html).not.toContain("Sign out");
+      expect(html).not.toContain("greenroom_mod");
+    },
+  );
 
   it("bypasses all product chrome and auth hooks for canvas routes", () => {
     testState.pathname = "/app/rooms/room_123";

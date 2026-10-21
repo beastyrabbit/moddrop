@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import {
   ArrowRight,
   Crown,
@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
 
 export function StreamCanvasHome() {
-  const clerk = useClerk();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [rooms, setRooms] = useState<AccessibleRoom[] | null>(null);
   const [creating, setCreating] = useState(false);
@@ -96,13 +95,12 @@ export function StreamCanvasHome() {
             Rooms are tied to your Moddrop account so your canvas and
             collaborator access stay private.
           </p>
-          <button
-            type="button"
-            onClick={() => clerk.openSignIn()}
+          <Link
+            href="/sign-in"
             className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
           >
             Sign in
-          </button>
+          </Link>
         </section>
       </main>
     );

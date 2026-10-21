@@ -1,0 +1,23 @@
+"use client";
+
+import { LegalFooter } from "@/components/legal/legal-footer";
+
+export default function GlobalError({
+  reset,
+}: Readonly<{
+  reset: () => void;
+}>) {
+  return (
+    <html lang="en">
+      <body>
+        <main>
+          <h1>Something went wrong</h1>
+          <button type="button" onClick={reset}>
+            Try again
+          </button>
+        </main>
+        <LegalFooter />
+      </body>
+    </html>
+  );
+}

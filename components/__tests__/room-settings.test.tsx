@@ -23,6 +23,7 @@ vi.mock("@clerk/nextjs", () => ({
   useClerk: () => ({}),
 }));
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/app/rooms/room-fixture",
   useParams: () => ({ roomId: "room-fixture" }),
 }));
 vi.mock("sonner", () => ({
