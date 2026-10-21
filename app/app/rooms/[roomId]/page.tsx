@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { CanvasEditor } from "@/components/stream-canvas/CanvasEditor";
 import { getAccessibleRooms } from "@/lib/stream-canvas/api";
 import type { YouTubePolicy } from "@/lib/stream-canvas/types";
+import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
+import { track } from "@/lib/telemetry/events";
 
 export default function StreamCanvasRoomPage() {
   const pathname = usePathname();
@@ -27,20 +29,25 @@ export default function StreamCanvasRoomPage() {
     setError(null);
     getAccessibleRooms(getToken)
       .then((rooms) => {
+        if (cancelled) return;
         const room = rooms.find((r) => r.id === roomId);
-        if (!room)
-          throw new Error(
-            "This room is unavailable or you no longer have access.",
-          );
-        if (!cancelled) {
-          setTwitchChannel(room.twitchChannel);
-          setYouTubePolicy(room.youtubePolicy);
-          setLoadedRoomId(roomId);
+        if (!room) {
+          track("failure", { operation: "room", reason: "rejected" });
+          setError("This room is unavailable or you no longer have access.");
+          return;
         }
+        setTwitchChannel(room.twitchChannel);
+        setYouTubePolicy(room.youtubePolicy);
+        setLoadedRoomId(roomId);
+        track("room_opened", {});
       })
       .catch((err) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Failed to load room");
+        if (cancelled) return;
+        if (!(err instanceof ReportedError)) {
+          reportError(err);
+          track("failure", { operation: "room", reason: "rejected" });
+        }
+        setError(err instanceof Error ? err.message : "Failed to load room");
       });
     return () => {
       cancelled = true;

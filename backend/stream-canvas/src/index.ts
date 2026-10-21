@@ -1,10 +1,11 @@
+import { flushTelemetry } from "./telemetry.ts";
 import { serve } from "@hono/node-server";
 import { WebSocketServer } from "ws";
-import { config, validateServerConfig } from "./config.ts";
-import { withDeadline } from "./deadline.ts";
-import { closeDatabase } from "./db.ts";
-import { leaderState } from "./leader.ts";
 import { app } from "./app.ts";
+import { config, validateServerConfig } from "./config.ts";
+import { closeDatabase } from "./db.ts";
+import { withDeadline } from "./deadline.ts";
+import { leaderState } from "./leader.ts";
 import { closeAllRooms, handleWebSocketUpgrade } from "./ws-handler.ts";
 
 // ---------------------------------------------------------------------------
@@ -79,6 +80,7 @@ async function performShutdown(): Promise<void> {
   await new Promise<void>((resolve) => wss.close(() => resolve()));
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await closeDatabase();
+  await flushTelemetry();
   console.log("[stream-canvas] shutdown complete");
 }
 
@@ -91,7 +93,7 @@ function requestShutdown(): void {
     () => process.exit(0),
     (error) => {
       console.error("[stream-canvas] shutdown failed", error);
-      process.exit(1);
+      void flushTelemetry().finally(() => process.exit(1));
     },
   );
 }

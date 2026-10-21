@@ -62,6 +62,8 @@ import {
   ViewSubmenu,
   XBoxToolbarItem,
 } from "tldraw";
+import { ReportedError, reportError } from "@/lib/telemetry/browser-errors";
+import { track } from "@/lib/telemetry/events";
 import "tldraw/tldraw.css";
 import {
   buildEditorWsUrl,
@@ -786,6 +788,15 @@ export function CanvasEditor({
     },
   });
 
+  const connectionError =
+    storeWithStatus.status === "error" ? storeWithStatus.error : null;
+  useEffect(() => {
+    if (connectionError && !(connectionError instanceof ReportedError)) {
+      reportError(connectionError);
+      track("failure", { operation: "canvas", reason: "network" });
+    }
+  }, [connectionError]);
+
   if (storeWithStatus.status === "loading") {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -803,7 +814,7 @@ export function CanvasEditor({
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div data-telemetry-private className="rr-block relative h-full w-full">
       <MediaPreferencesProvider roomId={roomId} userId={userId}>
         <CanvasMediaRefreshContext.Provider value={mediaRefreshCtx}>
           <AudioUploadCtx.Provider value={audioUploadCtx}>
@@ -811,6 +822,7 @@ export function CanvasEditor({
               <YouTubePolicyCtx.Provider value={youtubePolicy}>
                 <Tldraw
                   onMount={(editor) => {
+                    const stopMediaEvents = listenForMediaAdded(editor);
                     editor.registerExternalContentHandler(
                       "embed",
                       (content) => {
@@ -832,7 +844,11 @@ export function CanvasEditor({
                         );
                       },
                     );
-                    return onMount?.(editor);
+                    const cleanup = onMount?.(editor);
+                    return () => {
+                      stopMediaEvents();
+                      if (typeof cleanup === "function") cleanup();
+                    };
                   }}
                   store={storeWithStatus.store}
                   shapeUtils={customShapeUtils}
@@ -856,6 +872,26 @@ export function CanvasEditor({
         </CanvasMediaRefreshContext.Provider>
       </MediaPreferencesProvider>
     </div>
+  );
+}
+
+function mediaEventType(type: string) {
+  if (type === "youtube-embed") return "youtube";
+  if (type === "audio-player") return "audio";
+  if (type === "image" || type === "video" || type === "embed") return type;
+  return undefined;
+}
+
+function listenForMediaAdded(editor: ReturnType<typeof useEditor>) {
+  return editor.store.listen(
+    ({ changes }) => {
+      for (const record of Object.values(changes.added)) {
+        if (record.typeName !== "shape") continue;
+        const type = mediaEventType(record.type);
+        if (type) track("media_added", { type });
+      }
+    },
+    { source: "user", scope: "document" },
   );
 }
 

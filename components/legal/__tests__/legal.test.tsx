@@ -145,7 +145,10 @@ describe("legal routes", () => {
       ])
         expect(html).toContain(provider);
       const table = html.match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
-      expect(table.match(/<tr>/g)).toHaveLength(5);
+      expect(table.match(/<tr>/g)).toHaveLength(6);
+      expect(table).toContain("moddrop_consent");
+      expect(html).toContain("Umami");
+      expect(html).toContain("GlitchTip");
       expect(table).toContain("OBS");
       expect(table).toContain("Twitch / YouTube");
       expect(html).not.toMatch(
@@ -157,7 +160,9 @@ describe("legal routes", () => {
 
 describe("legal navigation", () => {
   it("keeps the OBS error state transparent and free of legal links", () => {
-    const html = renderToStaticMarkup(<OBSError reset={() => {}} />);
+    const html = renderToStaticMarkup(
+      <OBSError error={new Error("fixture")} reset={() => {}} />,
+    );
     expect(html).toContain("OBS output unavailable.");
     expect(html).toContain("Try again");
     expect(html).not.toContain("href=");
@@ -170,8 +175,12 @@ describe("legal navigation", () => {
       <AppLayout key="app">Rooms</AppLayout>,
       <SignInPage key="sign-in" />,
       <NotFound key="404" />,
-      <ErrorPage key="error" reset={() => {}} />,
-      <GlobalError key="global" reset={() => {}} />,
+      <ErrorPage key="error" error={new Error("fixture")} reset={() => {}} />,
+      <GlobalError
+        key="global"
+        error={new Error("fixture")}
+        reset={() => {}}
+      />,
     ])
       expectLinks(renderToStaticMarkup(element));
   });

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { createRoom, getAccessibleRooms } from "@/lib/stream-canvas/api";
 import type { AccessibleRoom } from "@/lib/stream-canvas/types";
+import { beginAuth } from "@/lib/telemetry/events";
 import { cn } from "@/lib/utils";
 
 const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
@@ -96,6 +97,7 @@ export function StreamCanvasHome() {
             collaborator access stay private.
           </p>
           <Link
+            onClick={() => beginAuth("sign_in")}
             href="/sign-in"
             className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
           >
@@ -136,81 +138,13 @@ export function StreamCanvasHome() {
         </div>
       ) : null}
 
-      {loadError ? (
-        <InitialLoadError message={loadError} onRetry={loadRooms} />
-      ) : rooms === null ? (
-        <AppLoadingState label="Loading rooms" compact />
-      ) : rooms.length === 0 ? (
-        <section className="rounded-xl border border-border bg-card px-5 py-8 text-center sm:px-8">
-          <h2 className="font-product-display text-2xl">No rooms yet</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-            Create your room to start arranging a canvas and invite your crew.
-          </p>
-          <div className="mt-5 flex justify-center">
-            <CreateRoomButton creating={creating} onCreate={handleCreate} />
-          </div>
-        </section>
-      ) : (
-        <section aria-labelledby="room-list-title">
-          <h2 id="room-list-title" className="sr-only">
-            Accessible rooms
-          </h2>
-          <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
-            {rooms.map((room) => {
-              const roomName = room.twitchChannel
-                ? `${room.twitchChannel}'s room`
-                : `Room ${room.id.slice(0, 8)}`;
-
-              return (
-                <article
-                  key={room.id}
-                  className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5"
-                >
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <h3 className="truncate text-base font-semibold text-foreground">
-                        {roomName}
-                      </h3>
-                      {room.isOwner ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--app-brass-highlight)]">
-                          <Crown className="size-3.5" aria-hidden="true" />
-                          Owner
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {room.collaboratorCount}{" "}
-                      {room.collaboratorCount === 1
-                        ? "collaborator"
-                        : "collaborators"}
-                      {!room.isOwner ? " · Shared with you" : ""}
-                    </p>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-2">
-                    {room.isOwner ? (
-                      <Link
-                        href="/app/settings"
-                        aria-label={`Settings for ${roomName}`}
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-muted-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] hover:text-foreground"
-                      >
-                        <Settings className="size-4" aria-hidden="true" />
-                      </Link>
-                    ) : null}
-                    <Link
-                      href={`/app/rooms/${room.id}`}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-4 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)] sm:flex-none"
-                    >
-                      Open room
-                      <ArrowRight className="size-4" aria-hidden="true" />
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      )}
+      <RoomsContent
+        rooms={rooms}
+        loadError={loadError}
+        creating={creating}
+        onCreate={handleCreate}
+        onRetry={loadRooms}
+      />
     </main>
   );
 }
@@ -288,5 +222,100 @@ function AppLoadingState({
       />
       <span className="sr-only">{label}</span>
     </div>
+  );
+}
+
+function RoomsContent({
+  rooms,
+  loadError,
+  creating,
+  onCreate,
+  onRetry,
+}: Readonly<{
+  rooms: AccessibleRoom[] | null;
+  loadError: string | null;
+  creating: boolean;
+  onCreate: () => void;
+  onRetry: () => void;
+}>) {
+  if (loadError)
+    return <InitialLoadError message={loadError} onRetry={onRetry} />;
+  if (rooms === null) return <AppLoadingState label="Loading rooms" compact />;
+  if (rooms.length === 0)
+    return (
+      <section className="rounded-xl border border-border bg-card px-5 py-8 text-center sm:px-8">
+        <h2 className="font-product-display text-2xl">No rooms yet</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          Create your room to start arranging a canvas and invite your crew.
+        </p>
+        <div className="mt-5 flex justify-center">
+          <CreateRoomButton creating={creating} onCreate={onCreate} />
+        </div>
+      </section>
+    );
+  return (
+    <section
+      data-telemetry-private
+      className="rr-block"
+      aria-labelledby="room-list-title"
+    >
+      <h2 id="room-list-title" className="sr-only">
+        Accessible rooms
+      </h2>
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {rooms.map((room) => {
+          const roomName = room.twitchChannel
+            ? `${room.twitchChannel}'s room`
+            : `Room ${room.id.slice(0, 8)}`;
+
+          return (
+            <article
+              key={room.id}
+              className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5"
+            >
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className="truncate text-base font-semibold text-foreground">
+                    {roomName}
+                  </h3>
+                  {room.isOwner ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--app-brass-highlight)]">
+                      <Crown className="size-3.5" aria-hidden="true" />
+                      Owner
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {room.collaboratorCount}{" "}
+                  {room.collaboratorCount === 1
+                    ? "collaborator"
+                    : "collaborators"}
+                  {!room.isOwner ? " · Shared with you" : ""}
+                </p>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                {room.isOwner ? (
+                  <Link
+                    href="/app/settings"
+                    aria-label={`Settings for ${roomName}`}
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border text-muted-foreground hover:border-primary/60 hover:bg-[var(--app-billiard-hover)] hover:text-foreground"
+                  >
+                    <Settings className="size-4" aria-hidden="true" />
+                  </Link>
+                ) : null}
+                <Link
+                  href={`/app/rooms/${room.id}`}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-4 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)] sm:flex-none"
+                >
+                  Open room
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }

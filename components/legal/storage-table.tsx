@@ -3,6 +3,12 @@ import type { LegalLanguage } from "./controller";
 const rows = {
   de: [
     [
+      "moddrop_consent",
+      "Einwilligungsauswahl, Zeitpunkte und zufällige Belegkennung; keine Analysekennung",
+      "180 Tage",
+      "technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG)",
+    ],
+    [
       "Clerk",
       "Anmeldung/Sitzung",
       "Nach den Sitzungs- und Löschregeln von Clerk",
@@ -28,6 +34,12 @@ const rows = {
     ],
   ],
   en: [
+    [
+      "moddrop_consent",
+      "Consent choice, dates and random receipt ID; no analytics identifier",
+      "180 days",
+      "technically necessary (Section 25(2) no. 2 TDDDG)",
+    ],
     [
       "Clerk",
       "Sign-in/session",

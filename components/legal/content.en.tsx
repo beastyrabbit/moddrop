@@ -363,6 +363,37 @@ export const privacyEN: readonly LegalSection[] = [
     ),
   },
   {
+    id: "telemetry",
+    title: "Analytics and error tracking",
+    content: (
+      <>
+        <p>
+          {
+            "Umami is self-hosted on the operator's own servers in Germany. Only after consent, it measures pageviews, feature events, outbound destination hosts and web vitals, and records masked page interactions for session replay and heatmaps, subject to server sampling. Text and inputs are masked; account panels, the canvas and media are blocked. Query strings, fragments, referrers and room identifiers are removed. We do not identify your account to Umami. OBS overlays are excluded."
+          }
+        </p>
+        <p>
+          {
+            "The legal basis is consent under Art. 6(1)(a) GDPR and, for access to your device, Section 25(1) TDDDG. Umami writes no cookies or entries to localStorage or sessionStorage. Analytics data is automatically deleted after 25 months, and session replays and heatmap recordings after 30 days. You can withdraw consent at any time through Cookie settings. Withdrawal saves your choice and reloads the page to stop recording. It does not affect processing before withdrawal."
+          }
+        </p>
+        <p>
+          {
+            "GlitchTip is self-hosted on the operator's own servers in Germany. It receives scrubbed error reports from the browser, Next.js server and backend, including the OBS overlay. Reports contain technical errors, stack traces, release and environment information and sanitized routes. Account details, request credentials and bodies are removed. Delivery exposes connection data to the receiving server. GlitchTip writes no cookies, localStorage or sessionStorage. Reports are retained for 90 days. The legal basis is Art. 6(1)(f) GDPR; our legitimate interest is diagnosing failures and maintaining reliable operation. Error reporting operates independently of analytics consent."
+          }
+        </p>
+        <p>
+          You have the right to object to processing based on legitimate
+          interests. To exercise this right, contact{" "}
+          <a href={`mailto:${controller.privacyEmail}`}>
+            {controller.privacyEmail}
+          </a>{" "}
+          .
+        </p>
+      </>
+    ),
+  },
+  {
     id: "privacyEN-11",
     title: "Cookies and local storage",
     content: (

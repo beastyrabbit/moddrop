@@ -103,6 +103,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Set application release
+        id: release
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "value=moddrop@${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=moddrop@$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Docker CLI
         run: |
           set -euo pipefail
@@ -187,6 +197,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
+            APP_RELEASE=${{ steps.release.outputs.value }}
             NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${{ steps.ci-secrets.outputs.NEXT_PUBLIC_TLDRAW_LICENSE_KEY }}
 
   build-stream-canvas:
@@ -199,6 +210,16 @@ jobs:
     runs-on: personal
     steps:
       - uses: actions/checkout@v7
+
+      - name: Set application release
+        id: release
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "value=moddrop@${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=moddrop@$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install Docker CLI
         run: |
@@ -230,3 +251,5 @@ jobs:
           file: ./backend/stream-canvas/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            APP_RELEASE=${{ steps.release.outputs.value }}

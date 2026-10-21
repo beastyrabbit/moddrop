@@ -29,6 +29,7 @@ import {
   updateRoom,
 } from "@/lib/stream-canvas/api";
 import type { CanvasRoom, YouTubePolicy } from "@/lib/stream-canvas/types";
+import { beginAuth, track } from "@/lib/telemetry/events";
 import { cn } from "@/lib/utils";
 
 const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
@@ -98,6 +99,8 @@ export default function StreamCanvasSettingsPage() {
         getToken,
       );
       setRoom(updated);
+      if (updated.twitchChannel && updated.twitchChannel !== room.twitchChannel)
+        track("media_added", { type: "twitch" });
       toast.success("Settings saved");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save");
@@ -135,6 +138,7 @@ export default function StreamCanvasSettingsPage() {
             Only a room owner can change these settings.
           </p>
           <Link
+            onClick={() => beginAuth("sign_in")}
             href={`/sign-in?redirect_url=${encodeURIComponent(pathname)}`}
             className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
           >
@@ -179,12 +183,13 @@ export default function StreamCanvasSettingsPage() {
                 </label>
                 <input
                   id="twitch-channel"
+                  data-telemetry-private
                   type="text"
                   value={twitchChannel}
                   onChange={(event) => setTwitchChannel(event.target.value)}
                   placeholder="e.g. BeastyRabbit"
                   autoComplete="off"
-                  className="mt-2 min-h-11 w-full rounded-lg border border-input bg-background px-3 text-base text-foreground placeholder:text-muted-foreground/70 sm:text-sm"
+                  className="rr-block mt-2 min-h-11 w-full rounded-lg border border-input bg-background px-3 text-base text-foreground placeholder:text-muted-foreground/70 sm:text-sm"
                 />
               </div>
             </section>
@@ -313,7 +318,10 @@ function ObsSettings({
       />
 
       <div className="mt-5 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch">
-        <code className="min-h-11 min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-input bg-background px-3 py-3 text-xs text-foreground">
+        <code
+          data-telemetry-private
+          className="rr-block min-h-11 min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-input bg-background px-3 py-3 text-xs text-foreground"
+        >
           {displayUrl}
         </code>
         <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -339,6 +347,7 @@ function ObsSettings({
               if (!obsUrl) return;
               try {
                 await navigator.clipboard.writeText(obsUrl);
+                track("obs_link_copied", {});
                 toast.success("Copied to clipboard");
               } catch {
                 toast.error("Failed to copy — please select and copy manually");

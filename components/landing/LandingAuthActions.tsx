@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { beginAuth } from "@/lib/telemetry/events";
 
 type LandingAuthActionsProps = {
   className?: string;
@@ -55,7 +56,11 @@ export function LandingAuthActions({
 
   return (
     <div className={className}>
-      <Link href="/sign-in" className={secondaryClassName}>
+      <Link
+        href="/sign-in"
+        onClick={() => beginAuth("sign_in")}
+        className={secondaryClassName}
+      >
         Log in
       </Link>
       <Link href="/app" className={primaryClassName}>

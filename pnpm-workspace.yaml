@@ -1,6 +1,7 @@
 packages:
   - backend/stream-canvas
 allowBuilds:
+  '@sentry/cli': false
   '@clerk/shared': true
   esbuild: true
   sharp: true

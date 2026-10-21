@@ -1,12 +1,19 @@
 "use client";
 
+import { useEffect } from "react";
 import { LegalFooter } from "@/components/legal/legal-footer";
+import { reportBoundaryError } from "@/lib/telemetry/browser-errors";
 
 export default function ErrorPage({
+  error,
   reset,
 }: Readonly<{
+  error: Error;
   reset: () => void;
 }>) {
+  useEffect(() => {
+    reportBoundaryError(error);
+  }, [error]);
   return (
     <div className="app-shell flex min-h-screen flex-col bg-background text-foreground">
       <main className="flex flex-1 flex-col items-center justify-center gap-5 px-5 py-16 text-center">

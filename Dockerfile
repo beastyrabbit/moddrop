@@ -28,13 +28,23 @@ COPY . .
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_placeholder_CLERK_KEY
 ARG NEXT_PUBLIC_CANVAS_API_URL=__NEXT_PUBLIC_CANVAS_API_URL__
 ARG NEXT_PUBLIC_TLDRAW_LICENSE_KEY=tldraw-placeholder-key
+ARG APP_RELEASE
+ARG SOURCEMAP_UPLOAD_REQUIRED
 
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
 ENV NEXT_PUBLIC_CANVAS_API_URL=${NEXT_PUBLIC_CANVAS_API_URL}
 ENV NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
 ENV PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
+ENV APP_RELEASE=${APP_RELEASE}
+ENV SOURCEMAP_UPLOAD_REQUIRED=${SOURCEMAP_UPLOAD_REQUIRED}
 
+RUN test -n "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" || { \
+    echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is empty; set the repository variable" >&2; \
+    exit 1; \
+    }
+RUN pnpm exec sentry-cli --version
 RUN pnpm run build
+RUN --mount=type=secret,id=glitchtip_auth_token node scripts/upload-sourcemaps.mjs
 
 FROM node:26.5.0-bookworm-slim AS runner
 
@@ -43,6 +53,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ARG APP_RELEASE
+ENV APP_RELEASE=${APP_RELEASE}
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=node:node /app/.next/standalone ./

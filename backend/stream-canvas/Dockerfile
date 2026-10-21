@@ -30,6 +30,8 @@ WORKDIR /app/backend/stream-canvas
 
 ENV NODE_ENV=production
 ENV PORT=8003
+ARG APP_RELEASE
+ENV APP_RELEASE=${APP_RELEASE}
 
 COPY --from=production-dependencies /app/node_modules /app/node_modules
 COPY --from=production-dependencies /app/backend/stream-canvas/node_modules ./node_modules
@@ -41,4 +43,4 @@ USER node
 
 EXPOSE 8003
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--enable-source-maps", "--import", "./dist/telemetry.js", "dist/index.js"]

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import vm from "node:vm";
 
@@ -64,11 +64,21 @@ for (const configured of [
       };
     },
   });
-  vm.runInContext(
-    source.split("__NEXT_PUBLIC_CANVAS_API_URL__").join(configured),
-    context,
-    { timeout: 2_000 },
-  );
+  // The API now imports telemetry helpers. Register the real module factories
+  // across chunks and load those dependencies instead of stubbing them out.
+  for (const file of candidates.filter((file) => file.endsWith(".js"))) {
+    const chunk = await readFile(file, "utf8");
+    if (
+      file.includes("turbopack-") ||
+      !chunk.startsWith("(globalThis.TURBOPACK||")
+    )
+      continue;
+    vm.runInContext(
+      chunk.split("__NEXT_PUBLIC_CANVAS_API_URL__").join(configured),
+      context,
+      { timeout: 2_000 },
+    );
+  }
   function factories(value: unknown): ((runtime: unknown) => void)[] {
     if (typeof value === "function")
       return [value as (runtime: unknown) => void];
@@ -82,15 +92,21 @@ for (const configured of [
     "Compiled chunk format changed; update scripts/test-runtime-config.ts for this Next.js version",
   );
   const exports: Record<string, unknown> = {};
-  factory({
-    s(entries: unknown[]) {
-      for (let i = 0; i < entries.length; ) {
-        const name = entries[i++] as string;
-        const getter = entries[i++];
-        exports[name] = typeof getter === "function" ? getter() : entries[i++];
+  const definitions = new Map<number, (runtime: unknown) => void>();
+  for (const registration of registrations) {
+    if (!Array.isArray(registration)) continue;
+    let ids: number[] = [];
+    for (const item of registration.slice(1)) {
+      if (typeof item === "number") ids.push(item);
+      if (typeof item === "function") {
+        for (const id of ids)
+          definitions.set(id, item as (runtime: unknown) => void);
+        ids = [];
       }
-    },
-  });
+    }
+  }
+  const modules = new Map<number, Record<string, unknown>>();
+  factory(runtime(exports, { definitions, modules }));
   const ws = (
     exports.buildEditorWsUrl as (room: string, token: string) => string
   )("fixture", "fixture-token");
@@ -124,3 +140,31 @@ for (const configured of [
 console.log(
   "Compiled runtime API, WebSocket, and asset URLs passed for default, absolute, and alternate paths.",
 );
+
+type ModuleState = {
+  definitions: Map<number, (runtime: unknown) => void>;
+  modules: Map<number, Record<string, unknown>>;
+};
+function runtime(target: Record<string, unknown>, state: ModuleState) {
+  return {
+    i: (id: number) => load(id, state),
+    r: (id: number) => load(id, state),
+    s(entries: unknown[]) {
+      for (let i = 0; i < entries.length; ) {
+        const name = entries[i++] as string;
+        const getter = entries[i++];
+        target[name] = typeof getter === "function" ? getter() : entries[i++];
+      }
+    },
+  };
+}
+function load(id: number, state: ModuleState) {
+  const existing = state.modules.get(id);
+  if (existing) return existing;
+  const definition = state.definitions.get(id);
+  assert.ok(definition, `Missing compiled dependency ${id}`);
+  const target = {};
+  state.modules.set(id, target);
+  definition(runtime(target, state));
+  return target;
+}

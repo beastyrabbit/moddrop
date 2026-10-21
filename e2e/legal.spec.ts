@@ -44,6 +44,10 @@ for (const width of [1280, 375]) {
       ],
     ]) {
       await page.goto("/");
+      await expect(page.locator("#cc-main")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Cookie settings", exact: true }),
+      ).toHaveCount(0);
       await page
         .getByRole("navigation", { name: "Legal", exact: true })
         .getByRole("link", { name: label, exact: true })
@@ -75,7 +79,7 @@ for (const width of [1280, 375]) {
         await expect(page.locator("main")).toContainText(
           path === "/datenschutz" ? "bis zu 10 Jahre" : "up to 10 years",
         );
-        await expect(page.locator("table tbody tr")).toHaveCount(4);
+        await expect(page.locator("table tbody tr")).toHaveCount(5);
         await expect(page.locator("main")).toContainText("cdn.tldraw.com");
         await expect(page.locator("main")).not.toContainText(
           /OPEN|noch nicht bestätigt|not yet confirmed/,
