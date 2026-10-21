@@ -2,13 +2,14 @@
 
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CanvasEditor } from "@/components/stream-canvas/CanvasEditor";
 import { getAccessibleRooms } from "@/lib/stream-canvas/api";
 import type { YouTubePolicy } from "@/lib/stream-canvas/types";
 
 export default function StreamCanvasRoomPage() {
+  const pathname = usePathname();
   const { roomId } = useParams<{ roomId: string }>();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const [twitchChannel, setTwitchChannel] = useState<string | null>(null);
@@ -49,7 +50,10 @@ export default function StreamCanvasRoomPage() {
   if (isLoaded && !isSignedIn)
     return (
       <p className="p-6">
-        <Link href="/sign-in" className="underline">
+        <Link
+          href={`/sign-in?redirect_url=${encodeURIComponent(pathname)}`}
+          className="underline"
+        >
           Sign in
         </Link>{" "}
         to open this room.

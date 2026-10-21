@@ -34,7 +34,17 @@ export function LegalDocument({
         {updated ? (
           <p className="mt-4 text-sm text-muted-foreground">
             {language === "de" ? "Stand: " : "Last updated: "}
-            <time dateTime="2026-10-21">{updated}</time>
+            <time dateTime={updated}>
+              {new Date(updated).toLocaleDateString(
+                language === "de" ? "de-DE" : "en-GB",
+                {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                  timeZone: "UTC",
+                },
+              )}
+            </time>
           </p>
         ) : null}
         <div className="mt-10 space-y-9 text-base leading-7 [&_a]:break-words [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4 [&_p]:my-4 [&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6">

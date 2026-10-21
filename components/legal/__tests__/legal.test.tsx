@@ -12,10 +12,13 @@ import LegalNotice, {
   metadata as legalNoticeMetadata,
 } from "@/app/legal-notice/page";
 import NotFound from "@/app/not-found";
+import OBSError from "@/app/obs/error";
 import Privacy, { metadata as privacyMetadata } from "@/app/privacy/page";
 import SignInPage from "@/app/sign-in/page";
 import { Landing } from "@/components/landing/Landing";
 import { ControlLegalFooter } from "../control-legal-footer";
+import { controller } from "../controller";
+import { LegalDocument } from "../legal-document";
 
 const state = vi.hoisted(() => ({ pathname: "/app" }));
 vi.mock("next/navigation", () => ({ usePathname: () => state.pathname }));
@@ -87,8 +90,33 @@ describe("legal routes", () => {
       'href="https://beastyrabbit.com/kontakt?from=moddrop"',
     );
     for (const Page of [Datenschutz, Privacy])
-      expect(renderToStaticMarkup(<Page />)).toContain('dateTime="2026-10-21"');
+      expect(renderToStaticMarkup(<Page />)).toContain(
+        `dateTime="${controller.updated}"`,
+      );
   });
+  it.each([
+    [Impressum, "Kontaktformular"],
+    [LegalNotice, "Contact form"],
+  ])("separates the contact lines", (Page, label) => {
+    expect(renderToStaticMarkup(<Page />)).toContain(`</a><br/>${label}: `);
+  });
+  it.each([
+    ["de", "22. Oktober 2026"],
+    ["en", "22 October 2026"],
+  ] as const)(
+    "uses the same ISO date for the %s attribute and label",
+    (language, label) => {
+      const html = renderToStaticMarkup(
+        <LegalDocument
+          language={language}
+          title="Fixture"
+          sections={[]}
+          updated="2026-10-22"
+        />,
+      );
+      expect(html).toContain(`<time dateTime="2026-10-22">${label}</time>`);
+    },
+  );
   it.each([
     [
       Datenschutz,
@@ -128,6 +156,16 @@ describe("legal routes", () => {
 });
 
 describe("legal navigation", () => {
+  it("keeps the OBS error state transparent and free of legal links", () => {
+    const html = renderToStaticMarkup(
+      <OBSError error={new Error("fixture")} reset={() => {}} />,
+    );
+    expect(html).toContain("OBS output unavailable.");
+    expect(html).toContain("Try again");
+    expect(html).not.toContain("href=");
+    expect(html).not.toContain("bg-");
+    expect(html).not.toContain("app-shell");
+  });
   it("is in the landing, control layout, sign-in, not-found and error surfaces", () => {
     for (const element of [
       <Landing key="home" />,

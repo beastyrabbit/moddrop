@@ -22,7 +22,8 @@ export const noticeEN: readonly LegalSection[] = [
           <a href={`mailto:${controller.legalEmail}`}>
             {controller.legalEmail}
           </a>
-          {"\nContact form: "}
+          <br />
+          {"Contact form: "}
           <a href={controller.contactUrl}>{"beastyrabbit.com/kontakt"}</a>
         </p>
       </>

@@ -12,6 +12,7 @@ import {
   Save,
 } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   type FormEvent,
   useCallback,
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
 
 export default function StreamCanvasSettingsPage() {
+  const pathname = usePathname();
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [room, setRoom] = useState<CanvasRoom | null>(null);
@@ -133,7 +135,7 @@ export default function StreamCanvasSettingsPage() {
             Only a room owner can change these settings.
           </p>
           <Link
-            href="/sign-in"
+            href={`/sign-in?redirect_url=${encodeURIComponent(pathname)}`}
             className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
           >
             Sign in

@@ -9,8 +9,6 @@ export const controller = {
   legalEmail: "impressum-moddrop@heerlab.com",
   privacyEmail: "datenschutz-moddrop@heerlab.com",
   contactUrl: "https://beastyrabbit.com/kontakt?from=moddrop",
-  siteName: "Moddrop",
-  siteUrl: "https://moddrop.live",
   updated: "2026-10-21",
 } as const;
 
