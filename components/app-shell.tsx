@@ -96,14 +96,13 @@ function ThemedAppShell({
               </>
             ) : null}
             {isLoaded && !isSignedIn ? (
-              <button
-                type="button"
-                onClick={() => clerk.openSignIn()}
+              <Link
+                href="/sign-in"
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-primary bg-primary px-3 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
               >
                 <LogIn className="size-4" aria-hidden="true" />
                 Log in
-              </button>
+              </Link>
             ) : null}
           </div>
         </div>

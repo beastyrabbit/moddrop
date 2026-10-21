@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
@@ -15,26 +15,7 @@ export function LandingAuthActions({
   secondaryClassName,
   primaryClassName,
 }: Readonly<LandingAuthActionsProps>) {
-  const clerk = useClerk();
   const { isLoaded, isSignedIn } = useAuth();
-
-  const handleSignIn = () => {
-    if (!isLoaded) return;
-    try {
-      clerk.openSignIn();
-    } catch (error) {
-      // Never leave the primary auth control as a silent no-op: if the modal
-      // can't open, log it and send the visitor to Clerk's hosted sign-in
-      // page — the app has no sign-in route of its own.
-      console.error("[LandingAuthActions] openSignIn failed", error);
-      void clerk.redirectToSignIn().catch((redirectError: unknown) => {
-        console.error(
-          "[LandingAuthActions] redirectToSignIn failed",
-          redirectError,
-        );
-      });
-    }
-  };
 
   // "Get started" is a plain link and must not wait for clerk-js, which loads
   // late on slow networks and never with an ad blocker. Only the secondary
@@ -74,13 +55,9 @@ export function LandingAuthActions({
 
   return (
     <div className={className}>
-      <button
-        type="button"
-        onClick={handleSignIn}
-        className={secondaryClassName}
-      >
+      <Link href="/sign-in" className={secondaryClassName}>
         Log in
-      </button>
+      </Link>
       <Link href="/app" className={primaryClassName}>
         <span>Get started</span>
         <ArrowRight aria-hidden className="size-4" />

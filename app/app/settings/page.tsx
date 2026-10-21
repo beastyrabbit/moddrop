@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import {
   AlertTriangle,
   Copy,
@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Save,
 } from "lucide-react";
+import Link from "next/link";
 import {
   type FormEvent,
   useCallback,
@@ -32,7 +33,6 @@ import { cn } from "@/lib/utils";
 const PENDING_OBS_SECRET_PREFIX = "moddrop:obsSetupSecret:";
 
 export default function StreamCanvasSettingsPage() {
-  const clerk = useClerk();
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [room, setRoom] = useState<CanvasRoom | null>(null);
@@ -132,13 +132,12 @@ export default function StreamCanvasSettingsPage() {
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
             Only a room owner can change these settings.
           </p>
-          <button
-            type="button"
-            onClick={() => clerk.openSignIn()}
+          <Link
+            href="/sign-in"
             className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg border border-primary bg-primary px-5 text-sm font-semibold text-primary-foreground hover:border-[var(--app-brass-highlight)] hover:bg-[var(--app-brass-highlight)]"
           >
             Sign in
-          </button>
+          </Link>
         </section>
       </main>
     );

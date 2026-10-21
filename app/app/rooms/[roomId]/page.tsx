@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CanvasEditor } from "@/components/stream-canvas/CanvasEditor";
@@ -46,7 +47,14 @@ export default function StreamCanvasRoomPage() {
   }, [getToken, isLoaded, isSignedIn, roomId, attempt]);
 
   if (isLoaded && !isSignedIn)
-    return <p className="p-6">Sign in to open this room.</p>;
+    return (
+      <p className="p-6">
+        <Link href="/sign-in" className="underline">
+          Sign in
+        </Link>{" "}
+        to open this room.
+      </p>
+    );
   if (error)
     return (
       <div
@@ -71,7 +79,7 @@ export default function StreamCanvasRoomPage() {
     );
 
   return (
-    <div className="fixed inset-0 overflow-hidden">
+    <div className="fixed inset-x-0 top-0 bottom-[104px] overflow-hidden sm:bottom-[60px]">
       <CanvasEditor
         key={roomId}
         roomId={roomId}

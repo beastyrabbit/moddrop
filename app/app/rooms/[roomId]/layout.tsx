@@ -9,7 +9,7 @@ export default function CanvasRoomLayout({
   return (
     <>
       <style>{`
-        header, footer { display: none !important; }
+        header { display: none !important; }
         .min-h-screen { min-height: auto !important; }
         body { overflow: hidden !important; }
       `}</style>
