@@ -1,39 +1,28 @@
 import Link from "next/link";
 import { CookieSettings } from "@/components/cookie-settings";
 
+const legalLinkClassName =
+  "inline-flex min-h-11 items-center underline underline-offset-4 hover:text-primary";
+
 export function LegalLinks() {
   return (
     <nav
       aria-label="Legal"
       className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs"
     >
-      <Link
-        className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-primary"
-        href="/legal-notice"
-      >
+      <Link className={legalLinkClassName} href="/legal-notice">
         Legal notice
       </Link>
-      <Link
-        className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-primary"
-        href="/privacy"
-      >
+      <Link className={legalLinkClassName} href="/privacy">
         Privacy
       </Link>
-      <Link
-        className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-primary"
-        href="/impressum"
-        hrefLang="de"
-      >
+      <Link className={legalLinkClassName} href="/impressum" hrefLang="de">
         Impressum
       </Link>
-      <Link
-        className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-primary"
-        href="/datenschutz"
-        hrefLang="de"
-      >
+      <Link className={legalLinkClassName} href="/datenschutz" hrefLang="de">
         Datenschutz
       </Link>
-      <CookieSettings />
+      <CookieSettings className={legalLinkClassName} />
     </nav>
   );
 }
