@@ -3,18 +3,32 @@ import type { LegalLanguage } from "./controller";
 const rows = {
   de: [
     [
-      "__client_uat; __client_uat_AuaLYNYS",
+      "__client_uat; __client_uat_<suffix>",
       "Clerk",
       "Cookie, Aktualisierungsstand der Anmeldung",
       "ca. 400 Tage, beobachtet",
-      "Anmeldung; Erforderlichkeit vor Anmeldung offen",
+      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
     ],
     [
       "__clerk_environment",
       "Clerk",
       "localStorage, Anmeldekonfiguration",
       "ohne automatische Ablauffrist, beobachtet",
-      "Erforderlichkeit vor Anmeldung offen",
+      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
+    ],
+    [
+      "__session (moddrop.live)",
+      "Clerk",
+      "Cookie, kurzlebiges Sitzungstoken",
+      "60 Sekunden Tokenlaufzeit, regelmäßig erneuert; Clerk-Dokumentation",
+      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
+    ],
+    [
+      "__client (clerk.moddrop.live)",
+      "Clerk",
+      "Cookie, Authentifizierung bei der Clerk-Frontend-API",
+      "browserabhängige Laufzeit; Clerk-Dokumentation",
+      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
     ],
     [
       "moddrop:obsSetupSecret:<roomId>",
@@ -32,14 +46,14 @@ const rows = {
     ],
     [
       "TLDRAW_USER_DATA_v3",
-      "tldraw",
+      "Moddrop (Editor-Bibliothek)",
       "localStorage, Editor-Nutzerpräferenzen",
       "ohne automatische Ablauffrist, aus Code",
       "Präferenz; Erforderlichkeit offen",
     ],
     [
       "TLDRAW_TAB_ID_v2",
-      "tldraw",
+      "Moddrop (Editor-Bibliothek)",
       "sessionStorage, Tab-Zustand",
       "Tabsitzung, aus Code",
       "technisch erforderlicher Sitzungszustand",
@@ -47,18 +61,32 @@ const rows = {
   ],
   en: [
     [
-      "__client_uat; __client_uat_AuaLYNYS",
+      "__client_uat; __client_uat_<suffix>",
       "Clerk",
       "Cookie, authentication update marker",
       "approx. 400 days, observed",
-      "authentication; necessity before sign-in unresolved",
+      "strictly necessary, Section 25(2) no. 2 TDDDG",
     ],
     [
       "__clerk_environment",
       "Clerk",
       "localStorage, authentication configuration",
       "no automatic expiry, observed",
-      "necessity before sign-in unresolved",
+      "strictly necessary, Section 25(2) no. 2 TDDDG",
+    ],
+    [
+      "__session (moddrop.live)",
+      "Clerk",
+      "Cookie, short-lived session token",
+      "60-second token lifetime, refreshed regularly; Clerk documentation",
+      "strictly necessary, Section 25(2) no. 2 TDDDG",
+    ],
+    [
+      "__client (clerk.moddrop.live)",
+      "Clerk",
+      "Cookie, authentication with the Clerk frontend API",
+      "browser-dependent lifetime; Clerk documentation",
+      "strictly necessary, Section 25(2) no. 2 TDDDG",
     ],
     [
       "moddrop:obsSetupSecret:<roomId>",
@@ -76,14 +104,14 @@ const rows = {
     ],
     [
       "TLDRAW_USER_DATA_v3",
-      "tldraw",
+      "Moddrop (editor library)",
       "localStorage, editor user preferences",
       "no automatic expiry, from code",
       "preference; necessity unresolved",
     ],
     [
       "TLDRAW_TAB_ID_v2",
-      "tldraw",
+      "Moddrop (editor library)",
       "sessionStorage, tab state",
       "tab session, from code",
       "necessary session state",

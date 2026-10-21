@@ -90,7 +90,7 @@ export const privacyEN: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "Moddrop does not sell personal data or use it for its own advertising. Embedded platforms may process data for their own advertising, as described in the section on Twitch and YouTube embeds. Moddrop does not use automated decision-making, including profiling, within the meaning of Art. 22 GDPR."
+            "Personal data is not sold and not used for advertising. There is no automated decision-making, including profiling, within the meaning of Art. 22 GDPR. After embedded Twitch or YouTube content is loaded, the platforms may process data for their own advertising, as described in the section on embeds."
           }
         </p>
       </>
@@ -103,12 +103,17 @@ export const privacyEN: readonly LegalSection[] = [
       <>
         <p>
           {
-            "Moddrop runs on the controller's own server infrastructure in Germany. Requests from the internet reach the application through a reverse proxy on a virtual server operated by netcup GmbH, Emmy-Noether-Straße 10, 76131 Karlsruhe, Germany (data center in Nuremberg). netcup processes the data as a processor. The connection is TLS-encrypted up to the reverse proxy and forwarded from there to the controller's infrastructure through an encrypted tunnel."
+            "Moddrop runs on the controller's own server infrastructure in Germany. Requests from the internet reach the application through a reverse proxy on a virtual server operated by netcup GmbH, Emmy-Noether-Straße 10, 76131 Karlsruhe, Germany (data center in Nuremberg). netcup processes the data as a processor under a data processing agreement pursuant to Art. 28 GDPR. The connection is TLS-encrypted up to the reverse proxy and forwarded from there to the controller's infrastructure through an encrypted tunnel."
           }
         </p>
         <p>
           {
             "The legal basis is Art. 6(1)(f) GDPR. The legitimate interest is the secure and reliable provision of the website."
+          }
+        </p>
+        <p>
+          {
+            "The following backup information applies to the database, whose Longhorn volumes use the default recurring-job group. Backup copies are stored within the controller's own infrastructure and overwritten after no more than three months. Backup coverage and retention for uploaded files in the separate Garage storage remain to be established."
           }
         </p>
       </>
@@ -146,12 +151,12 @@ export const privacyEN: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "This data is used to operate the site, analyse errors, and defend against attacks and abuse. The legal basis is Art. 6(1)(f) GDPR. The legitimate interest is the stability and security of the service. The actual deletion period for reverse-proxy logs has not yet been conclusively confirmed. A 14-day limit is planned and will only be stated here as an existing limit once implementation is confirmed."
+            "This data is used to operate the site, analyse errors, and defend against attacks and abuse. The legal basis is Art. 6(1)(f) GDPR. The legitimate interest is the stability and security of the service. Log files are deleted automatically after 14 days."
           }
         </p>
         <p>
           {
-            "Pangolin additionally processes HTTP request and network logs. The planned retention periods of 14 and 30 days respectively have not yet been confirmed as implemented. Moddrop is publicly accessible and does not use Pangolin/Pocket-ID SSO. The application logs security events with a truncated IP-derived hash and, where relevant, upload identifiers, rejected WebSocket origins, and error names and messages. The application code does not configure general logging of e-mail addresses or request bodies; technical error objects may contain further metadata. These records exist in short-lived Kubernetes container logs without central log collection. The specific deletion periods for these logs and local CrowdSec alerts and blocking decisions, including any backups, have not yet been confirmed. The legal basis is Art. 6(1)(f) GDPR, with troubleshooting and abuse prevention as legitimate interests. Connection addresses are also processed in memory for rate limiting; inactive entries can remain until cleanup or restart."
+            "Pangolin also processes HTTP request logs, deleted after 14 days, and network logs, deleted after 30 days. Moddrop is public and does not use Pangolin/Pocket-ID SSO. The application logs security events with a truncated IP-derived hash and, where relevant, upload identifiers, rejected WebSocket origins, and error names and messages. General logging of e-mail addresses or request bodies is not configured in the application code; technical error objects may contain further metadata. This data exists only in short-lived Kubernetes container logs without central aggregation. No fixed retention period is configured for these logs. Retention of local CrowdSec alerts and blocking decisions, including any backups, remains to be established. The legal basis is Art. 6(1)(f) GDPR; the legitimate interests are troubleshooting and abuse prevention. Rate limiting also processes connection addresses in memory; inactive entries may remain until cleanup or restart."
           }
         </p>
       </>
@@ -205,17 +210,12 @@ export const privacyEN: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "The purposes are requested collaboration, media delivery and access control. The legal basis is Art. 6(1)(f) GDPR; the legitimate interest is providing these functions to authorised users. Automatic deletion of accounts, rooms, canvas content and uploads is currently not implemented. Deleting a Clerk account does not establish automatic deletion of this application data. Please send erasure requests to "
+            "The purposes are requested collaboration, media delivery and access control. The legal basis is Art. 6(1)(f) GDPR; the legitimate interest is providing these functions to authorised users. Accounts, profile and user records, rooms, canvas content and uploads remain stored until you delete data in the app, where a deletion function is available, or request deletion. You can remove elements in the canvas; this does not delete the associated uploaded files and metadata. Moddrop currently has no deletion function for accounts, user records, rooms or uploads. No automatic deletion deadline is implemented. Deleting the Clerk account alone does not remove Moddrop's own records. On a deletion request, these records are deleted manually. Please send erasure requests to "
           }
           <a href={`mailto:${controller.privacyEmail}`}>
             {controller.privacyEmail}
           </a>
           {"."}
-        </p>
-        <p>
-          {
-            "Daily volume snapshots back up the database. The configuration deletes scheduled backups after seven days but retains the latest successful backup for longer; manual backups are excluded. A binding maximum retention period for all backups and a backup/deletion period for uploaded files have not yet been confirmed. Short-lived access tickets for OBS, WebSockets and upload retrieval limit access, not content storage."
-          }
         </p>
       </>
     ),
@@ -232,7 +232,7 @@ export const privacyEN: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "The purpose is identity and access management. The legal basis is Art. 6(1)(f) GDPR; the legitimate interest is restricting editing to authorised users. The necessity of Clerk functionality and storage loaded before a sign-in request is still under review. Clerk may process data in the USA and other countries. Its "
+            "The purpose is identity and access management. The legal basis is Art. 6(1)(f) GDPR; the legitimate interest is restricting editing to authorised users. Cookies and local configuration entries needed for sign-in and session management are technically necessary under Section 25(2) no. 2 TDDDG. Clerk may process data in the USA and other countries. Its "
           }
           <a href="https://clerk.com/legal/dpa">
             {"data processing agreement"}
@@ -276,13 +276,13 @@ export const privacyEN: readonly LegalSection[] = [
     ),
   },
   {
-    id: "privacyEN-9",
+    id: "embeds",
     title: "Twitch and YouTube embeds",
     content: (
       <>
         <p>
           {
-            "The canvas can embed a Twitch stream. The browser loads embed.twitch.tv/embed/v1.js and the player for this purpose. YouTube content loads the www.youtube.com/iframe_api interface; permission also depends on the room's YouTube setting. The platforms receive, in particular, your IP address, browser/connection data, the page visited, and channel or video selection. Platforms may use cookies and process usage data for their own purposes, including advertising. Twitch and Google content may autoplay while muted."
+            "In the control interface, Twitch and YouTube players load only after you explicitly click “Load Twitch player” or “Load YouTube video”. Before that click, these embeds load no provider scripts or players. After the click, the browser loads embed.twitch.tv/embed/v1.js for Twitch or www.youtube.com/iframe_api for YouTube, along with the respective players. The platforms receive, in particular, your IP address, browser/connection data, the page visited, and channel or video selection. They may use cookies and process usage data for their own purposes, including advertising. Content may autoplay while muted."
           }
         </p>
         <p>
@@ -302,40 +302,42 @@ export const privacyEN: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "These embeds currently have no prior consent gate. Where non-essential storage access or tracking occurs, consent under Section 25(1) TDDDG and Art. 6(1)(a) GDPR is required. This policy does not obtain that consent. The legal basis for the existing automatic loading, platform cookies and their specific periods, and Twitch transfer safeguards still need to be established."
+            "Clicking gives consent to load the selected embed under Section 25(1) TDDDG and Art. 6(1)(a) GDPR. The choice is held only in this page's memory and is not persisted in browser storage. Reloading withdraws consent for further loading; cookies already set by the platforms can be removed in browser settings. Withdrawal does not affect the lawfulness of processing before withdrawal. The OBS browser source continues to load the output configured by the room owner automatically. This is necessary to deliver that output under Section 25(2) no. 2 TDDDG and Art. 6(1)(f) GDPR, with the legitimate interest of providing the requested stream output. The room's YouTube policy also applies: disabled YouTube loads no player, and OBS output still requires the owner's allow_on_air setting and risk acknowledgment. That acknowledgment does not replace a control user's consent. The specific platform cookies and their periods, and Twitch transfer safeguards, remain to be established."
           }
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "tldraw-licence",
+    title: "tldraw licence validation",
+    content: (
+      <>
+        <p>
+          The canvas uses the tldraw library. Icons, fonts and translations are
+          served with Moddrop itself; drawings synchronise with the controller's
+          own backend. The current production licence is valid but enables a
+          watermark request to cdn.tldraw.com. This sends connection data,
+          licence ID, licence type, SDK version and the full page address. The
+          licence signature is verified locally.
+        </p>
+        <p>
+          The current public privacy policy names tldraw Inc., with contact
+          address Floor 3, The Arts Building, Morris Pl, Finsbury Park, London
+          N4 3JG, United Kingdom, and processing in the USA among other
+          locations. The necessity and legal basis of this additional request,
+          the policy's applicability to SDK reports, retention and transfer
+          safeguards remain to be established. Further information:{" "}
+          <a href="https://tldraw.dev/sdk-features/license-key">
+            tldraw licence information
+          </a>{" "}
+          and <a href="https://www.tldraw.com/privacy.html">privacy policy</a>.
         </p>
       </>
     ),
   },
   {
     id: "privacyEN-10",
-    title: "tldraw",
-    content: (
-      <>
-        <p>
-          {
-            "The canvas uses the tldraw library; the shared drawing synchronises with the controller's own backend. The default configuration loads editor assets such as icons, fonts and translations from cdn.tldraw.com. This service consequently receives connection data such as IP address, browser identifier and referrer. The licence signature is verified locally. For evaluation or watermarked licences and unlicensed production requests, the library can additionally send a watermark request containing licence ID, licence type, SDK version and the full page address to that CDN. Which condition applies to the production licence was not checked using a licence key."
-          }
-        </p>
-        <p>
-          {
-            "Required editor assets support canvas operation; Art. 6(1)(f) GDPR may apply to that legitimate interest. The necessity and legal basis of further licence/usage reporting remain to be established. The current public privacy policy names tldraw Inc., with contact address Floor 3, The Arts Building, Morris Pl, Finsbury Park, London N4 3JG, United Kingdom, and processing in the USA among other locations. Whether that policy fully covers SDK/CDN processing, its specific retention periods and third-country transfer safeguards have not yet been conclusively confirmed. See "
-          }
-          <a href="https://tldraw.dev/sdk-features/license-key">
-            {"tldraw licence information"}
-          </a>
-          {" and "}
-          <a href="https://www.tldraw.com/privacy.html">privacy policy</a>
-          {
-            ". No tldraw requests were observed on public pages during the inspection."
-          }
-        </p>
-      </>
-    ),
-  },
-  {
-    id: "privacyEN-11",
     title: "Contact by e-mail",
     content: (
       <>
@@ -374,31 +376,32 @@ export const privacyEN: readonly LegalSection[] = [
     ),
   },
   {
-    id: "privacyEN-12",
+    id: "privacyEN-11",
     title: "Cookies and local storage",
     content: (
       <>
+        {" "}
         <StorageTable language="en" />
         <p>
           {
-            "The logged-out inspection observed Clerk cookies __client_uat and __client_uat_AuaLYNYS on .moddrop.live. They mark authentication updates and had an expiry of approximately 400 days. Clerk also stores a configuration copy as __clerk_environment in localStorage, with no automatic browser expiry. sessionStorage and IndexedDB were empty when inspecting public pages and the sign-in dialog. Additional cookies for a signed-in account were not inspected."
+            "Clerk cookies __client_uat and __client_uat_<suffix>, lasting approximately 400 days, and the __clerk_environment localStorage entry without automatic browser expiry are technically necessary for sign-in and session management under Section 25(2) no. 2 TDDDG. The first two cookie names and configuration were observed while signed out. Clerk also documents __session on the application domain with a 60-second token lifetime and __client on clerk.moddrop.live with a browser-dependent lifetime for signed-in users. These session cookies were verified in official documentation, not observed in an authenticated session."
           }
         </p>
         <p>
           {
-            "The application code also uses sessionStorage at moddrop:obsSetupSecret:<roomId> to hand over the one-time OBS access secret within the tab session. localStorage at moddrop:media-preferences:v1:<userId>:<roomId> retains volume and mute settings without automatic expiry. The tldraw library uses TLDRAW_USER_DATA_v3 in localStorage for editor user preferences without automatic expiry, and TLDRAW_TAB_ID_v2 in sessionStorage for tab state until the tab session ends. These signed-in storage accesses were identified from code, not observed in an authenticated session. The canvas uses the controller's server synchronisation; this integration does not configure an additional local canvas database."
+            "Moddrop uses sessionStorage at moddrop:obsSetupSecret:<roomId> to hand over the one-time OBS access secret. localStorage at moddrop:media-preferences:v1:<userId>:<roomId> stores volume and mute settings. The locally integrated editor library writes TLDRAW_USER_DATA_v3 in localStorage and TLDRAW_TAB_ID_v2 in sessionStorage as first-party storage. Editor assets are served by Moddrop itself. These entries were identified from code. sessionStorage and IndexedDB were empty on the inspected public pages; no additional local canvas database is configured."
           }
         </p>
         <p>
           {
-            'Section 25(2) no. 2 TDDDG applies to strictly necessary storage access, particularly requested sign-in and access-secret handover. The necessity of Clerk storage before sign-in and permanent preference storage still needs to be established. Non-essential access requires consent under Section 25(1) TDDDG; where personal data is processed, Art. 6(1)(a) GDPR applies. Consent collection for the open cases described here is currently not implemented. You can delete local data in your browser settings. This does not delete server data. does not set cookies or store data in your browser." Or a table of every cookie / localStorage / sessionStorage / IndexedDB entry actually set: name, provider, purpose, duration, and whether it is technically necessary (Section 25(2) no. 2 TDDDG) or requires consent (Section 25(1) TDDDG, Art. 6(1)(a) GDPR).]]'
+            "Section 25(2) no. 2 TDDDG applies to strictly necessary storage access. The necessity of permanent preference storage remains to be established. Non-essential access requires consent under Section 25(1) TDDDG and, for personal data, Art. 6(1)(a) GDPR. Consent collection for the unresolved preference accesses is currently not implemented. The decision to load an embedded player stays only in memory. You can delete local data in browser settings. This does not delete server data."
           }
         </p>
       </>
     ),
   },
   {
-    id: "privacyEN-13",
+    id: "privacyEN-12",
     title: "Your rights",
     content: (
       <>
@@ -437,7 +440,7 @@ export const privacyEN: readonly LegalSection[] = [
     ),
   },
   {
-    id: "privacyEN-14",
+    id: "privacyEN-13",
     title: "Obligation to provide data",
     content: (
       <>
@@ -450,7 +453,7 @@ export const privacyEN: readonly LegalSection[] = [
     ),
   },
   {
-    id: "privacyEN-15",
+    id: "privacyEN-14",
     title: "Changes",
     content: (
       <>

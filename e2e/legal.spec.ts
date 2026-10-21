@@ -5,6 +5,17 @@ for (const width of [1280, 375]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
+    const forbiddenRequests: string[] = [];
+    page.on("request", (request) => {
+      const host = new URL(request.url()).hostname;
+      if (
+        host === "cdn.tldraw.com" ||
+        host === "embed.twitch.tv" ||
+        host === "youtube.com" ||
+        host.endsWith(".youtube.com")
+      )
+        forbiddenRequests.push(request.url());
+    });
     // Never send a request to Clerk, an embed provider or another third party.
     await page.route("**/*", (route) =>
       new URL(route.request().url()).hostname === "127.0.0.1"
@@ -16,15 +27,20 @@ for (const width of [1280, 375]) {
         "Legal notice",
         "/legal-notice",
         "Legal Notice (Impressum)",
-        "impressum@heerlab.com",
+        "impressum-moddrop@heerlab.com",
       ],
-      ["Privacy", "/privacy", "Privacy Policy", "datenschutz@heerlab.com"],
-      ["Impressum", "/impressum", "Impressum", "impressum@heerlab.com"],
+      [
+        "Privacy",
+        "/privacy",
+        "Privacy Policy",
+        "datenschutz-moddrop@heerlab.com",
+      ],
+      ["Impressum", "/impressum", "Impressum", "impressum-moddrop@heerlab.com"],
       [
         "Datenschutz",
         "/datenschutz",
         "Datenschutzerklärung",
-        "datenschutz@heerlab.com",
+        "datenschutz-moddrop@heerlab.com",
       ],
     ]) {
       await page.goto("/");
@@ -81,5 +97,6 @@ for (const width of [1280, 375]) {
     await expect(
       page.getByRole("navigation", { name: "Legal", exact: true }),
     ).toHaveCount(0);
+    expect(forbiddenRequests).toEqual([]);
   });
 }

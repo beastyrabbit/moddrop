@@ -33,15 +33,30 @@ function expectLinks(html: string) {
 
 describe("legal routes", () => {
   const cases: [string, () => React.JSX.Element, Metadata, string][] = [
-    ["Impressum", Impressum, impressumMetadata, "impressum@heerlab.com"],
-    ["Legal Notice", LegalNotice, legalNoticeMetadata, "impressum@heerlab.com"],
+    [
+      "Impressum",
+      Impressum,
+      impressumMetadata,
+      "impressum-moddrop@heerlab.com",
+    ],
+    [
+      "Legal Notice",
+      LegalNotice,
+      legalNoticeMetadata,
+      "impressum-moddrop@heerlab.com",
+    ],
     [
       "Datenschutzerklärung",
       Datenschutz,
       datenschutzMetadata,
-      "datenschutz@heerlab.com",
+      "datenschutz-moddrop@heerlab.com",
     ],
-    ["Privacy Policy", Privacy, privacyMetadata, "datenschutz@heerlab.com"],
+    [
+      "Privacy Policy",
+      Privacy,
+      privacyMetadata,
+      "datenschutz-moddrop@heerlab.com",
+    ],
   ];
   it.each(cases)(
     "renders %s with approved operator data and noindex",
@@ -58,6 +73,7 @@ describe("legal routes", () => {
         expect(html).toContain(text);
       expect(metadata.robots).toEqual({ index: false });
       expect(html).not.toContain("[[");
+      expect(html).not.toContain("]]");
       expect(html).not.toContain("MODULE");
       expect(html).not.toContain("kontakt@heerlab.com");
       expectLinks(html);
@@ -65,10 +81,10 @@ describe("legal routes", () => {
   );
   it("links to the central contact form and dates both policies", () => {
     expect(renderToStaticMarkup(<Impressum />)).toContain(
-      'href="https://beastyrabbit.com/kontakt"',
+      'href="https://beastyrabbit.com/kontakt?from=moddrop"',
     );
     expect(renderToStaticMarkup(<LegalNotice />)).toContain(
-      'href="https://beastyrabbit.com/kontakt"',
+      'href="https://beastyrabbit.com/kontakt?from=moddrop"',
     );
     for (const Page of [Datenschutz, Privacy])
       expect(renderToStaticMarkup(<Page />)).toContain('dateTime="2026-10-21"');
