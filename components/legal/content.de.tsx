@@ -92,7 +92,7 @@ export const privacyDE: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "Personenbezogene Daten werden nicht verkauft und nicht für Werbung verwendet. Eine automatisierte Entscheidungsfindung einschließlich Profiling im Sinne von Art. 22 DSGVO findet nicht statt. Nach dem Laden eingebundener Twitch- oder YouTube-Inhalte können die Plattformen Daten für eigene Werbung verarbeiten, wie im Abschnitt zu Einbettungen beschrieben."
+            "Personenbezogene Daten werden nicht verkauft und nicht für Werbung verwendet. Eine automatisierte Entscheidungsfindung einschließlich Profiling im Sinne von Art. 22 DSGVO findet nicht statt. Eingebettete Plattformen können Daten nach ihren eigenen Richtlinien auch für Werbung verarbeiten."
           }
         </p>
       </>
@@ -115,7 +115,7 @@ export const privacyDE: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "Die folgenden Angaben zu Sicherungskopien betreffen die Datenbank, deren Longhorn-Volumes die wiederkehrenden Sicherungsaufträge der Gruppe default verwenden. Sicherungskopien werden innerhalb der eigenen Infrastruktur gespeichert und nach spätestens drei Monaten überschrieben. Für die hochgeladenen Dateien im separaten Garage-Speicher ist die Sicherungsabdeckung und deren Aufbewahrungsdauer noch zu klären."
+            "Zur Datensicherung werden regelmäßig Sicherungskopien innerhalb der eigenen Infrastruktur erstellt; sie werden nach Ablauf ihrer Aufbewahrungszeit überschrieben."
           }
         </p>
       </>
@@ -156,7 +156,12 @@ export const privacyDE: readonly LegalSection[] = [
         </p>
         <p>
           {
-            "Pangolin verarbeitet zusätzlich HTTP-Anfrageprotokolle, die nach 14 Tagen gelöscht werden, und Netzwerkprotokolle, die nach 30 Tagen gelöscht werden. Moddrop ist öffentlich zugänglich und verwendet kein Pangolin-/Pocket-ID-SSO. Die Anwendung protokolliert Sicherheitsereignisse mit einem gekürzten IP-abgeleiteten Hash und gegebenenfalls Upload-Kennungen, abgewiesene WebSocket-Ursprünge sowie Fehlernamen und Fehlermeldungen. Ein allgemeines Protokollieren von E-Mail-Adressen oder Anfrageinhalten ist im Anwendungscode nicht eingerichtet; technische Fehlerobjekte können weitere Metadaten enthalten. Diese Daten stehen ausschließlich in kurzlebigen Kubernetes-Containerprotokollen ohne zentrale Logsammlung. Eine feste Aufbewahrungsdauer ist dafür nicht konfiguriert. Die Aufbewahrung lokaler CrowdSec-Warnungen und Sperrentscheidungen einschließlich etwaiger Sicherungen ist noch zu klären. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO, berechtigtes Interesse sind Fehlerbehebung und Missbrauchsschutz. Zur Ratenbegrenzung werden außerdem Verbindungsadressen im Arbeitsspeicher verarbeitet; inaktive Einträge können bis zur Bereinigung oder zum Neustart verbleiben."
+            "Pangolin verarbeitet zusätzlich HTTP-Anfrageprotokolle, die nach 14 Tagen gelöscht werden, und Netzwerkprotokolle, die nach 30 Tagen gelöscht werden. Moddrop verwendet kein Pangolin-/Pocket-ID-SSO."
+          }
+        </p>
+        <p>
+          {
+            "Für Betrieb, Fehleranalyse und Missbrauchsschutz verarbeitet die Anwendung technische Ereignis- und Fehlerdaten in kurzlebigen Containerprotokollen. Eine zentrale Logsammlung gibt es nicht. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; das berechtigte Interesse liegt im sicheren und zuverlässigen Betrieb."
           }
         </p>
       </>
@@ -205,80 +210,62 @@ export const privacyDE: readonly LegalSection[] = [
       <>
         <p>
           {
-            "Moddrop speichert in PostgreSQL die Clerk-Nutzerkennung, den Benutzernamen samt Suchschlüssel, die Einstellung zur Profilbildanzeige und Zeitstempel. Andere angemeldete Nutzer können Benutzernamen zur Zusammenarbeit suchen. Räume enthalten Eigentümer- und Mitgliederkennungen, einen optionalen Twitch-Kanal, YouTube-Freigabeeinstellungen samt Bestätigungszeitpunkt und einen gehashten OBS-Zugangsschlüssel. Gespeichert werden außerdem der aktuelle Canvas-Synchronisationsstand, Revisionen und Zeitstempel sowie Upload-Dateinamen, Medientyp, Größe, Objektkennung und Zeitpunkt. Die hochgeladenen Dateien liegen im eigenen S3-kompatiblen Garage-Speicher in Deutschland. Raumteilnehmer und berechtigte OBS-Quellen erhalten die für die gemeinsame Bearbeitung und Anzeige erforderlichen Inhalte. Inhalte, die Sie in den sichtbaren Streambereich legen, können im Stream öffentlich ausgestrahlt werden."
+            "Moddrop speichert Konten- und Profildaten, Räume und Mitgliedschaften, Canvas-Inhalte, Einstellungen sowie hochgeladene Medien und zugehörige Dateiinformationen auf eigener Infrastruktur in Deutschland. Dies ermöglicht die gemeinsame Bearbeitung, die Medienbereitstellung und die Zugangskontrolle. Raumteilnehmer und berechtigte OBS-Quellen erhalten die dafür erforderlichen Inhalte. Inhalte im sichtbaren Streambereich können öffentlich ausgestrahlt werden."
           }
         </p>
         <p>
           {
-            "Zwecke sind die angeforderte Zusammenarbeit, die Bereitstellung von Medien und die Zugangskontrolle. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; das berechtigte Interesse ist die Bereitstellung dieser Funktionen für berechtigte Nutzer. Konten, Profil- und Nutzerdatensätze, Räume, Canvas-Inhalte und Uploads bleiben gespeichert, bis Sie die Daten in der Anwendung löschen, soweit dort eine Löschfunktion verfügbar ist, oder eine Löschung anfordern. Im Canvas können Sie Elemente entfernen; dies löscht nicht die zugehörigen Upload-Dateien und Metadaten. Für Konten, Nutzerdatensätze, Räume und Uploads gibt es derzeit keine Löschfunktion in Moddrop. Eine automatische Löschfrist ist nicht eingerichtet. Das Löschen des Clerk-Kontos allein entfernt die eigenen Datensätze von Moddrop nicht. Wenn Sie die Löschung anfordern, werden diese Daten manuell gelöscht. Löschanfragen richten Sie bitte an "
+            "Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO. Das berechtigte Interesse ist die Bereitstellung der angeforderten Funktionen für berechtigte Nutzer. Die Daten werden gespeichert, solange Sie das Konto nutzen, längstens bis zu 10 Jahre."
           }
+        </p>
+        <p>
+          Auf Anfrage werden Konten- und Profildaten, Räume, Canvas-Inhalte und
+          Uploads gelöscht. Löschanfragen richten Sie bitte an{" "}
           <a href={`mailto:${controller.privacyEmail}`}>
             {controller.privacyEmail}
           </a>
-          {"."}
+          . Das Löschen des Clerk-Kontos allein entfernt diese Daten nicht.
         </p>
       </>
     ),
   },
   {
     id: "privacyDE-7",
-    title: "Clerk",
+    title: "Anmeldung mit Clerk",
     content: (
       <>
         <p>
           {
-            "Für die Anmeldung verwenden wir Clerk, Inc., 660 King Street, Unit 345, San Francisco, CA 94107, USA. Der Browser kontaktiert bereits auf öffentlichen Seiten clerk.moddrop.live für Skripte und die Anmeldekonfiguration; bei der Anmeldung können Profilbilder von img.clerk.com hinzukommen. Clerk verarbeitet Verbindungsdaten wie IP-Adresse und Browserkennung sowie bei Anmeldung Kontodaten, Nutzerkennung, E-Mail-Adresse, Benutzernamen und gegebenenfalls Profilbild. Anmeldedaten werden durch Clerk verwaltet. Der Backend-Dienst prüft Clerk-Zugangstokens und ruft bei Bedarf Nutzerprofile ab."
+            "Für die Anmeldung verwenden wir Clerk, Inc., 660 King Street, Unit 345, San Francisco, CA 94107, USA. Clerk verarbeitet Verbindungsdaten, Kontodaten und Anmeldeinformationen, etwa Nutzerkennung, E-Mail-Adresse, Benutzername und Profilbild. Der Browser kontaktiert Clerk auch auf öffentlichen Seiten für die Anmeldekonfiguration. Optional können Sie sich über Discord oder Twitch anmelden; dabei werden die von Ihnen freigegebenen Identitätsdaten mit Clerk ausgetauscht."
           }
         </p>
         <p>
           {
-            "Zweck ist die Verwaltung von Identität und Zugang. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; berechtigtes Interesse ist die Beschränkung der Bearbeitung auf berechtigte Nutzer. Die für Anmeldung und Sitzung benötigten Cookies und lokalen Konfigurationseinträge sind technisch erforderlich nach § 25 Abs. 2 Nr. 2 TDDDG. Clerk kann Daten in den USA und weiteren Ländern verarbeiten. Der "
+            "Clerk ist für die Anmeldung und Sitzungsverwaltung technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG). Rechtsgrundlage der Datenverarbeitung ist Art. 6 Abs. 1 lit. f DSGVO; berechtigtes Interesse ist die Beschränkung der Bearbeitung auf berechtigte Nutzer. Clerk ist unter dem EU-US Data Privacy Framework zertifiziert; der Auftragsverarbeitungsvertrag sieht ergänzend Standardvertragsklauseln vor. Die Anbieter speichern Daten, solange dies für die in ihren Datenschutzerklärungen beschriebenen Zwecke erforderlich ist."
           }
-          <a href="https://clerk.com/legal/dpa">
-            {"Auftragsverarbeitungsvertrag"}
-          </a>
-          {
-            " sieht das EU-US Data Privacy Framework und ersatzweise EU-Standardvertragsklauseln vor. Clerk ist im DPF-Verzeichnis mit aktivem EU-US-Status für Nicht-Personaldaten gelistet. Clerk beschreibt eine zweckgebundene Speicherung; eine feste Frist für dieses Nutzerkonto ist nicht bestätigt. Die vertragliche Löschung innerhalb von 90 Tagen nach Ende des Dienstleistungsvertrags ist keine Zusage zur Löschung eines einzelnen Nutzerkontos. Weitere Informationen: "
-          }
+        </p>
+        <p>
+          Weitere Informationen:{" "}
           <a href="https://clerk.com/legal/privacy">
-            {"Clerk-Datenschutzerklärung"}
-          </a>
-          {"."}
+            Clerk-Datenschutzerklärung
+          </a>{" "}
+          und{" "}
+          <a href="https://clerk.com/legal/dpa">Auftragsverarbeitungsvertrag</a>
+          .
+        </p>
+        <p>
+          Discord nennt für Personen im EWR die Discord Netherlands BV, Schiphol
+          Boulevard 195, 1118 BG Schiphol, Niederlande, und für andere Regionen
+          Discord Inc., 444 De Haro Street #200, San Francisco, CA 94107, USA.
+          Discord beschreibt Standardvertragsklauseln und das Data Privacy
+          Framework für internationale Übermittlungen. Details:{" "}
+          <a href="https://discord.com/privacy">Discord-Datenschutzerklärung</a>
+          . Für Twitch gelten die Angaben im folgenden Abschnitt.
         </p>
       </>
     ),
   },
-  {
-    id: "privacyDE-8",
-    title: "Optionale Plattform-Anmeldung",
-    content: (
-      <>
-        <p>
-          {
-            "Die Anmeldeoberfläche bietet optional Discord und Twitch an. Eine Verbindung zum gewählten Plattformkonto erfolgt erst, wenn Sie diese Anmeldeart auswählen. Dabei werden Verbindungsdaten und die von Ihnen bei der Plattform freigegebenen Identitätsdaten zwischen Plattform und Clerk ausgetauscht. Moddrop verwendet diese Anmeldung zur Zugangskontrolle auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO. Die konkret angeforderten Berechtigungen werden im Anmeldevorgang angezeigt; eine vollständige Prüfung dieser Berechtigungen steht noch aus."
-          }
-        </p>
-        <p>
-          {
-            "Discord nennt für Personen im EWR die Discord Netherlands BV, Schiphol Boulevard 195, 1118 BG Schiphol, Niederlande, und für andere Regionen Discord Inc., 444 De Haro Street #200, San Francisco, CA 94107, USA. Discord verarbeitet auch in den USA und weiteren Ländern und nennt Standardvertragsklauseln sowie das Data Privacy Framework als Übermittlungsmechanismen. Discord ist im DPF-Verzeichnis für Nicht-Personaldaten als aktiv mit laufender Rezertifizierungsprüfung gelistet. Aufbewahrung und weitere Verarbeitung richten sich nach der "
-          }
-          <a href="https://discord.com/privacy">
-            {"Discord-Datenschutzerklärung"}
-          </a>
-          {"; eine anwendungsspezifische feste Frist ist nicht bestätigt."}
-        </p>
-        <p>
-          {
-            "Twitch wird von Twitch Interactive, Inc., 350 Bush Street, 2nd Floor, San Francisco, CA 94104, USA, angeboten. Twitch nennt Verarbeitung in den USA und weiteren Ländern sowie eine Speicherung, solange sie für die beschriebenen Zwecke oder rechtliche Pflichten erforderlich ist. Ein konkreter Übermittlungsmechanismus für diese Integration ist noch nicht bestätigt. Siehe "
-          }
-          <a href="https://legal.twitch.com/en/legal/privacy-notice/">
-            {"Twitch-Datenschutzhinweise"}
-          </a>
-          {"."}
-        </p>
-      </>
-    ),
-  },
+
   {
     id: "embeds",
     title: "Twitch- und YouTube-Einbettungen",
@@ -286,60 +273,69 @@ export const privacyDE: readonly LegalSection[] = [
       <>
         <p>
           {
-            "In der Steuerungsoberfläche werden Twitch- und YouTube-Player erst geladen, wenn Sie ausdrücklich auf „Load Twitch player“ beziehungsweise „Load YouTube video“ klicken. Vorher werden keine Skripte oder Player dieser Einbettungen geladen. Nach dem Klick lädt der Browser für Twitch embed.twitch.tv/embed/v1.js und für YouTube www.youtube.com/iframe_api sowie die jeweiligen Player. Die Plattformen erhalten insbesondere IP-Adresse, Browser-/Verbindungsdaten, die aufgerufene Seite und die Kanal- oder Videoauswahl. Sie können Cookies einsetzen und Nutzungsdaten für eigene Zwecke einschließlich Werbung verarbeiten. Inhalte können auch ohne Ton automatisch abspielen."
+            "Twitch- und YouTube-Inhalte werden geladen, wenn ein Raum vom Raumeigentümer konfigurierte Medien anzeigt. Die Plattformen erhalten dabei insbesondere IP-Adresse, Browser- und Verbindungsdaten sowie Angaben zur aufgerufenen Seite und zum ausgewählten Kanal oder Video. Sie können eigene Cookies setzen und Daten nach ihren eigenen Richtlinien verarbeiten."
           }
         </p>
         <p>
           {
-            "Anbieter von Twitch ist das im vorigen Abschnitt genannte Unternehmen. Für YouTube ist bei Nutzern im EWR Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland, verantwortlich. Daten können an Google LLC, 1600 Amphitheatre Parkway, Mountain View, CA 94043, USA, und in weitere Länder übermittelt werden. Google beschreibt DPF und Standardvertragsklauseln in seinen "
+            "Das Laden ist zur Bereitstellung dieser Funktion erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG). Rechtsgrundlage der Datenverarbeitung ist Art. 6 Abs. 1 lit. f DSGVO; berechtigtes Interesse ist die angeforderte Medienanzeige und Streamausgabe."
           }
+        </p>
+        <p>
+          Twitch wird von Twitch Interactive, Inc., 350 Bush Street, 2nd Floor,
+          San Francisco, CA 94104, USA, angeboten. Daten können in die USA
+          übermittelt werden; Einzelheiten in der{" "}
+          <a href="https://legal.twitch.com/en/legal/privacy-notice/">
+            Datenschutzerklärung von Twitch
+          </a>
+          .
+        </p>
+        <p>
+          Für YouTube ist bei Nutzern im EWR Google Ireland Limited, Gordon
+          House, Barrow Street, Dublin 4, Irland, verantwortlich. Daten können
+          an Google LLC, 1600 Amphitheatre Parkway, Mountain View, CA 94043,
+          USA, übermittelt werden. Google LLC ist unter dem EU-US Data Privacy
+          Framework zertifiziert; Google beschreibt ergänzend
+          Standardvertragsklauseln in seinen{" "}
           <a href="https://policies.google.com/privacy/frameworks">
-            {"Übermittlungsregeln"}
+            Übermittlungsregeln
           </a>
-          {
-            "; Google LLC ist im DPF-Verzeichnis mit aktivem EU-US-Status gelistet. Einzelheiten zur zweckgebundenen Aufbewahrung stehen in der "
-          }
+          . Weitere Verarbeitung und Aufbewahrung richten sich nach der{" "}
           <a href="https://policies.google.com/privacy">
-            {"Google-Datenschutzerklärung"}
+            Google-Datenschutzerklärung
           </a>
-          {"."}
-        </p>
-        <p>
-          {
-            "Mit dem Klick willigen Sie in das Laden der gewählten Einbettung ein. Rechtsgrundlagen sind § 25 Abs. 1 TDDDG und Art. 6 Abs. 1 lit. a DSGVO. Die Entscheidung wird nur im Arbeitsspeicher dieser Seite gehalten, nicht dauerhaft im Browser gespeichert. Durch Neuladen können Sie die Einwilligung für weiteres Laden widerrufen; zuvor von den Plattformen gesetzte Cookies können Sie in den Browsereinstellungen löschen. Der Widerruf berührt die Rechtmäßigkeit der bisherigen Verarbeitung nicht. Die OBS-Browserquelle lädt die vom Raumeigentümer konfigurierte Ausgabe weiterhin automatisch. Dies ist für die Bereitstellung dieser Ausgabe erforderlich; Rechtsgrundlagen sind § 25 Abs. 2 Nr. 2 TDDDG und Art. 6 Abs. 1 lit. f DSGVO mit dem berechtigten Interesse an der angeforderten Streamausgabe. Die YouTube-Raumeinstellung gilt zusätzlich: Bei deaktiviertem YouTube wird kein Player geladen, und die Ausgabe in OBS setzt weiterhin die Freigabe allow_on_air samt Risikobestätigung durch den Eigentümer voraus. Diese Bestätigung ersetzt nicht die Einwilligung eines Nutzers in der Steuerungsoberfläche. Die konkreten Plattform-Cookies und ihre Fristen sowie Twitch-Übermittlungsgarantien sind noch zu klären."
-          }
+          .
         </p>
       </>
     ),
   },
   {
-    id: "tldraw-licence",
-    title: "tldraw-Lizenzprüfung",
+    id: "tldraw",
+    title: "tldraw-Editor",
     content: (
       <>
         <p>
-          Der Canvas verwendet die tldraw-Bibliothek. Symbole, Schriften und
-          Übersetzungen werden mit Moddrop selbst bereitgestellt; die Zeichnung
-          wird mit dem eigenen Backend synchronisiert. Die derzeitige
-          Produktivlizenz ist gültig, aktiviert jedoch eine
-          Wasserzeichen-Anfrage an cdn.tldraw.com. Dabei werden
-          Verbindungsdaten, Lizenzkennung, Lizenztyp, SDK-Version und die
-          vollständige Seitenadresse übermittelt. Die Lizenzsignatur wird lokal
-          geprüft.
+          {
+            "Der Canvas verwendet tldraw. Der Editor lädt Symbole, Schriften und Übersetzungen von cdn.tldraw.com und stellt eine Anfrage zur Lizenzprüfung. Dabei werden Verbindungsdaten sowie bei der Lizenzanfrage Lizenz- und SDK-Angaben und die Seitenadresse übermittelt. Die Canvas-Inhalte werden mit dem eigenen Backend synchronisiert."
+          }
         </p>
         <p>
-          Die aktuelle öffentliche Datenschutzerklärung nennt tldraw Inc. mit
-          der Kontaktanschrift Floor 3, The Arts Building, Morris Pl, Finsbury
-          Park, London N4 3JG, Vereinigtes Königreich, und eine Verarbeitung
-          unter anderem in den USA. Die Erforderlichkeit und Rechtsgrundlage
-          dieser zusätzlichen Anfrage, die Anwendbarkeit der Erklärung auf
-          SDK-Berichte sowie Speicherfristen und Übermittlungsgarantien sind
-          noch zu klären. Weitere Informationen:{" "}
-          <a href="https://tldraw.dev/sdk-features/license-key">
-            tldraw-Lizenzinformationen
+          {
+            "Diese Anfragen sind zur Bereitstellung des Editors erforderlich. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO; das berechtigte Interesse liegt in der Bereitstellung der Zeichenfunktion. Für technisch notwendige lokale Editor-Einstellungen gilt § 25 Abs. 2 Nr. 2 TDDDG."
+          }
+        </p>
+        <p>
+          Anbieter ist tldraw Inc., Kontaktanschrift Floor 3, The Arts Building,
+          Morris Pl, Finsbury Park, London N4 3JG, Vereinigtes Königreich. Daten
+          können unter anderem in den USA verarbeitet werden. Einzelheiten zur
+          Verarbeitung und Aufbewahrung finden Sie in der{" "}
+          <a href="https://www.tldraw.com/privacy.html">
+            Datenschutzerklärung von tldraw
           </a>{" "}
-          und{" "}
-          <a href="https://www.tldraw.com/privacy.html">Datenschutzerklärung</a>
+          und den{" "}
+          <a href="https://tldraw.dev/sdk-features/license-key">
+            Lizenzinformationen
+          </a>
           .
         </p>
       </>
@@ -389,21 +385,10 @@ export const privacyDE: readonly LegalSection[] = [
     title: "Cookies und lokale Speicherung",
     content: (
       <>
-        {" "}
         <StorageTable language="de" />
         <p>
           {
-            "Für die Anmeldung und Sitzungsverwaltung sind die Clerk-Cookies __client_uat und __client_uat_<suffix> mit rund 400 Tagen Laufzeit und der localStorage-Eintrag __clerk_environment ohne automatische Browser-Ablauffrist technisch erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG). Die ersten beiden Cookie-Namen und die Konfiguration wurden ohne Anmeldung beobachtet. Clerk dokumentiert außerdem __session auf der Anwendungsdomain mit 60 Sekunden Tokenlaufzeit und __client auf clerk.moddrop.live mit browserabhängiger Laufzeit für angemeldete Nutzer. Diese Sitzungscookies wurden anhand der offiziellen Dokumentation geprüft, nicht in einer angemeldeten Sitzung beobachtet."
-          }
-        </p>
-        <p>
-          {
-            "Moddrop verwendet sessionStorage unter moddrop:obsSetupSecret:<roomId> zur einmaligen Übergabe des OBS-Zugangsschlüssels. localStorage unter moddrop:media-preferences:v1:<userId>:<roomId> speichert Lautstärke und Stummschaltung. Die selbst eingebundene Editor-Bibliothek schreibt TLDRAW_USER_DATA_v3 in localStorage und TLDRAW_TAB_ID_v2 in sessionStorage als Erstanbieterspeicher. Editor-Assets werden von Moddrop selbst bereitgestellt. Diese Einträge wurden aus dem Code ermittelt. Auf öffentlichen Seiten waren sessionStorage und IndexedDB bei der Prüfung leer; eine zusätzliche lokale Canvas-Datenbank ist nicht konfiguriert."
-          }
-        </p>
-        <p>
-          {
-            "Für technisch erforderliche Speicherzugriffe gilt § 25 Abs. 2 Nr. 2 TDDDG. Die Erforderlichkeit dauerhafter Präferenzspeicherung ist noch zu klären. Nicht erforderliche Zugriffe erfordern eine Einwilligung nach § 25 Abs. 1 TDDDG; bei personenbezogenen Daten gilt Art. 6 Abs. 1 lit. a DSGVO. Für die noch offenen Präferenzzugriffe ist eine Einwilligungseinholung derzeit nicht eingerichtet. Die Entscheidung zum Laden eines eingebetteten Players bleibt ausschließlich im Arbeitsspeicher. Sie können lokale Daten in den Browsereinstellungen löschen. Dies löscht keine Daten auf den Servern."
+            "Die Speicherung dient der Anmeldung und den von Ihnen genutzten Funktionen. Technisch notwendige Zugriffe erfolgen nach § 25 Abs. 2 Nr. 2 TDDDG. Funktionale Einstellungen bleiben lokal, bis Sie sie löschen; Sitzungsdaten enden mit der jeweiligen Sitzung. Für Cookies eingebetteter Plattformen gelten deren eigene Richtlinien. Sie können lokale Daten in den Browsereinstellungen löschen. Dies löscht keine Daten auf den Servern."
           }
         </p>
       </>

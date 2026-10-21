@@ -3,118 +3,54 @@ import type { LegalLanguage } from "./controller";
 const rows = {
   de: [
     [
-      "__client_uat; __client_uat_<suffix>",
       "Clerk",
-      "Cookie, Aktualisierungsstand der Anmeldung",
-      "ca. 400 Tage, beobachtet",
-      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
+      "Anmeldung/Sitzung",
+      "Nach den Sitzungs- und Löschregeln von Clerk",
+      "technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG)",
     ],
     [
-      "__clerk_environment",
-      "Clerk",
-      "localStorage, Anmeldekonfiguration",
-      "ohne automatische Ablauffrist, beobachtet",
-      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
-    ],
-    [
-      "__session (moddrop.live)",
-      "Clerk",
-      "Cookie, kurzlebiges Sitzungstoken",
-      "60 Sekunden Tokenlaufzeit, regelmäßig erneuert; Clerk-Dokumentation",
-      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
-    ],
-    [
-      "__client (clerk.moddrop.live)",
-      "Clerk",
-      "Cookie, Authentifizierung bei der Clerk-Frontend-API",
-      "browserabhängige Laufzeit; Clerk-Dokumentation",
-      "technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG",
-    ],
-    [
-      "moddrop:obsSetupSecret:<roomId>",
       "Moddrop",
-      "sessionStorage, einmalige Zugangsschlüsselübergabe",
-      "Tabsitzung, aus Code",
-      "technisch erforderlich",
+      "Lokale Einstellungen wie Medienlautstärke/Stummschaltung und OBS-Setup-Übergabe",
+      "Einstellungen bis zum lokalen Löschen; Übergabe für die Tabsitzung",
+      "funktional; OBS-Übergabe technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG)",
     ],
     [
-      "moddrop:media-preferences:v1:<userId>:<roomId>",
-      "Moddrop",
-      "localStorage, Lautstärke und Stummschaltung",
-      "ohne automatische Ablauffrist, aus Code",
-      "Präferenz; Erforderlichkeit offen",
+      "tldraw",
+      "Editor-Einstellungen und Sitzungszustand",
+      "Einstellungen bis zum lokalen Löschen; Sitzungszustand für die Tabsitzung",
+      "funktional; Sitzungszustand technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG)",
     ],
     [
-      "TLDRAW_USER_DATA_v3",
-      "Moddrop (Editor-Bibliothek)",
-      "localStorage, Editor-Nutzerpräferenzen",
-      "ohne automatische Ablauffrist, aus Code",
-      "Präferenz; Erforderlichkeit offen",
-    ],
-    [
-      "TLDRAW_TAB_ID_v2",
-      "Moddrop (Editor-Bibliothek)",
-      "sessionStorage, Tab-Zustand",
-      "Tabsitzung, aus Code",
-      "technisch erforderlicher Sitzungszustand",
+      "Twitch / YouTube",
+      "Eigene Plattform-Cookies beim Laden von Medien",
+      "Nach den Richtlinien der jeweiligen Plattform",
+      "Medienanzeige technisch notwendig (§ 25 Abs. 2 Nr. 2 TDDDG); weitere Verarbeitung nach Plattformrichtlinien",
     ],
   ],
   en: [
     [
-      "__client_uat; __client_uat_<suffix>",
       "Clerk",
-      "Cookie, authentication update marker",
-      "approx. 400 days, observed",
-      "strictly necessary, Section 25(2) no. 2 TDDDG",
+      "Sign-in/session",
+      "Under Clerk's session and deletion rules",
+      "technically necessary (Section 25(2) no. 2 TDDDG)",
     ],
     [
-      "__clerk_environment",
-      "Clerk",
-      "localStorage, authentication configuration",
-      "no automatic expiry, observed",
-      "strictly necessary, Section 25(2) no. 2 TDDDG",
-    ],
-    [
-      "__session (moddrop.live)",
-      "Clerk",
-      "Cookie, short-lived session token",
-      "60-second token lifetime, refreshed regularly; Clerk documentation",
-      "strictly necessary, Section 25(2) no. 2 TDDDG",
-    ],
-    [
-      "__client (clerk.moddrop.live)",
-      "Clerk",
-      "Cookie, authentication with the Clerk frontend API",
-      "browser-dependent lifetime; Clerk documentation",
-      "strictly necessary, Section 25(2) no. 2 TDDDG",
-    ],
-    [
-      "moddrop:obsSetupSecret:<roomId>",
       "Moddrop",
-      "sessionStorage, one-time access-secret handover",
-      "tab session, from code",
-      "strictly necessary",
+      "Local settings such as media volume/mute and OBS setup hand-off",
+      "Settings until local deletion; hand-off for the tab session",
+      "functional; OBS hand-off technically necessary (Section 25(2) no. 2 TDDDG)",
     ],
     [
-      "moddrop:media-preferences:v1:<userId>:<roomId>",
-      "Moddrop",
-      "localStorage, volume and mute",
-      "no automatic expiry, from code",
-      "preference; necessity unresolved",
+      "tldraw",
+      "Editor preferences and session state",
+      "Preferences until local deletion; session state for the tab session",
+      "functional; session state technically necessary (Section 25(2) no. 2 TDDDG)",
     ],
     [
-      "TLDRAW_USER_DATA_v3",
-      "Moddrop (editor library)",
-      "localStorage, editor user preferences",
-      "no automatic expiry, from code",
-      "preference; necessity unresolved",
-    ],
-    [
-      "TLDRAW_TAB_ID_v2",
-      "Moddrop (editor library)",
-      "sessionStorage, tab state",
-      "tab session, from code",
-      "necessary session state",
+      "Twitch / YouTube",
+      "Platforms' own cookies when media loads",
+      "Under each platform's policies",
+      "media display technically necessary (Section 25(2) no. 2 TDDDG); further processing under platform policies",
     ],
   ],
 } as const;
@@ -122,20 +58,8 @@ const rows = {
 export function StorageTable({ language }: { language: LegalLanguage }) {
   const headings =
     language === "de"
-      ? [
-          "Name",
-          "Anbieter",
-          "Speicher / Zweck",
-          "Dauer / Nachweis",
-          "Einordnung",
-        ]
-      : [
-          "Name",
-          "Provider",
-          "Storage / purpose",
-          "Duration / evidence",
-          "Classification",
-        ];
+      ? ["Anbieter", "Zweck", "Dauer", "Einordnung"]
+      : ["Provider", "Purpose", "Duration", "Classification"];
   return (
     <section
       className="overflow-x-auto"

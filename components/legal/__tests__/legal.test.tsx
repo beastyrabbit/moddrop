@@ -89,6 +89,42 @@ describe("legal routes", () => {
     for (const Page of [Datenschutz, Privacy])
       expect(renderToStaticMarkup(<Page />)).toContain('dateTime="2026-10-21"');
   });
+  it.each([
+    [
+      Datenschutz,
+      "bis zu 10 Jahre",
+      "Zur Datensicherung werden regelmäßig Sicherungskopien innerhalb der eigenen Infrastruktur erstellt; sie werden nach Ablauf ihrer Aufbewahrungszeit überschrieben.",
+    ],
+    [
+      Privacy,
+      "up to 10 years",
+      "For data protection, backup copies are regularly created within the controller&#x27;s own infrastructure; they are overwritten after their retention period has expired.",
+    ],
+  ])(
+    "describes existing processing in grouped categories",
+    (Page, retention, backups) => {
+      const html = renderToStaticMarkup(<Page />);
+      expect(html).toContain(retention);
+      expect(html).toContain(backups);
+      expect(html).toContain('href="mailto:datenschutz-moddrop@heerlab.com"');
+      for (const provider of [
+        "Clerk",
+        "Discord",
+        "Twitch",
+        "Google Ireland Limited",
+        "cdn.tldraw.com",
+        "tldraw Inc.",
+      ])
+        expect(html).toContain(provider);
+      const table = html.match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
+      expect(table.match(/<tr>/g)).toHaveLength(5);
+      expect(table).toContain("OBS");
+      expect(table).toContain("Twitch / YouTube");
+      expect(html).not.toMatch(
+        /OPEN|noch (?:nicht|zu)|not yet confirmed|Longhorn|Garage|Load Twitch player|Load YouTube video|__client_uat/,
+      );
+    },
+  );
 });
 
 describe("legal navigation", () => {
