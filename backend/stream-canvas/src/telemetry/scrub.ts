@@ -92,7 +92,12 @@ function isSensitiveAssignment(key: string) {
   );
 }
 
-function assignmentValueStart(text: string, offset: number) {
+function assignmentValueStart(text: string, keyStart: number, offset: number) {
+  const quote = text[keyStart - 1];
+  if (quote === '"' || quote === "'") {
+    const closingQuote = text[keyStart - 2] === "\\" ? `\\${quote}` : quote;
+    if (text.startsWith(closingQuote, offset)) offset += closingQuote.length;
+  }
   while (/\s/.test(text.charAt(offset)) && offset < text.length) offset++;
   if (text[offset] !== ":" && text[offset] !== "=") return -1;
   offset++;
@@ -101,11 +106,27 @@ function assignmentValueStart(text: string, offset: number) {
 }
 
 function assignmentValueEnd(text: string, start: number) {
-  const quote = text[start];
+  const escaped = text[start] === "\\";
+  const quote = text[start + (escaped ? 1 : 0)];
   if (quote === '"' || quote === "'") {
-    const end = text.indexOf(quote, start + 1);
+    let backslashes = 0;
+    for (let end = start + (escaped ? 2 : 1); end < text.length; end++) {
+      if (text[end] === "\\") {
+        backslashes++;
+        continue;
+      }
+      // JSON adds an escape layer: 1 mod 4 slashes closes an escaped quote,
+      // while 3 mod 4 represents a quote inside the secret.
+      if (
+        text[end] === quote &&
+        backslashes % (escaped ? 4 : 2) === (escaped ? 1 : 0)
+      ) {
+        return end + 1;
+      }
+      backslashes = 0;
+    }
     // An unterminated quoted secret must also be removed.
-    return end === -1 ? text.length : end + 1;
+    return text.length;
   }
   let end = start;
   while (end < text.length && !/[\s&#"']/.test(text.charAt(end))) end++;
@@ -118,7 +139,7 @@ function scrubAssignments(text: string) {
   let copied = 0;
   for (let match = keys.exec(text); match; match = keys.exec(text)) {
     if (!isSensitiveAssignment(match[0])) continue;
-    const start = assignmentValueStart(text, keys.lastIndex);
+    const start = assignmentValueStart(text, match.index, keys.lastIndex);
     if (start === -1) continue;
     const end = assignmentValueEnd(text, start);
     if (end === start) continue;

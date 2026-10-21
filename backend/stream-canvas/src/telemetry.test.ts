@@ -16,6 +16,8 @@ test("privacy scrubber handles 100 KB adversarial inputs in under 50 ms each", (
     `${"a".repeat(100_000)}!`,
     `${"token ".repeat(16_667)}=private`,
     `token="${"a".repeat(100_000)}`,
+    String.raw`{\"token\":\"${"a".repeat(100_000)}`,
+    String.raw`{\"token\":\"${String.raw`a\\\"`.repeat(20_000)}`,
   ];
   for (const input of inputs) {
     const start = performance.now();
@@ -49,6 +51,47 @@ test("privacy scrubber parses sensitive assignments without leaking quoted or ma
     safePath("/profile/person%40example.com"),
     "/profile/[redacted]",
   );
+});
+
+for (const [input, expected] of [
+  ['{"token":"opaque-credential"}', '{"token":[redacted]}'],
+  ['{"access_token": "abc", "ok": 1}', '{"access_token": [redacted], "ok": 1}'],
+  ["{'password':'p'}", "{'password':[redacted]}"],
+  [String.raw`{\"apiKey\":\"k\"}`, String.raw`{\"apiKey\":[redacted]}`],
+  ['"clientSecret" = "s"', '"clientSecret" = [redacted]'],
+  ['"token=private"', '"token=[redacted]"'],
+  ["'password=private'", "'password=[redacted]'"],
+  [String.raw`{"token":"one\"two"}`, '{"token":[redacted]}'],
+  [String.raw`{'password':'one\'two'}`, "{'password':[redacted]}"],
+  [
+    String.raw`{\"token\":\"one\\\"two\", \"ok\":1}`,
+    String.raw`{\"token\":[redacted], \"ok\":1}`,
+  ],
+  [
+    String.raw`{\"token\":\"one\\\\\", \"ok\":1}`,
+    String.raw`{\"token\":[redacted], \"ok\":1}`,
+  ],
+  [String.raw`{\"token\":\"unterminated`, String.raw`{\"token\":[redacted]`],
+] as const) {
+  test(`privacy scrubber redacts quoted assignment ${input}`, () => {
+    assert.equal(scrubText(input), expected);
+  });
+}
+
+test("privacy scrubber preserves non-sensitive keys and requires matching key quotes", () => {
+  for (const input of [
+    '{"ok":"value"}',
+    String.raw`{\"ok\":\"value\"}`,
+    '"token\'="value"',
+    String.raw`\"token": "value"`,
+  ]) {
+    assert.equal(scrubText(input), input);
+  }
+});
+
+test("privacy scrubber retains the sensitive key suffix rule for monkey", () => {
+  assert.equal(scrubText("monkey=banana"), "monkey=[redacted]");
+  assert.equal(scrubText('{"monkey":"banana"}'), '{"monkey":[redacted]}');
 });
 
 test("unhandled backend rejections flush exactly one event and exit non-zero", async (t) => {
