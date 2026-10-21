@@ -29,27 +29,25 @@ export default function StreamCanvasRoomPage() {
     setError(null);
     getAccessibleRooms(getToken)
       .then((rooms) => {
+        if (cancelled) return;
         const room = rooms.find((r) => r.id === roomId);
         if (!room) {
           track("failure", { operation: "room", reason: "rejected" });
-          if (!cancelled)
-            setError("This room is unavailable or you no longer have access.");
+          setError("This room is unavailable or you no longer have access.");
           return;
         }
-        if (!cancelled) {
-          setTwitchChannel(room.twitchChannel);
-          setYouTubePolicy(room.youtubePolicy);
-          setLoadedRoomId(roomId);
-          track("room_opened", {});
-        }
+        setTwitchChannel(room.twitchChannel);
+        setYouTubePolicy(room.youtubePolicy);
+        setLoadedRoomId(roomId);
+        track("room_opened", {});
       })
       .catch((err) => {
+        if (cancelled) return;
         if (!(err instanceof ReportedError)) {
           reportError(err);
           track("failure", { operation: "room", reason: "rejected" });
         }
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Failed to load room");
+        setError(err instanceof Error ? err.message : "Failed to load room");
       });
     return () => {
       cancelled = true;

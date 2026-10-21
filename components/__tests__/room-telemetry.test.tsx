@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import RoomPage from "@/app/app/rooms/[roomId]/page";
 import ErrorPage from "@/app/error";
@@ -16,6 +22,7 @@ import { track } from "@/lib/telemetry/events";
 const mocks = vi.hoisted(() => ({
   getToken: vi.fn(async () => "test-token"),
   fetch: vi.fn<typeof fetch>(),
+  roomId: "room-fixture",
 }));
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({
@@ -26,7 +33,7 @@ vi.mock("@clerk/nextjs", () => ({
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/app/rooms/room-fixture",
-  useParams: () => ({ roomId: "room-fixture" }),
+  useParams: () => ({ roomId: mocks.roomId }),
 }));
 vi.mock("@/components/stream-canvas/CanvasEditor", () => ({
   CanvasEditor: () => <div>Editor connected</div>,
@@ -41,6 +48,7 @@ vi.mock("@/lib/telemetry/browser-errors", async (importOriginal) => ({
 vi.mock("@/lib/telemetry/events", () => ({ track: vi.fn() }));
 
 beforeEach(() => {
+  mocks.roomId = "room-fixture";
   mocks.getToken.mockResolvedValue("test-token");
   vi.stubGlobal("fetch", mocks.fetch);
 });
@@ -123,6 +131,38 @@ test("a missing room emits one room failure without an error report and remains 
   expect(track).toHaveBeenNthCalledWith(2, "room_opened", {});
   expect(track).toHaveBeenCalledTimes(2);
 });
+
+test.each([200, 403])(
+  "a cancelled room load returning HTTP %s has no room side effects",
+  async (status) => {
+    const pending = Promise.withResolvers<Response>();
+    mocks.fetch.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(
+      Response.json([
+        {
+          id: "next-room",
+          twitchChannel: null,
+          youtubePolicy: "preview_only",
+        },
+      ]),
+    );
+    const { rerender } = render(<RoomPage />);
+    await act(async () => {});
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    mocks.roomId = "next-room";
+    rerender(<RoomPage />);
+    expect(await screen.findByText("Editor connected")).toBeTruthy();
+    vi.mocked(track).mockClear();
+    await act(async () => {
+      pending.resolve(
+        Response.json(status === 200 ? [] : { error: "Forbidden" }, { status }),
+      );
+    });
+    expect(track).not.toHaveBeenCalled();
+    expect(reportError).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Editor connected")).toBeTruthy();
+  },
+);
 
 test.each([
   ["app boundary", ErrorPage],

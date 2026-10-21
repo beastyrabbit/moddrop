@@ -29,6 +29,7 @@ vi.mock("@/lib/telemetry/browser-errors", () => ({
 }));
 vi.mock("@/lib/telemetry/analytics", () => ({
   createAnalytics: mocks.createAnalytics,
+  disableAnalytics: vi.fn(),
   isOverlay: () => false,
 }));
 

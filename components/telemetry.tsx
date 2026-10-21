@@ -4,7 +4,11 @@ import { useAuth, useClerk } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";
 import { useEffect, useMemo, useRef } from "react";
-import { createAnalytics, isOverlay } from "@/lib/telemetry/analytics";
+import {
+  createAnalytics,
+  disableAnalytics,
+  isOverlay,
+} from "@/lib/telemetry/analytics";
 import { startErrorReporting } from "@/lib/telemetry/browser-errors";
 import type { TelemetryConfig } from "@/lib/telemetry/config";
 import { startConsent, syncConsentLanguage } from "@/lib/telemetry/consent";
@@ -46,7 +50,11 @@ export function Telemetry({ config }: Readonly<{ config: TelemetryConfig }>) {
       analytics.current = undefined;
       return;
     }
-    if (!stableConfig.umami) return;
+    if (!stableConfig.umami) {
+      disableAnalytics();
+      analytics.current = undefined;
+      return;
+    }
     let disposed = false;
     const consentAbort = new AbortController();
     let cleanup: (() => void) | undefined;

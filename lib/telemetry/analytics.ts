@@ -256,6 +256,10 @@ function reloadDocument(reload: () => void) {
   reload();
 }
 
+export function disableAnalytics(reload = () => window.location.reload()) {
+  if (documentState.scripts.size > 0) reloadDocument(reload);
+}
+
 function loadScript(name: "script" | "recorder") {
   const { config, activeInstance, scripts } = documentState;
   if (!config || !activeInstance?.allowed()) return;

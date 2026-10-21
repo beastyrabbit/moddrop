@@ -484,6 +484,35 @@ it.each([
   second.dispose();
 });
 
+it.each(["not-loaded", "tracker-pending", "recorder-loaded"])(
+  "configuration removed with %s → reload only when scripts exist",
+  async (stage) => {
+    const reload = vi.fn();
+    const disable = analytics.disableAnalytics;
+    vi.spyOn(analytics, "disableAnalytics").mockImplementation(() =>
+      disable(reload),
+    );
+    const mounted = mount();
+    await finishConsent(stage !== "not-loaded");
+    if (stage === "recorder-loaded") {
+      loadTracker();
+      document
+        .querySelector('script[src$="/recorder.js"]')
+        ?.dispatchEvent(new Event("load"));
+    }
+    nativeFetch.mockClear();
+    mounted.rerender(<Telemetry config={{ ...appConfig, umami: undefined }} />);
+    expect(reload).toHaveBeenCalledTimes(Number(stage !== "not-loaded"));
+    expect(document.querySelectorAll("script")).toHaveLength(0);
+    await sendEvent();
+    await window.fetch(`${config.host}/api/record`, { body: "private" });
+    events.track("room_created", {});
+    expect(nativeFetch).not.toHaveBeenCalled();
+    analytics.disableAnalytics();
+    expect(reload).toHaveBeenCalledTimes(Number(stage !== "not-loaded"));
+  },
+);
+
 it.each(["script", "recorder"])(
   "%s error → later recovery appends one new script",
   (name) => {
