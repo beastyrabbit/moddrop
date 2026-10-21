@@ -2,6 +2,23 @@ import * as CookieConsent from "vanilla-cookieconsent";
 
 export const CONSENT_COOKIE = "moddrop_consent";
 export const CONSENT_DAYS = 180;
+let running = false;
+const listeners = new Set<() => void>();
+
+export function isConsentRunning() {
+  return running;
+}
+export function subscribeConsent(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+function setConsentRunning(value: boolean) {
+  running = value;
+  for (const listener of listeners) listener();
+}
+
 export function consentLanguage() {
   if (["/datenschutz", "/impressum"].includes(window.location.pathname))
     return "de";
@@ -104,6 +121,10 @@ export async function startConsent(onAnalytics: (accepted: boolean) => void) {
       },
     },
   });
+  setConsentRunning(true);
   onAnalytics(CookieConsent.acceptedCategory("analytics"));
-  return () => CookieConsent.reset(false);
+  return () => {
+    setConsentRunning(false);
+    CookieConsent.reset(false);
+  };
 }

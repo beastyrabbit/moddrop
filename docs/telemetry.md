@@ -33,8 +33,10 @@ The bundled vanilla-cookieconsent v3 banner offers accept, reject and preference
 Necessary is read-only. Analytics covers pageviews, events, browser performance,
 session replay and heatmaps. The consent cookie is `moddrop_consent`, with a
 180-day lifetime, category choices, timestamps and a random consent receipt ID.
-Cookie settings is reachable in the landing footer, app shell, room canvas and
-privacy page. The banner and analytics are absent from `/obs` and its descendants.
+The banner and Cookie settings appear only when all three Umami settings are
+configured. Cookie settings is reachable while the consent manager is running in
+the landing footer, app shell, room canvas and privacy page. The banner and
+analytics are absent from `/obs` and its descendants.
 
 Before consent, Umami scripts and API requests are absent. After acceptance,
 `script.js` loads, followed by `recorder.js`. The transport guard checks consent,

@@ -22,8 +22,6 @@ for (const width of [1280, 375]) {
         ? route.continue()
         : route.abort(),
     );
-    await page.goto("/");
-    await page.getByRole("button", { name: "Reject all", exact: true }).click();
     for (const [label, path, heading, email] of [
       [
         "Legal notice",
@@ -46,6 +44,10 @@ for (const width of [1280, 375]) {
       ],
     ]) {
       await page.goto("/");
+      await expect(page.locator("#cc-main")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Cookie settings", exact: true }),
+      ).toHaveCount(0);
       await page
         .getByRole("navigation", { name: "Legal", exact: true })
         .getByRole("link", { name: label, exact: true })

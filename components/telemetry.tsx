@@ -19,7 +19,7 @@ import {
 const reportVital: Parameters<typeof useReportWebVitals>[0] = (metric) =>
   track("web_vital", vitalEvent(metric));
 
-export function Telemetry({ config }: { config: TelemetryConfig }) {
+export function Telemetry({ config }: Readonly<{ config: TelemetryConfig }>) {
   const { dsn, environment, release, tracesSampleRate } = config.errors;
   const { host, website, domains } = config.umami ?? {};
   const stableConfig = useMemo(
@@ -46,13 +46,12 @@ export function Telemetry({ config }: { config: TelemetryConfig }) {
       analytics.current = undefined;
       return;
     }
+    if (!stableConfig.umami) return;
     let disposed = false;
     let cleanup: (() => void) | undefined;
-    const instance = stableConfig.umami
-      ? createAnalytics(stableConfig.umami)
-      : undefined;
+    const instance = createAnalytics(stableConfig.umami);
     analytics.current = instance;
-    void startConsent((accepted) => instance?.setConsent(accepted)).then(
+    void startConsent((accepted) => instance.setConsent(accepted)).then(
       (stop) => {
         if (disposed) stop();
         else cleanup = stop;
@@ -66,15 +65,15 @@ export function Telemetry({ config }: { config: TelemetryConfig }) {
     return () => {
       disposed = true;
       cleanup?.();
-      instance?.dispose();
+      instance.dispose();
       document.removeEventListener("click", onClick);
     };
     // The root persists across App Router navigation. Only OBS changes lifecycle.
   }, [stableConfig, overlay]);
   useEffect(() => {
-    if (!isOverlay(pathname)) syncConsentLanguage();
+    if (stableConfig.umami && !overlay) syncConsentLanguage();
     if (pathname) analytics.current?.pageview();
-  }, [pathname]);
+  }, [pathname, stableConfig, overlay]);
   useEffect(
     () =>
       clerk.addListener(({ client }) => {
