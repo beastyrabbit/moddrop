@@ -35,27 +35,10 @@ export function analyticsAllowed(
 // Retain structure, static app styling and coordinates. Fragment strings cannot be safely
 // scrubbed independently, so discard them. Never send form, image or media values.
 export function scrubRecording(value: unknown, key = ""): unknown {
-  if (typeof value === "string") {
-    if (key === "type" && ["click", "scroll"].includes(value)) return value;
-    if (key === "tag" && value === "url-change") return value;
-    if (key === "name" && value === "html") return value;
-    if (["publicId", "systemId"].includes(key)) return "";
-    if (["url", "href"].includes(key)) return recordingUrl(value);
-    if (key === "textContent") return value.replace(/\S/g, "*");
-    if (key === "tagName" && /^[a-z][a-z0-9-]*$/i.test(value)) return value;
-    return "*";
-  }
+  if (typeof value === "string") return recordingString(value, key);
   if (Array.isArray(value))
     return value
-      .filter(
-        (item) =>
-          !(
-            item &&
-            typeof item === "object" &&
-            "type" in item &&
-            item.type === "umami:rrweb-event-fragment"
-          ),
-      )
+      .filter((item) => !isRecordingFragment(item))
       .map((item) => scrubRecording(item));
   if (value && typeof value === "object") {
     return Object.fromEntries(
@@ -70,6 +53,44 @@ export function scrubRecording(value: unknown, key = ""): unknown {
   return value;
 }
 
+function recordingString(value: string, key: string) {
+  if (key === "type" && ["click", "scroll"].includes(value)) return value;
+  if (key === "tag" && value === "url-change") return value;
+  if (key === "name" && value === "html") return value;
+  if (["publicId", "systemId"].includes(key)) return "";
+  if (["url", "href"].includes(key)) return recordingUrl(value);
+  if (key === "textContent") return value.replace(/\S/g, "*");
+  if (key === "tagName" && /^[a-z][a-z0-9-]*$/i.test(value)) return value;
+  return "*";
+}
+
+function isRecordingFragment(item: unknown) {
+  return (
+    item &&
+    typeof item === "object" &&
+    "type" in item &&
+    item.type === "umami:rrweb-event-fragment"
+  );
+}
+
+function isLayoutDeclaration(declaration: string) {
+  const colon = declaration.indexOf(":");
+  if (colon === -1) return false;
+  const property = declaration.slice(0, colon).trim();
+  const value = declaration.slice(colon + 1).trim();
+  return (
+    /^(width|height|min-width|max-width|min-height|max-height|top|left|right|bottom)$/.test(
+      property,
+    ) && /^-?[\d.]+(px|%|vh|vw|rem|em)?$/.test(value)
+  );
+}
+
+function fetchInputUrl(input: RequestInfo | URL) {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
 function recordingUrl(value: string) {
   return `${typeof window === "undefined" ? "" : window.location.origin}${safePath(value)}`;
 }
@@ -82,14 +103,7 @@ function recordingAttributes(value: unknown): Record<string, string> {
   // values in class names. Never retain IDs, data-*, input values or media srcs.
   if (typeof attrs.class === "string") result.class = attrs.class;
   if (typeof attrs.style === "string") {
-    result.style = attrs.style
-      .split(";")
-      .filter((declaration) =>
-        /^\s*(?:(?:min-|max-)?width|(?:min-|max-)?height|top|left|right|bottom)\s*:\s*-?[\d.]+(?:px|%|vh|vw|rem|em)?\s*$/.test(
-          declaration,
-        ),
-      )
-      .join(";");
+    result.style = attrs.style.split(";").filter(isLayoutDeclaration).join(";");
   }
   if (
     typeof attrs.href === "string" &&
@@ -154,14 +168,7 @@ export function createAnalytics(
   // this guard to the configured Umami origin, and keep it installed until reload
   // so unload flushes cannot send data after withdrawal or navigation to OBS.
   window.fetch = async (input, init) => {
-    const url = new URL(
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url,
-      window.location.href,
-    );
+    const url = new URL(fetchInputUrl(input), window.location.href);
     if (
       url.origin !== config.host ||
       ![

@@ -106,30 +106,7 @@ for (const configured of [
     }
   }
   const modules = new Map<number, Record<string, unknown>>();
-  function runtime(target: Record<string, unknown>) {
-    return {
-      i: load,
-      r: load,
-      s(entries: unknown[]) {
-        for (let i = 0; i < entries.length; ) {
-          const name = entries[i++] as string;
-          const getter = entries[i++];
-          target[name] = typeof getter === "function" ? getter() : entries[i++];
-        }
-      },
-    };
-  }
-  function load(id: number) {
-    const existing = modules.get(id);
-    if (existing) return existing;
-    const definition = definitions.get(id);
-    assert.ok(definition, `Missing compiled dependency ${id}`);
-    const target = {};
-    modules.set(id, target);
-    definition(runtime(target));
-    return target;
-  }
-  factory(runtime(exports));
+  factory(runtime(exports, { definitions, modules }));
   const ws = (
     exports.buildEditorWsUrl as (room: string, token: string) => string
   )("fixture", "fixture-token");
@@ -163,3 +140,31 @@ for (const configured of [
 console.log(
   "Compiled runtime API, WebSocket, and asset URLs passed for default, absolute, and alternate paths.",
 );
+
+type ModuleState = {
+  definitions: Map<number, (runtime: unknown) => void>;
+  modules: Map<number, Record<string, unknown>>;
+};
+function runtime(target: Record<string, unknown>, state: ModuleState) {
+  return {
+    i: (id: number) => load(id, state),
+    r: (id: number) => load(id, state),
+    s(entries: unknown[]) {
+      for (let i = 0; i < entries.length; ) {
+        const name = entries[i++] as string;
+        const getter = entries[i++];
+        target[name] = typeof getter === "function" ? getter() : entries[i++];
+      }
+    },
+  };
+}
+function load(id: number, state: ModuleState) {
+  const existing = state.modules.get(id);
+  if (existing) return existing;
+  const definition = state.definitions.get(id);
+  assert.ok(definition, `Missing compiled dependency ${id}`);
+  const target = {};
+  state.modules.set(id, target);
+  definition(runtime(target, state));
+  return target;
+}

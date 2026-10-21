@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { assertNoRuntimePlaceholders } from "./sourcemap-guard.ts";
 
@@ -46,13 +47,16 @@ try {
       ],
     ]) {
       step = args.slice(0, 2).join(" ");
-      const result = spawnSync("pnpm", ["exec", "sentry-cli", ...args], {
+      const cli = createRequire(import.meta.url).resolve(
+        "@sentry/cli/bin/sentry-cli",
+      );
+      const result = spawnSync(process.execPath, [cli, ...args], {
         env,
         stdio: "ignore",
       });
       if (result.status !== 0) {
         process.exitCode = result.status ?? 1;
-        throw new Error();
+        throw new Error("Source-map CLI failed");
       }
     }
     console.log("Browser source maps uploaded for this release");

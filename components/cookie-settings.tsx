@@ -2,7 +2,9 @@
 import { usePathname } from "next/navigation";
 import { showCookieSettings } from "@/lib/telemetry/consent";
 
-export function CookieSettings({ className }: { className?: string }) {
+export function CookieSettings({
+  className,
+}: Readonly<{ className?: string }>) {
   const pathname = usePathname();
   return (
     <button type="button" onClick={showCookieSettings} className={className}>

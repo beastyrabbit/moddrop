@@ -129,7 +129,18 @@ test("TTFB is reported once after two client navigations", async ({ page }) => {
   await expect(page).toHaveURL(/\/privacy$/);
   await page.getByRole("link", { name: "Legal notice", exact: true }).click();
   await expect(page).toHaveURL(/\/legal-notice$/);
-  await page.waitForTimeout(300);
+  await expect
+    .poll(() =>
+      stub.bodies.some((body) => {
+        const event = JSON.parse(body);
+        return (
+          event.type === "event" &&
+          !event.payload.name &&
+          new URL(event.payload.url).pathname === "/legal-notice"
+        );
+      }),
+    )
+    .toBe(true);
   expect(ttfbEvents()).toBe(1);
 });
 
@@ -169,7 +180,11 @@ test("consent gates scripts and recording, navigation has one safe pageview, wit
   await expect(
     page.getByRole("button", { name: "Accept all", exact: true }),
   ).toBeVisible();
-  await page.waitForTimeout(250);
+  await page.getByRole("button", { name: "Preferences", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Cookie settings", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
   expect(stub.requests).toEqual([]);
   await assertStorage(page, false);
   await page.getByRole("button", { name: "Accept all", exact: true }).click();
@@ -202,7 +217,15 @@ test("consent gates scripts and recording, navigation has one safe pageview, wit
   await expect(page.locator('script[src$="/script.js"]')).toHaveCount(0);
   const count = stub.requests.length;
   await page.reload();
-  await page.waitForTimeout(300);
+  await page
+    .getByRole("button", { name: "Cookie settings", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Cookie settings", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('script[src$="/script.js"], script[src$="/recorder.js"]'),
+  ).toHaveCount(0);
   expect(stub.requests).toHaveLength(count);
   await assertStorage(page, true);
 });

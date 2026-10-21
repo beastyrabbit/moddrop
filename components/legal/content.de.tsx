@@ -392,7 +392,7 @@ export const privacyDE: readonly LegalSection[] = [
           berechtigter Interessen. Wenden Sie sich dazu an{" "}
           <a href={`mailto:${controller.privacyEmail}`}>
             {controller.privacyEmail}
-          </a>
+          </a>{" "}
           .
         </p>
       </>

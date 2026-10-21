@@ -822,27 +822,7 @@ export function CanvasEditor({
               <YouTubePolicyCtx.Provider value={youtubePolicy}>
                 <Tldraw
                   onMount={(editor) => {
-                    const stopMediaEvents = editor.store.listen(
-                      ({ changes }) => {
-                        for (const record of Object.values(changes.added)) {
-                          if (record.typeName !== "shape") continue;
-                          const type =
-                            record.type === "youtube-embed"
-                              ? "youtube"
-                              : record.type === "audio-player"
-                                ? "audio"
-                                : record.type === "image"
-                                  ? "image"
-                                  : record.type === "video"
-                                    ? "video"
-                                    : record.type === "embed"
-                                      ? "embed"
-                                      : undefined;
-                          if (type) track("media_added", { type });
-                        }
-                      },
-                      { source: "user", scope: "document" },
-                    );
+                    const stopMediaEvents = listenForMediaAdded(editor);
                     editor.registerExternalContentHandler(
                       "embed",
                       (content) => {
@@ -892,6 +872,26 @@ export function CanvasEditor({
         </CanvasMediaRefreshContext.Provider>
       </MediaPreferencesProvider>
     </div>
+  );
+}
+
+function mediaEventType(type: string) {
+  if (type === "youtube-embed") return "youtube";
+  if (type === "audio-player") return "audio";
+  if (type === "image" || type === "video" || type === "embed") return type;
+  return undefined;
+}
+
+function listenForMediaAdded(editor: ReturnType<typeof useEditor>) {
+  return editor.store.listen(
+    ({ changes }) => {
+      for (const record of Object.values(changes.added)) {
+        if (record.typeName !== "shape") continue;
+        const type = mediaEventType(record.type);
+        if (type) track("media_added", { type });
+      }
+    },
+    { source: "user", scope: "document" },
   );
 }
 

@@ -6,7 +6,50 @@ import test from "node:test";
 import * as Sentry from "@sentry/node";
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import { errorConfig } from "./telemetry/config.ts";
-import { scrubTelemetry, scrubText } from "./telemetry/scrub.ts";
+import { safePath, scrubTelemetry, scrubText } from "./telemetry/scrub.ts";
+
+test("privacy scrubber handles 100 KB adversarial inputs in under 50 ms each", (t) => {
+  const inputs = [
+    "a".repeat(100_000),
+    "/".repeat(100_000),
+    `${"a".repeat(100_000)}@example.com`,
+    `${"a".repeat(100_000)}!`,
+    `${"token ".repeat(16_667)}=private`,
+    `token="${"a".repeat(100_000)}`,
+  ];
+  for (const input of inputs) {
+    const start = performance.now();
+    const text = scrubText(input);
+    const path = safePath(`/${input}`);
+    const elapsed = performance.now() - start;
+    t.diagnostic(`${input.length} characters: ${elapsed.toFixed(2)} ms`);
+    assert.ok(elapsed < 50, `Scrubbing took ${elapsed.toFixed(2)} ms`);
+    assert.ok(text.length <= 2_000);
+    assert.doesNotMatch(text, /@example\.com|private/);
+    assert.doesNotMatch(path, /@example\.com/);
+  }
+});
+
+test("privacy scrubber parses sensitive assignments without leaking quoted or malformed values", () => {
+  assert.equal(
+    scrubText(
+      "token=one obsSecret: \"two words\" password=three&email=four code='five six'",
+    ),
+    "token=[redacted] obsSecret: [redacted] password=[redacted]&email=[redacted] code=[redacted]",
+  );
+  assert.equal(scrubText('token="unterminated'), "token=[redacted]");
+  assert.equal(scrubText("moddrop@telemetry-test"), "moddrop@telemetry-test");
+  assert.equal(scrubText("person%40example.com"), "[redacted]");
+  assert.equal(
+    scrubText("custom-email=seven auth-authorization=eight"),
+    "custom-email=[redacted] auth-authorization=[redacted]",
+  );
+  assert.equal(scrubText("/api/path?token=private#fragment"), "/api/path");
+  assert.equal(
+    safePath("/profile/person%40example.com"),
+    "/profile/[redacted]",
+  );
+});
 
 test("unhandled backend rejections flush exactly one event and exit non-zero", async (t) => {
   const envelopes: string[] = [];

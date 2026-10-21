@@ -1,4 +1,4 @@
-import "./telemetry.ts";
+import { flushTelemetry } from "./telemetry.ts";
 import { serve } from "@hono/node-server";
 import { WebSocketServer } from "ws";
 import { app } from "./app.ts";
@@ -6,7 +6,6 @@ import { config, validateServerConfig } from "./config.ts";
 import { closeDatabase } from "./db.ts";
 import { withDeadline } from "./deadline.ts";
 import { leaderState } from "./leader.ts";
-import { flushTelemetry } from "./telemetry.ts";
 import { closeAllRooms, handleWebSocketUpgrade } from "./ws-handler.ts";
 
 // ---------------------------------------------------------------------------

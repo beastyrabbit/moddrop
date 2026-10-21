@@ -387,7 +387,7 @@ export const privacyEN: readonly LegalSection[] = [
           interests. To exercise this right, contact{" "}
           <a href={`mailto:${controller.privacyEmail}`}>
             {controller.privacyEmail}
-          </a>
+          </a>{" "}
           .
         </p>
       </>

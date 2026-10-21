@@ -299,28 +299,31 @@ export async function uploadFile(
 ): Promise<{ id: string; url: string; filename: string }> {
   try {
     const result = await performUpload(roomId, file, getToken);
-    const type = file.type.startsWith("image/")
-      ? "image"
-      : file.type.startsWith("video/")
-        ? "video"
-        : file.type.startsWith("audio/")
-          ? "audio"
-          : "other";
+    const type = uploadMediaType(file.type);
     track("upload_succeeded", { type });
     return result;
   } catch (error) {
     track("upload_failed", {
-      reason:
-        error instanceof TypeError
-          ? "network"
-          : error instanceof Error && error.message === "Not authenticated"
-            ? "authentication"
-            : "rejected",
+      reason: uploadFailureReason(error),
     });
     if (error instanceof TypeError)
       reportError(new Error("Canvas upload network request failed"));
     throw error;
   }
+}
+
+function uploadMediaType(mime: string) {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "other";
+}
+
+function uploadFailureReason(error: unknown) {
+  if (error instanceof TypeError) return "network";
+  if (error instanceof Error && error.message === "Not authenticated")
+    return "authentication";
+  return "rejected";
 }
 
 async function performUpload(

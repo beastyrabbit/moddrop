@@ -36,7 +36,10 @@ ENV NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${NEXT_PUBLIC_TLDRAW_LICENSE_KEY}
 ENV PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
 ENV APP_RELEASE=${APP_RELEASE}
 
-RUN test -n "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" || { echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is empty; set the repository variable" >&2; exit 1; }
+RUN test -n "$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" || { \
+    echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is empty; set the repository variable" >&2; \
+    exit 1; \
+    }
 RUN pnpm exec sentry-cli --version
 RUN pnpm run build
 RUN --mount=type=secret,id=glitchtip_auth_token node scripts/upload-sourcemaps.mjs

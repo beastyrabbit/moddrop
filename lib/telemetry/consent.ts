@@ -3,11 +3,9 @@ import * as CookieConsent from "vanilla-cookieconsent";
 export const CONSENT_COOKIE = "moddrop_consent";
 export const CONSENT_DAYS = 180;
 export function consentLanguage() {
-  return ["/datenschutz", "/impressum"].includes(window.location.pathname)
-    ? "de"
-    : document.documentElement.lang.startsWith("de")
-      ? "de"
-      : "en";
+  if (["/datenschutz", "/impressum"].includes(window.location.pathname))
+    return "de";
+  return document.documentElement.lang.startsWith("de") ? "de" : "en";
 }
 export function syncConsentLanguage() {
   void CookieConsent.setLanguage(consentLanguage());
