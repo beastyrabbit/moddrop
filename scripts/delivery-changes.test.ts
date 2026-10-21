@@ -108,10 +108,25 @@ test.each([
 );
 
 test.each([
+  "scripts/upload-sourcemaps.mjs",
+  "scripts/sourcemap-guard.ts",
+  "docker-entrypoint.sh",
+])("frontend image script %s rebuilds only the frontend", (path) => {
+  const output = execFileSync("bash", ["scripts/delivery-changes.sh"], {
+    input: path,
+    encoding: "utf8",
+  });
+  expect(output).toContain("frontend=true");
+  expect(output).toContain("stream_canvas=false");
+});
+
+test.each([
   "docs/telemetry.md",
   "backend/stream-canvas/src/telemetry.ts",
   "backend/stream-canvas/src/server.ts",
   "instrumentation-client.ts.bak",
+  "scripts/upload-sourcemaps.mjs.bak",
+  "scripts/sourcemap-guard.test.ts",
 ])("unrelated input %s does not rebuild the frontend", (path) => {
   const output = execFileSync("bash", ["scripts/delivery-changes.sh"], {
     input: path,
