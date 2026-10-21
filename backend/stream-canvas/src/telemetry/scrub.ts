@@ -105,32 +105,45 @@ function assignmentValueStart(text: string, keyStart: number, offset: number) {
   return offset;
 }
 
+function quotedValueEnd(
+  text: string,
+  from: number,
+  quote: string,
+  escaped: boolean,
+) {
+  let backslashes = 0;
+  for (let end = from; end < text.length; end++) {
+    if (text[end] === "\\") {
+      backslashes++;
+      continue;
+    }
+    // JSON adds an escape layer: 1 mod 4 slashes closes an escaped quote,
+    // while 3 mod 4 represents a quote inside the secret.
+    if (
+      text[end] === quote &&
+      backslashes % (escaped ? 4 : 2) === (escaped ? 1 : 0)
+    ) {
+      return end + 1;
+    }
+    backslashes = 0;
+  }
+  // An unterminated quoted secret must also be removed.
+  return text.length;
+}
+
+function bareValueEnd(text: string, start: number) {
+  let end = start;
+  while (end < text.length && !/[\s&#"']/.test(text.charAt(end))) end++;
+  return end;
+}
+
 function assignmentValueEnd(text: string, start: number) {
   const escaped = text[start] === "\\";
   const quote = text[start + (escaped ? 1 : 0)];
   if (quote === '"' || quote === "'") {
-    let backslashes = 0;
-    for (let end = start + (escaped ? 2 : 1); end < text.length; end++) {
-      if (text[end] === "\\") {
-        backslashes++;
-        continue;
-      }
-      // JSON adds an escape layer: 1 mod 4 slashes closes an escaped quote,
-      // while 3 mod 4 represents a quote inside the secret.
-      if (
-        text[end] === quote &&
-        backslashes % (escaped ? 4 : 2) === (escaped ? 1 : 0)
-      ) {
-        return end + 1;
-      }
-      backslashes = 0;
-    }
-    // An unterminated quoted secret must also be removed.
-    return text.length;
+    return quotedValueEnd(text, start + (escaped ? 2 : 1), quote, escaped);
   }
-  let end = start;
-  while (end < text.length && !/[\s&#"']/.test(text.charAt(end))) end++;
-  return end;
+  return bareValueEnd(text, start);
 }
 
 function scrubAssignments(text: string) {
