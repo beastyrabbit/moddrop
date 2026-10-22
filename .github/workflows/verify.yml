@@ -39,3 +39,21 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm exec playwright install --with-deps chromium
       - run: bash scripts/verify.sh
+      - name: Record verified checkout
+        id: proof
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, writeFileSync } from 'node:fs';
+          const git = (ref) => execFileSync('git', ['rev-parse', ref], { encoding: 'utf8' }).trim();
+          const proof = { commit: git('HEAD'), tree: git('HEAD^{tree}') };
+          writeFileSync('verify-proof.json', JSON.stringify(proof));
+          appendFileSync(process.env.GITHUB_OUTPUT, `tree=${proof.tree}\n`);
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verify-proof-${{ steps.proof.outputs.tree }}
+          path: verify-proof.json
+          if-no-files-found: error
+          retention-days: 14

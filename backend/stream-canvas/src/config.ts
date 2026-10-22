@@ -16,6 +16,7 @@ const uploadsDir = process.env.UPLOADS_DIR ?? "data/uploads";
 
 export const config = {
   nodeEnv,
+  appRelease: process.env.APP_RELEASE || null,
   port: numberEnv("PORT", 8003, { min: 1, max: 65535 }),
   databaseUrl:
     process.env.DATABASE_URL ??

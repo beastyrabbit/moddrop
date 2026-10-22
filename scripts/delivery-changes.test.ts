@@ -15,17 +15,78 @@ test("GitHub releases use the PR verification gate before production actions", (
   expect(verification.on).toHaveProperty("workflow_call");
   expect(verification.jobs.verify["runs-on"]).toBe("arc-moddrop");
   const job = workflow.jobs.build;
-  expect(job.needs).toBe("verify");
-  const allowed = (ref: string) =>
-    Function(
-      "github",
-      "startsWith",
-      `return (${job.if})`,
-    )({ ref }, (value: string, prefix: string) => value.startsWith(prefix));
-  expect(allowed("refs/heads/feature")).toBe(false);
-  expect(allowed("refs/heads/main")).toBe(true);
-  expect(allowed("refs/tags/v0.6.2")).toBe(true);
-  expect(job.if).not.toContain("always()");
+  expect(job.needs).toEqual(["gate", "verify"]);
+  expect(workflow.jobs.verify.needs).toBe("gate");
+  expect(workflow.jobs.smoke.needs).toBe("build");
+  expect(workflow.jobs.gate.permissions).toEqual({
+    actions: "read",
+    contents: "read",
+  });
+  expect(verification.jobs.verify.services.postgres).toBeDefined();
+  const steps = verification.jobs.verify.steps;
+  const verifyIndex = steps.findIndex(
+    (step: { run?: string }) => step.run === "bash scripts/verify.sh",
+  );
+  expect(verifyIndex).toBeGreaterThan(-1);
+  expect(steps.at(-1).uses).toBe("actions/upload-artifact@v4");
+  for (const step of steps.slice(verifyIndex + 1))
+    expect(step.if).toBeUndefined(); // Default success() protects the proof.
+
+  const results = ["success", "failure", "cancelled", "skipped"];
+  for (const gate of results)
+    for (const reuse of ["true", "false", ""])
+      for (const verify of results)
+        for (const cancelled of [true, false])
+          for (const ref of [
+            "refs/heads/feature",
+            "refs/heads/main",
+            "refs/tags/v0.6.2",
+            "refs/tags/other",
+            "refs/pull/1/merge",
+          ]) {
+            const needs = {
+              gate: { result: gate, outputs: { reuse } },
+              verify: { result: verify },
+            };
+            const evaluate = (
+              condition: string,
+              dependencies: object = needs,
+            ) =>
+              Function(
+                "needs",
+                "github",
+                "cancelled",
+                "always",
+                "startsWith",
+                `return (${condition});`,
+              )(
+                dependencies,
+                { ref },
+                () => cancelled,
+                () => true,
+                (value: string, prefix: string) => value.startsWith(prefix),
+              );
+            expect(evaluate(workflow.jobs.gate.if)).toBe(!cancelled);
+            expect(evaluate(workflow.jobs.verify.if)).toBe(
+              !cancelled && (gate !== "success" || reuse !== "true"),
+            );
+            const safe =
+              !cancelled &&
+              (ref === "refs/heads/main" || ref.startsWith("refs/tags/v")) &&
+              (verify === "success" ||
+                (gate === "success" &&
+                  reuse === "true" &&
+                  verify === "skipped"));
+            expect(evaluate(job.if)).toBe(safe);
+            for (const build of results)
+              expect(
+                evaluate(workflow.jobs.smoke.if, { build: { result: build } }),
+              ).toBe(
+                !cancelled &&
+                  build === "success" &&
+                  ref.startsWith("refs/tags/v"),
+              );
+          }
 });
 
 test.each(["pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", ".npmrc"])(

@@ -1,0 +1,170 @@
+import { expect, test, vi } from "vitest";
+import { compareVersions, rolloutSmoke } from "./rollout-smoke";
+
+const old = "moddrop@0.8.0";
+const expected = "moddrop@0.9.0";
+const newer = "moddrop@0.10.0";
+type Reply = string | number | Error | { malformed: true };
+function fixture(frontend: Reply[], backend: Reply[], ready: Reply[] = [200]) {
+  let now = 0;
+  const queues: Record<string, Reply[]> = {
+    "/telemetry-config": [...frontend],
+    "/canvas-api/version": [...backend],
+    "/": [200],
+    "/canvas-api/ready": [...ready],
+  };
+  const request = vi.fn<typeof fetch>(async (input) => {
+    const path = new URL(String(input)).pathname;
+    const queue = queues[path];
+    if (!queue?.length) throw new Error(`Unexpected request ${path}`);
+    const reply = queue.length > 1 ? queue.shift() : queue[0];
+    if (reply instanceof Error) throw reply;
+    if (typeof reply === "number") return new Response("", { status: reply });
+    if (typeof reply === "object") return new Response("<html>not JSON");
+    return Response.json({ release: reply });
+  });
+  const log = vi.fn();
+  return {
+    request,
+    log,
+    queues,
+    options: {
+      baseUrl: "https://fixture.invalid",
+      version: "0.9.0",
+      timeoutMs: 100,
+      pollMs: 20,
+      readyTimeoutMs: 40,
+      now: () => now,
+      sleep: async (ms: number) => {
+        now += ms;
+      },
+      fetch: request,
+      log,
+    },
+  };
+}
+
+test.each([
+  [
+    [old, expected],
+    [old, expected],
+  ],
+  [[expected], [old, expected]],
+  [[old, expected], [expected]],
+  [[404, expected], [expected]],
+  [
+    [500, expected],
+    [503, expected],
+  ],
+  [[new Error("offline"), expected], [expected]],
+  [[{ malformed: true }, expected], [expected]],
+  [["not-a-release", expected], [expected]],
+] satisfies [Reply[], Reply[]][])(
+  "waits for both versions, then checks homepage and retries readiness: %j / %j",
+  async (frontend, backend) => {
+    const { options, request } = fixture(frontend, backend, [503, 200]);
+    expect(await rolloutSmoke(options)).toBe("healthy");
+    const paths = request.mock.calls.map(
+      ([url]) => new URL(String(url)).pathname,
+    );
+    expect(paths.slice(-3)).toEqual([
+      "/",
+      "/canvas-api/ready",
+      "/canvas-api/ready",
+    ]);
+    expect(
+      request.mock.calls.every(([, init]) => init?.cache === "no-store"),
+    ).toBe(true);
+  },
+);
+
+test.each([
+  [[newer], [expected]],
+  [[expected], [newer]],
+  [[newer], [old]],
+  [[404], [newer]],
+] satisfies [Reply[], Reply[]][])(
+  "newer component supersedes the rollout: %j / %j",
+  async (frontend, backend) => {
+    const { options, request, log } = fixture(frontend, backend);
+    expect(await rolloutSmoke(options)).toBe("superseded");
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("::notice::Rollout superseded"),
+    );
+  },
+);
+
+test("timeout includes the last observation from each endpoint", async () => {
+  const { options, request } = fixture([old], [404]);
+  await expect(rolloutSmoke(options)).rejects.toThrow(
+    'Rollout timed out: {"/telemetry-config":"moddrop@0.8.0","/canvas-api/version":"HTTP 404"}',
+  );
+  expect(request).toHaveBeenCalledTimes(10);
+});
+
+test("deadline reached as matching versions arrive retains both observations", async () => {
+  const { options, request } = fixture([expected], [expected]);
+  const fetchAtDeadline: typeof fetch = async (url, init) => {
+    const response = await request(url, init);
+    await options.sleep(100);
+    return response;
+  };
+  await expect(
+    rolloutSmoke({ ...options, fetch: fetchAtDeadline }),
+  ).rejects.toThrow(
+    'Rollout timed out: {"/telemetry-config":"moddrop@0.9.0","/canvas-api/version":"moddrop@0.9.0"}',
+  );
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  [{ malformed: true }],
+  [new Error("offline")],
+  ["moddrop@invalid"],
+] satisfies [Reply][])(
+  "malformed and network responses stay pending until timeout: %j",
+  async (replies) => {
+    const { options } = fixture([replies], [expected]);
+    await expect(rolloutSmoke(options)).rejects.toThrow("Rollout timed out");
+  },
+);
+
+test("homepage failure fails after matching releases", async () => {
+  const { options, queues } = fixture([expected], [expected]);
+  queues["/"] = [502];
+  await expect(rolloutSmoke(options)).rejects.toThrow(
+    "Homepage returned HTTP 502",
+  );
+});
+
+test("readiness retries are bounded by the short window and overall deadline", async () => {
+  const { options, request } = fixture([expected], [expected], [503]);
+  await expect(rolloutSmoke({ ...options, timeoutMs: 30 })).rejects.toThrow(
+    "Readiness timed out: HTTP 503",
+  );
+  expect(request).toHaveBeenCalledTimes(5);
+});
+
+test.each([
+  ["0.10.0", "0.9.0", 1],
+  ["1.0.0", "1.0.0-rc.1", 1],
+  ["1.0.0-rc.10", "1.0.0-rc.2", 1],
+  ["1.0.0-alpha", "1.0.0-alpha.1", -1],
+  ["1.0.0-1", "1.0.0-alpha", -1],
+  ["1.0.0+build.2", "1.0.0+build.1", 0],
+] as const)("compares semver %s and %s", (a, b, expectedOrder) => {
+  expect(compareVersions(a, b)).toBe(expectedOrder);
+});
+
+test("invalid versions and deadlines fail before any request", async () => {
+  const { options, request } = fixture([expected], [expected]);
+  for (const version of ["bad", "01.0.0", "1.0.0-01"])
+    await expect(rolloutSmoke({ ...options, version })).rejects.toThrow(
+      "Invalid semver",
+    );
+  await expect(
+    rolloutSmoke({ ...options, timeoutMs: Number.NaN }),
+  ).rejects.toThrow("durations");
+  expect(request).not.toHaveBeenCalled();
+});
