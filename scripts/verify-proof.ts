@@ -22,17 +22,35 @@ export type ProofApi = {
   download: (id: number) => Promise<string>;
 };
 const sha = /^[0-9a-f]{40}$/;
+type Report = (reason: string, level: "notice" | "warning") => void;
+
+class ProofLookupError extends Error {}
+
+function errorClass(error: unknown) {
+  if (error instanceof TypeError) return "TypeError";
+  if (error instanceof SyntaxError) return "SyntaxError";
+  if (error instanceof DOMException) return "DOMException";
+  return error instanceof Error ? "Error" : "unknown error";
+}
 
 export async function canReuseVerify(
   api: ProofApi,
   repository: string,
   tree: string,
   now = Date.now(),
+  report: Report = () => {},
 ): Promise<boolean> {
+  const fallback = (reason: string, level: "notice" | "warning" = "notice") => {
+    report(reason, level);
+    return false;
+  };
+  let reason = "no artifact named for this tree";
+  let operation = "API artifact lookup";
   try {
-    if (!sha.test(tree)) return false;
+    if (!sha.test(tree)) return fallback("invalid release tree");
     const name = `verify-proof-${tree}`;
     for (let page = 1; ; page++) {
+      operation = "API artifact lookup";
       const artifacts = await api.artifacts(name, page);
       for (const artifact of artifacts) {
         if (
@@ -40,17 +58,34 @@ export async function canReuseVerify(
           artifact.expired ||
           !(Date.parse(artifact.expires_at) > now) ||
           !artifact.workflow_run
-        )
+        ) {
+          if (artifact.name === name)
+            reason =
+              artifact.expired || !(Date.parse(artifact.expires_at) > now)
+                ? "artifact expired or invalid expiry"
+                : "artifact has no workflow run";
           continue;
+        }
+        operation = "API run lookup";
         const run = await api.run(artifact.workflow_run.id);
         if (
           run.path !== ".github/workflows/verify.yml" ||
           run.status !== "completed" ||
           run.conclusion !== "success" ||
           run.head_repository?.full_name !== repository
-        )
+        ) {
+          reason =
+            run.path !== ".github/workflows/verify.yml"
+              ? "wrong workflow path"
+              : run.status !== "completed" || run.conclusion !== "success"
+                ? "run not successful/completed"
+                : "foreign head repository";
           continue;
-        const proof: unknown = JSON.parse(await api.download(artifact.id));
+        }
+        operation = "artifact download";
+        const contents = await api.download(artifact.id);
+        operation = "proof parsing";
+        const proof: unknown = JSON.parse(contents);
         if (
           proof !== null &&
           typeof proof === "object" &&
@@ -63,12 +98,27 @@ export async function canReuseVerify(
           sha.test(proof.commit)
         )
           return true;
+        reason =
+          proof !== null &&
+          typeof proof === "object" &&
+          "tree" in proof &&
+          typeof proof.tree === "string" &&
+          sha.test(proof.tree) &&
+          proof.tree !== tree
+            ? "tree mismatch"
+            : "malformed proof";
       }
-      if (artifacts.length < 100) return false;
+      if (artifacts.length < 100) return fallback(reason);
     }
-  } catch {
+  } catch (error) {
     // An unavailable API, invalid archive or malformed proof requires full verify.
-    return false;
+    if (operation === "proof parsing") return fallback("malformed proof");
+    return fallback(
+      error instanceof ProofLookupError
+        ? error.message
+        : `${operation} failed (${errorClass(error)})`,
+      "warning",
+    );
   }
 }
 
@@ -87,7 +137,8 @@ export function githubProofApi(
       },
       signal: AbortSignal.timeout(15_000),
     });
-    if (!response.ok) throw new Error("GitHub proof lookup failed");
+    if (!response.ok)
+      throw new ProofLookupError(`GitHub proof API HTTP ${response.status}`);
     return response;
   }
   return {
@@ -107,12 +158,20 @@ export function githubProofApi(
         const archive = join(directory, "proof.zip");
         writeFileSync(archive, Buffer.from(await response.arrayBuffer()));
         // Read one fixed member as data. Never extract paths or execute archive contents.
-        return execFileSync("unzip", ["-p", archive, "verify-proof.json"], {
-          encoding: "utf8",
-          timeout: 5_000,
-          maxBuffer: 16_384,
-          stdio: ["ignore", "pipe", "ignore"],
-        });
+        try {
+          return execFileSync("unzip", ["-p", archive, "verify-proof.json"], {
+            encoding: "utf8",
+            timeout: 5_000,
+            maxBuffer: 16_384,
+            stdio: ["ignore", "pipe", "ignore"],
+          });
+        } catch (error) {
+          throw new ProofLookupError(
+            error instanceof Error && "code" in error && error.code === "ENOENT"
+              ? "unzip not available on runner (ENOENT)"
+              : `artifact unzip failed (${errorClass(error)})`,
+          );
+        }
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
@@ -122,6 +181,8 @@ export function githubProofApi(
 
 if (import.meta.main) {
   let reuse = false;
+  const report: Report = (reason, level) =>
+    console.log(`::${level}::Full Verify required: ${reason}.`);
   try {
     const tree = execFileSync(
       "git",
@@ -135,13 +196,15 @@ if (import.meta.main) {
         githubProofApi(repository, token, process.env.GITHUB_API_URL),
         repository,
         tree,
+        Date.now(),
+        report,
       );
-  } catch {
+    else report("missing GitHub repository or token", "warning");
+  } catch (error) {
     // Checkout or git failures also fall back to the existing workflow.
+    report(`checkout tree lookup failed (${errorClass(error)})`, "warning");
   }
-  console.log(
-    reuse ? "Reusing successful Verify tree proof." : "Full Verify required.",
-  );
+  if (reuse) console.log("Reusing successful Verify tree proof.");
   if (process.env.GITHUB_OUTPUT)
     appendFileSync(process.env.GITHUB_OUTPUT, `reuse=${reuse}\n`);
 }

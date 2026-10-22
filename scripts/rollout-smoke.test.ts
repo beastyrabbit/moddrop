@@ -130,20 +130,54 @@ test.each([
   },
 );
 
-test("homepage failure fails after matching releases", async () => {
-  const { options, queues } = fixture([expected], [expected]);
-  queues["/"] = [502];
-  await expect(rolloutSmoke(options)).rejects.toThrow(
-    "Homepage returned HTTP 502",
-  );
-});
+test.each([
+  [502, "HTTP 502"],
+  [new Error("offline"), "network error"],
+] as const)(
+  "homepage failure retries after matching releases: %j",
+  async (reply, observation) => {
+    const { options, queues, request } = fixture([expected], [expected]);
+    queues["/"] = [reply];
+    await expect(rolloutSmoke(options)).rejects.toThrow(
+      `Readiness timed out: /: ${observation}; /canvas-api/ready: not checked`,
+    );
+    expect(
+      request.mock.calls.slice(2).map(([url]) => new URL(String(url)).pathname),
+    ).toEqual(["/", "/"]);
+    expect(options.now()).toBe(40);
+  },
+);
+
+test.each([502, new Error("offline")])(
+  "homepage recovers from a transient failure: %j",
+  async (reply) => {
+    const { options, queues, request } = fixture([expected], [expected]);
+    queues["/"] = [reply, 200];
+    expect(await rolloutSmoke(options)).toBe("healthy");
+    expect(
+      request.mock.calls.slice(2).map(([url]) => new URL(String(url)).pathname),
+    ).toEqual(["/", "/", "/canvas-api/ready"]);
+  },
+);
 
 test("readiness retries are bounded by the short window and overall deadline", async () => {
   const { options, request } = fixture([expected], [expected], [503]);
   await expect(rolloutSmoke({ ...options, timeoutMs: 30 })).rejects.toThrow(
-    "Readiness timed out: HTTP 503",
+    "Readiness timed out: /: HTTP 200; /canvas-api/ready: HTTP 503",
   );
   expect(request).toHaveBeenCalledTimes(5);
+});
+
+test("homepage retries share the readiness window and overall deadline", async () => {
+  const { options, queues, request } = fixture([expected], [expected], [503]);
+  queues["/"] = [502, 200];
+  await expect(rolloutSmoke({ ...options, timeoutMs: 30 })).rejects.toThrow(
+    "Readiness timed out: /: HTTP 200; /canvas-api/ready: HTTP 503",
+  );
+  expect(options.now()).toBe(30);
+  expect(
+    request.mock.calls.slice(2).map(([url]) => new URL(String(url)).pathname),
+  ).toEqual(["/", "/", "/canvas-api/ready"]);
 });
 
 test.each([

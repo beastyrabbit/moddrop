@@ -123,14 +123,25 @@ export async function rolloutSmoke(options: SmokeOptions) {
     }
     log(paths.map((path) => `${path}: ${last.get(path)}`).join("; "));
     if (releases.every((release) => release === expected)) {
-      const home = await get("/").catch((error: unknown) => {
-        if (now() >= deadline) throw timedOut();
-        throw error;
-      });
-      if (!home.ok) throw new Error(`Homepage returned HTTP ${home.status}`);
+      if (now() >= deadline) throw timedOut();
       const readyDeadline = Math.min(deadline, now() + readyTimeoutMs);
+      let homeOk = false;
+      let home = "not checked";
       let ready = "not checked";
       while (now() < readyDeadline) {
+        if (!homeOk) {
+          try {
+            const response = await get("/", readyDeadline);
+            home = `HTTP ${response.status}`;
+            homeOk = response.ok;
+          } catch {
+            home = "network error";
+          }
+          if (!homeOk) {
+            await wait(readyDeadline);
+            continue;
+          }
+        }
         try {
           const response = await get("/canvas-api/ready", readyDeadline);
           ready = `HTTP ${response.status}`;
@@ -144,7 +155,7 @@ export async function rolloutSmoke(options: SmokeOptions) {
         await wait(readyDeadline);
       }
       throw new Error(
-        `Readiness timed out: ${ready}; ${JSON.stringify(Object.fromEntries(last))}`,
+        `Readiness timed out: /: ${home}; /canvas-api/ready: ${ready}; ${JSON.stringify(Object.fromEntries(last))}`,
       );
     }
     await wait(deadline);

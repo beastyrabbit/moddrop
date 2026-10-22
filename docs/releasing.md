@@ -5,13 +5,15 @@ the checked-out commit and tree in a JSON artifact after the full suite passes,
 retained for 14 days. The release gate reuses proof only for the exact release
 tree from a completed, successful Verify run in this repository. Fork PR runs
 cannot supply proof. Missing, expired, invalid or unavailable proof falls back
-to the full Verify workflow. Both production images still build on `arc-moddrop`
-and publish to GHCR after verification succeeds.
+to the full Verify workflow. The gate logs the fallback reason as a notice,
+or a warning for API, download and unzip errors. Both production images still
+build on `arc-moddrop` and publish to GHCR after verification succeeds.
 
 For tags, a rollout smoke job waits up to 30 minutes for Flux to deploy both
 components. It polls `/telemetry-config` and `/canvas-api/version` at
 `https://moddrop.live` every 20 seconds until both report `moddrop@<tag version>`,
-then checks `/` and retries `/canvas-api/ready` for up to a minute. The overall
+then retries `/` until successful and checks `/canvas-api/ready` for HTTP 200.
+Both checks share a one-minute retry window. The overall
 deadline includes readiness retries. A newer semver on either component marks
 the release as superseded and skips remaining checks. Timeouts fail with each
 endpoint's last observation. For manual use, run
