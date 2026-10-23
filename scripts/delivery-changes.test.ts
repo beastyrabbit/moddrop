@@ -30,6 +30,7 @@ test("GitHub releases use the PR verification gate before production actions", (
   expect(verifyIndex).toBeGreaterThan(-1);
   expect(steps.at(-1).uses).toBe("actions/upload-artifact@v7");
   expect(steps.at(-1).with.path).toBe("verify-proof.json");
+  expect(steps.at(-1).with.overwrite).toBe(true);
   expect(steps.at(-1).with.archive).toBeUndefined(); // v7 defaults to a ZIP.
   for (const step of steps.slice(verifyIndex + 1))
     expect(step.if).toBeUndefined(); // Default success() protects the proof.

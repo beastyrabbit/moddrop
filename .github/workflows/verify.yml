@@ -55,5 +55,6 @@ jobs:
         with:
           name: verify-proof-${{ steps.proof.outputs.tree }}
           path: verify-proof.json
+          overwrite: true
           if-no-files-found: error
           retention-days: 14

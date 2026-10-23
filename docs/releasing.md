@@ -3,7 +3,8 @@
 Pushing a `vX.Y.Z` tag runs the GitHub container-image workflow. Verify records
 the checked-out commit and tree in a JSON artifact after the full suite passes,
 retained for 14 days. The release gate reuses proof only for the exact release
-tree from a completed, successful Verify run in this repository. Fork PR runs
+tree from a completed, successful Verify run in this repository. Proof is reused
+only when the Verify run used the same `verify.yml` as the release. Fork PR runs
 cannot supply proof. Missing, expired, invalid or unavailable proof falls back
 to the full Verify workflow. The gate logs the fallback reason as a notice,
 or a warning for API, download and unzip errors. Both production images still
