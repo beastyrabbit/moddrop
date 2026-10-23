@@ -45,6 +45,37 @@ test("accepts matching artifact and run head trees from a successful same-reposi
 });
 
 test.each([
+  ".github/workflows/verify.yml@main",
+  ".github/workflows/verify.yml@refs/pull/19/merge",
+])("accepts ref-qualified Verify workflow path %s", async (path) => {
+  const { api, run } = fixture();
+  run.path = path;
+  expect(await canReuseVerify(api, repository, tree)).toBe(true);
+  expect(api.commitTree).toHaveBeenCalledWith(commit);
+  expect(api.download).toHaveBeenCalledWith(1);
+});
+
+test.each([
+  ".github/workflows/verify.yml@",
+  ".github/workflows/verify.yml.bak",
+  ".github/workflows/build-images.yml@main",
+  "x/.github/workflows/verify.yml",
+])("rejects invalid Verify workflow path %s", async (path) => {
+  const { api, run } = fixture();
+  const report = vi.fn();
+  run.path = path;
+  expect(await canReuseVerify(api, repository, tree, Date.now(), report)).toBe(
+    false,
+  );
+  expect(report).toHaveBeenCalledExactlyOnceWith(
+    "wrong workflow path",
+    "notice",
+  );
+  expect(api.commitTree).not.toHaveBeenCalled();
+  expect(api.download).not.toHaveBeenCalled();
+});
+
+test.each([
   { path: ".github/workflows/build-images.yml" },
   { status: "in_progress" },
   { conclusion: "failure" },

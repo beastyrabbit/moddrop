@@ -43,8 +43,16 @@ function artifactProblem(artifact: Artifact, now: number): string | null {
   return null;
 }
 
+function isVerifyWorkflow(path: string): boolean {
+  const workflow = ".github/workflows/verify.yml";
+  return (
+    path === workflow ||
+    (path.startsWith(`${workflow}@`) && path.length > workflow.length + 1)
+  );
+}
+
 function runProblem(run: Run, repository: string): string | null {
-  if (run.path !== ".github/workflows/verify.yml") return "wrong workflow path";
+  if (!isVerifyWorkflow(run.path)) return "wrong workflow path";
   if (run.status !== "completed" || run.conclusion !== "success")
     return "run not successful/completed";
   if (run.head_repository?.full_name !== repository)
