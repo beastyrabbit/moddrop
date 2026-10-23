@@ -1,15 +1,51 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 function semver(version: string) {
-  const match =
-    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*))?(?:\+[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/.exec(
-      version,
-    );
+  const buildAt = version.indexOf("+");
+  const withoutBuild = buildAt < 0 ? version : version.slice(0, buildAt);
+  if (
+    buildAt >= 0 &&
+    !/^[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*$/.test(version.slice(buildAt + 1))
+  )
+    throw new Error(`Invalid semver: ${version}`);
+  const prereleaseAt = withoutBuild.indexOf("-");
+  const core =
+    prereleaseAt < 0 ? withoutBuild : withoutBuild.slice(0, prereleaseAt);
+  const prerelease =
+    prereleaseAt < 0 ? [] : withoutBuild.slice(prereleaseAt + 1).split(".");
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(core);
   if (!match) throw new Error(`Invalid semver: ${version}`);
-  const prerelease = match[4]?.split(".") ?? [];
-  if (prerelease.some((part) => /^\d+$/.test(part) && /^0\d/.test(part)))
+  if (prerelease.some((part) => !validPrereleaseIdentifier(part)))
     throw new Error(`Invalid semver: ${version}`);
   return { core: match.slice(1, 4).map(BigInt), prerelease };
+}
+
+function validPrereleaseIdentifier(part: string) {
+  return (
+    /^[0-9A-Za-z-]+$/.test(part) && !(/^\d+$/.test(part) && /^0\d/.test(part))
+  );
+}
+
+function compareIdentifiers(x: string, y: string): number {
+  if (x === y) return 0;
+  const numericX = /^\d+$/.test(x);
+  const numericY = /^\d+$/.test(y);
+  if (numericX && numericY) return BigInt(x) > BigInt(y) ? 1 : -1;
+  if (numericX !== numericY) return numericX ? -1 : 1;
+  return x > y ? 1 : -1;
+}
+
+function comparePrerelease(a: string[], b: string[]): number {
+  if (!a.length || !b.length) return Number(!a.length) - Number(!b.length);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const order = compareIdentifiers(x, y);
+    if (order) return order;
+  }
+  return 0;
 }
 
 export function compareVersions(left: string, right: string): number {
@@ -18,21 +54,13 @@ export function compareVersions(left: string, right: string): number {
   for (let i = 0; i < 3; i++) {
     if (a.core[i] !== b.core[i]) return a.core[i] > b.core[i] ? 1 : -1;
   }
-  if (!a.prerelease.length || !b.prerelease.length)
-    return Number(!a.prerelease.length) - Number(!b.prerelease.length);
-  for (let i = 0; i < Math.max(a.prerelease.length, b.prerelease.length); i++) {
-    const x = a.prerelease[i];
-    const y = b.prerelease[i];
-    if (x === undefined) return -1;
-    if (y === undefined) return 1;
-    if (x === y) continue;
-    const numericX = /^\d+$/.test(x);
-    const numericY = /^\d+$/.test(y);
-    if (numericX && numericY) return BigInt(x) > BigInt(y) ? 1 : -1;
-    if (numericX !== numericY) return numericX ? -1 : 1;
-    return x > y ? 1 : -1;
-  }
-  return 0;
+  return comparePrerelease(a.prerelease, b.prerelease);
+}
+
+function findNewer(releases: (string | null)[], version: string) {
+  return releases.find(
+    (release) => release && compareVersions(release.slice(8), version) > 0,
+  );
 }
 
 type SmokeOptions = {
@@ -82,39 +110,70 @@ export async function rolloutSmoke(options: SmokeOptions) {
     const remaining = end - now();
     if (remaining > 0) await pause(Math.min(pollMs, remaining));
   };
+  async function readRelease(path: string) {
+    try {
+      const response = await get(path);
+      if (!response.ok) {
+        last.set(path, `HTTP ${response.status}`);
+        return null;
+      }
+      const body: unknown = await response.json();
+      if (
+        !body ||
+        typeof body !== "object" ||
+        !("release" in body) ||
+        typeof body.release !== "string" ||
+        !body.release.startsWith("moddrop@")
+      )
+        throw new Error("missing release");
+      const release = body.release;
+      semver(release.slice("moddrop@".length));
+      last.set(path, release);
+      return release;
+    } catch {
+      last.set(path, "network error, invalid JSON or invalid release");
+      return null;
+    }
+  }
+  async function checkHealth(readyDeadline: number) {
+    let homeOk = false;
+    let home = "not checked";
+    let ready = "not checked";
+    while (now() < readyDeadline) {
+      if (!homeOk) {
+        try {
+          const response = await get("/", readyDeadline);
+          home = `HTTP ${response.status}`;
+          homeOk = response.ok;
+        } catch {
+          home = "network error";
+        }
+        if (!homeOk) {
+          await wait(readyDeadline);
+          continue;
+        }
+      }
+      try {
+        const response = await get("/canvas-api/ready", readyDeadline);
+        ready = `HTTP ${response.status}`;
+        if (response.status === 200) {
+          log(`Rollout healthy: both components report ${expected}.`);
+          return "healthy";
+        }
+      } catch {
+        ready = "network error";
+      }
+      await wait(readyDeadline);
+    }
+    throw new Error(
+      `Readiness timed out: /: ${home}; /canvas-api/ready: ${ready}; ${JSON.stringify(Object.fromEntries(last))}`,
+    );
+  }
   while (now() < deadline) {
     // Inspect both responses before health checks, so a newer component wins
     // even when the other component is still rolling out or unavailable.
-    const releases = await Promise.all(
-      paths.map(async (path) => {
-        try {
-          const response = await get(path);
-          if (!response.ok) {
-            last.set(path, `HTTP ${response.status}`);
-            return null;
-          }
-          const body: unknown = await response.json();
-          if (
-            !body ||
-            typeof body !== "object" ||
-            !("release" in body) ||
-            typeof body.release !== "string" ||
-            !body.release.startsWith("moddrop@")
-          )
-            throw new Error("missing release");
-          const release = body.release;
-          semver(release.slice("moddrop@".length));
-          last.set(path, release);
-          return release;
-        } catch {
-          last.set(path, "network error, invalid JSON or invalid release");
-          return null;
-        }
-      }),
-    );
-    const newer = releases.find(
-      (release) => release && compareVersions(release.slice(8), version) > 0,
-    );
+    const releases = await Promise.all(paths.map(readRelease));
+    const newer = findNewer(releases, version);
     if (newer) {
       log(
         `::notice::Rollout superseded: expected ${expected}, observed ${newer}. Skipping remaining checks.`,
@@ -125,38 +184,7 @@ export async function rolloutSmoke(options: SmokeOptions) {
     if (releases.every((release) => release === expected)) {
       if (now() >= deadline) throw timedOut();
       const readyDeadline = Math.min(deadline, now() + readyTimeoutMs);
-      let homeOk = false;
-      let home = "not checked";
-      let ready = "not checked";
-      while (now() < readyDeadline) {
-        if (!homeOk) {
-          try {
-            const response = await get("/", readyDeadline);
-            home = `HTTP ${response.status}`;
-            homeOk = response.ok;
-          } catch {
-            home = "network error";
-          }
-          if (!homeOk) {
-            await wait(readyDeadline);
-            continue;
-          }
-        }
-        try {
-          const response = await get("/canvas-api/ready", readyDeadline);
-          ready = `HTTP ${response.status}`;
-          if (response.status === 200) {
-            log(`Rollout healthy: both components report ${expected}.`);
-            return "healthy";
-          }
-        } catch {
-          ready = "network error";
-        }
-        await wait(readyDeadline);
-      }
-      throw new Error(
-        `Readiness timed out: /: ${home}; /canvas-api/ready: ${ready}; ${JSON.stringify(Object.fromEntries(last))}`,
-      );
+      return checkHealth(readyDeadline);
     }
     await wait(deadline);
   }

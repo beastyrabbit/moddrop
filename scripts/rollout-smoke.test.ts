@@ -202,3 +202,31 @@ test("invalid versions and deadlines fail before any request", async () => {
   ).rejects.toThrow("durations");
   expect(request).not.toHaveBeenCalled();
 });
+
+test.each([
+  "1.0.0+",
+  "1.0.0+build..1",
+  "1.0.0+build+1",
+  "1.0.0+build_1",
+  "1.0.0-",
+  "1.0.0-alpha..1",
+  "1.0.0-alpha_1",
+  "1.0.0-01+build",
+  "01.0.0",
+  "1.0.0\n",
+  "1.0.0-alpha\n",
+])("rejects semver identifier boundary case %s", (version) => {
+  expect(() => compareVersions(version, "1.0.0")).toThrow(
+    `Invalid semver: ${version}`,
+  );
+});
+
+test.each([
+  ["1.0.0+001", "1.0.0", 0],
+  ["1.0.0-alpha-beta+build-1.001", "1.0.0-alpha-beta", 0],
+  ["1.0.0-alpha.0", "1.0.0-alpha.1", -1],
+  ["1.0.0-alpha.1", "1.0.0-alpha", 1],
+  ["1.0.0-alpha", "1.0.0-beta", -1],
+] as const)("preserves semver ordering for %s and %s", (a, b, order) => {
+  expect(compareVersions(a, b)).toBe(order);
+});

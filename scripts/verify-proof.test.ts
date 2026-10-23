@@ -315,8 +315,62 @@ test.each([
   ).toBe(false);
   expect(report).toHaveBeenCalledExactlyOnceWith(reason, "warning");
   expect(execFileSync).toHaveBeenCalledWith(
-    "unzip",
+    "/usr/bin/unzip",
     ["-p", expect.any(String), "verify-proof.json"],
     expect.objectContaining({ stdio: ["ignore", "pipe", "ignore"] }),
   );
+});
+
+test("expiry at the current time takes precedence over a missing workflow run", async () => {
+  const { api, artifact } = fixture();
+  const report = vi.fn();
+  artifact.workflow_run = undefined;
+  expect(
+    await canReuseVerify(
+      api,
+      repository,
+      tree,
+      Date.parse(artifact.expires_at),
+      report,
+    ),
+  ).toBe(false);
+  expect(report).toHaveBeenCalledExactlyOnceWith(
+    "artifact expired or invalid expiry",
+    "notice",
+  );
+  expect(api.run).not.toHaveBeenCalled();
+});
+
+test("the last rejection wins across pages and unrelated names do not replace it", async () => {
+  const { api, artifact, run } = fixture();
+  const report = vi.fn();
+  run.path = "wrong workflow";
+  run.status = "in_progress";
+  run.head_sha = "invalid";
+  api.artifacts
+    .mockResolvedValueOnce(Array.from({ length: 100 }, () => artifact))
+    .mockResolvedValueOnce([
+      { ...artifact, workflow_run: undefined },
+      { ...artifact, name: "unrelated", expired: true },
+    ]);
+  expect(await canReuseVerify(api, repository, tree, Date.now(), report)).toBe(
+    false,
+  );
+  expect(report).toHaveBeenCalledExactlyOnceWith(
+    "artifact has no workflow run",
+    "notice",
+  );
+  expect(api.commitTree).not.toHaveBeenCalled();
+});
+
+test("a valid different proof tree takes precedence over a malformed commit", async () => {
+  const { api } = fixture();
+  const report = vi.fn();
+  api.download.mockResolvedValue(
+    JSON.stringify({ tree: "c".repeat(40), commit: "invalid" }),
+  );
+  expect(await canReuseVerify(api, repository, tree, Date.now(), report)).toBe(
+    false,
+  );
+  expect(report).toHaveBeenCalledExactlyOnceWith("tree mismatch", "notice");
 });
