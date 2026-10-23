@@ -17,6 +17,10 @@ app.onError((error, c) => {
 });
 app.use("*", cors({ origin: config.corsOrigins }));
 app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/version", (c) => {
+  c.header("Cache-Control", "no-store");
+  return c.json({ release: config.appRelease });
+});
 app.get("/ready", async (c) => {
   if (!leaderState.isLeader) {
     return c.json({ status: "standby", role: "standby" }, 503);

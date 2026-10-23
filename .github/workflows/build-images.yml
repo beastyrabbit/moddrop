@@ -9,12 +9,34 @@ permissions:
   contents: read
 
 jobs:
+  gate:
+    if: '!cancelled()'
+    runs-on: arc-moddrop
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      reuse: ${{ steps.proof.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Find successful verification of this tree
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-proof.ts
+
   verify:
+    needs: gate
+    if: "!cancelled() && (needs.gate.result != 'success' || needs.gate.outputs.reuse != 'true')"
     uses: ./.github/workflows/verify.yml
 
   build:
-    needs: verify
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    needs: [gate, verify]
+    if: "!cancelled() && ((needs.gate.result == 'success' && needs.gate.outputs.reuse == 'true' && needs.verify.result == 'skipped') || needs.verify.result == 'success') && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main')"
     runs-on: arc-moddrop
     permissions:
       contents: read
@@ -69,3 +91,16 @@ jobs:
             NEXT_PUBLIC_TLDRAW_LICENSE_KEY=${{ secrets.NEXT_PUBLIC_TLDRAW_LICENSE_KEY }}
           secrets: |
             glitchtip_auth_token=${{ secrets.GLITCHTIP_AUTH_TOKEN }}
+
+  smoke:
+    needs: build
+    if: "!cancelled() && needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/v')"
+    runs-on: arc-moddrop
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Wait for Flux rollout and check production
+        run: node scripts/rollout-smoke.ts https://moddrop.live "${GITHUB_REF_NAME#v}"

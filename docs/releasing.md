@@ -1,10 +1,29 @@
 # Release and deployment notes
 
-Pushing a `vX.Y.Z` tag runs the GitHub container-image workflow. The workflow
-verifies the repository and builds the frontend
-and stream-canvas images on the `arc-moddrop` runner. The current workflow
-publishes both images to GHCR; check the downstream deployment configuration
-before assuming a tag has reached production.
+Pushing a `vX.Y.Z` tag runs the GitHub container-image workflow. After the full
+suite passes, a separate job that runs no repository code records the checked-out
+commit and tree in a JSON proof artifact retained for 14 days. Recording is
+best-effort; failure only means the next release runs full Verify.
+The release gate reuses proof only for the exact release
+tree from a completed, successful Verify run in this repository. Proof is reused
+only when GitHub's record of the Verify run's head commit has the release tree.
+The artifact is only an index. PR runs whose merge tree differs from their head
+tree fall back to full verification. Fork PR runs cannot supply proof.
+Missing, expired, invalid or unavailable proof falls back
+to the full Verify workflow. The gate logs the fallback reason as a notice,
+or a warning for API, download and unzip errors. Both production images still
+build on `arc-moddrop` and publish to GHCR after verification succeeds.
+
+For tags, a rollout smoke job waits up to 30 minutes for Flux to deploy both
+components. It polls `/telemetry-config` and `/canvas-api/version` at
+`https://moddrop.live` every 20 seconds until both report `moddrop@<tag version>`,
+then retries `/` until successful and checks `/canvas-api/ready` for HTTP 200.
+Both checks share a one-minute retry window. The overall
+deadline includes readiness retries. A newer semver on either component marks
+the release as superseded and skips remaining checks. Timeouts fail with each
+endpoint's last observation. For manual use, run
+`node scripts/rollout-smoke.ts <base-url> <version> [timeout-ms]`; the timeout
+also accepts `ROLLOUT_TIMEOUT_MS`.
 
 The frontend image receives its public configuration at build time. The GitHub
 repository variable `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` must exist and contain the
