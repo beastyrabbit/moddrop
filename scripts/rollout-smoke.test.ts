@@ -98,6 +98,73 @@ test.each([
 );
 
 test.each([
+  [[expected, old, expected], [expected]],
+  [[expected], [expected, old, expected]],
+  [[expected, 404, expected], [expected]],
+  [[expected], [expected, 404, expected]],
+  [[expected, new Error("offline"), expected], [expected]],
+  [[expected], [expected, new Error("offline"), expected]],
+  [[expected, { malformed: true }, expected], [expected]],
+  [[expected], [expected, "moddrop@invalid", expected]],
+] satisfies [Reply[], Reply[]][])(
+  "version drift during readiness resumes polling before health checks: %j / %j",
+  async (frontend, backend) => {
+    const { options, request } = fixture(frontend, backend, [503, 200]);
+    expect(await rolloutSmoke(options)).toBe("healthy");
+    expect(
+      request.mock.calls.map(([url]) => new URL(String(url)).pathname),
+    ).toEqual([
+      "/telemetry-config",
+      "/canvas-api/version",
+      "/",
+      "/canvas-api/ready",
+      "/telemetry-config",
+      "/canvas-api/version",
+      "/telemetry-config",
+      "/canvas-api/version",
+      "/",
+      "/canvas-api/ready",
+    ]);
+    expect(options.now()).toBe(40);
+  },
+);
+
+test("matching versions after drift start a fresh readiness window", async () => {
+  const { options } = fixture(
+    [expected, old, expected],
+    [expected],
+    [503, 503, 200],
+  );
+  expect(await rolloutSmoke(options)).toBe("healthy");
+  expect(options.now()).toBe(60);
+});
+
+test.each([
+  [old, expected, old, expected],
+  [expected, 404, expected, "HTTP 404"],
+] satisfies [Reply, Reply, string, string][])(
+  "persistent version drift times out with the latest observations: %j / %j",
+  async (frontend, backend, lastFrontend, lastBackend) => {
+    const { options, request } = fixture(
+      [expected, frontend],
+      [expected, backend],
+      [503, 200],
+    );
+    await expect(rolloutSmoke(options)).rejects.toThrow(
+      `Rollout timed out: ${JSON.stringify({
+        "/telemetry-config": lastFrontend,
+        "/canvas-api/version": lastBackend,
+      })}`,
+    );
+    const healthPaths = request.mock.calls
+      .map(([url]) => new URL(String(url)).pathname)
+      .filter((path) => path === "/" || path === "/canvas-api/ready");
+    expect(healthPaths).toEqual(["/", "/canvas-api/ready"]);
+    expect(options.now()).toBe(options.timeoutMs);
+  },
+);
+
+test.each([
   [[expected, newer], [expected]],
   [[expected], [expected, newer]],
 ] satisfies [Reply[], Reply[]][])(

@@ -153,6 +153,13 @@ export async function rolloutSmoke(options: SmokeOptions) {
       return { ok: false, status: 0, observation: "network error" };
     }
   }
+  async function recheckVersions() {
+    const releases = await Promise.all(paths.map(readRelease));
+    const newer = findNewer(releases, version);
+    if (newer) return superseded(newer);
+    if (releases.some((release) => release !== expected)) return "pending";
+    return null;
+  }
   async function checkHealth(readyDeadline: number) {
     let homeOk = false;
     let home = "not checked";
@@ -160,11 +167,8 @@ export async function rolloutSmoke(options: SmokeOptions) {
     let retry = false;
     while (now() < readyDeadline) {
       if (retry) {
-        const newer = findNewer(
-          await Promise.all(paths.map(readRelease)),
-          version,
-        );
-        if (newer) return superseded(newer);
+        const result = await recheckVersions();
+        if (result) return result;
       }
       retry = true;
       if (!homeOk) {
@@ -198,7 +202,8 @@ export async function rolloutSmoke(options: SmokeOptions) {
     if (releases.every((release) => release === expected)) {
       if (now() >= deadline) throw timedOut();
       const readyDeadline = Math.min(deadline, now() + readyTimeoutMs);
-      return checkHealth(readyDeadline);
+      const result = await checkHealth(readyDeadline);
+      if (result !== "pending") return result;
     }
     await wait(deadline);
   }
