@@ -2,7 +2,8 @@
 
 Pushing a `vX.Y.Z` tag runs the GitHub container-image workflow. After the full
 suite passes, a separate job that runs no repository code records the checked-out
-commit and tree in a JSON proof artifact retained for 14 days.
+commit and tree in a JSON proof artifact retained for 14 days. Recording is
+best-effort; failure only means the next release runs full Verify.
 The release gate reuses proof only for the exact release
 tree from a completed, successful Verify run in this repository. Proof is reused
 only when GitHub's record of the Verify run's head commit has the release tree.

@@ -37,6 +37,7 @@ test("GitHub releases use the PR verification gate before production actions", (
   expect(verification.permissions).toEqual({ contents: "read" });
   expect(verification.jobs.proof).toEqual({
     needs: "verify", // Default success() requires the full suite to pass.
+    "continue-on-error": true,
     "runs-on": "arc-moddrop",
     steps: [
       {
@@ -63,60 +64,55 @@ test("GitHub releases use the PR verification gate before production actions", (
   });
 
   const results = ["success", "failure", "cancelled", "skipped"];
+  function checkVerification(gate: string, reuse: string, verify: string) {
+    for (const cancelled of [true, false])
+      for (const ref of [
+        "refs/heads/feature",
+        "refs/heads/main",
+        "refs/tags/v0.6.2",
+        "refs/tags/other",
+        "refs/pull/1/merge",
+      ]) {
+        const needs = {
+          gate: { result: gate, outputs: { reuse } },
+          verify: { result: verify },
+        };
+        const evaluate = (condition: string, dependencies: object = needs) =>
+          Function(
+            "needs",
+            "github",
+            "cancelled",
+            "always",
+            "startsWith",
+            `return (${condition});`,
+          )(
+            dependencies,
+            { ref },
+            () => cancelled,
+            () => true,
+            (value: string, prefix: string) => value.startsWith(prefix),
+          );
+        expect(evaluate(workflow.jobs.gate.if)).toBe(!cancelled);
+        expect(evaluate(workflow.jobs.verify.if)).toBe(
+          !cancelled && (gate !== "success" || reuse !== "true"),
+        );
+        const safe =
+          !cancelled &&
+          (ref === "refs/heads/main" || ref.startsWith("refs/tags/v")) &&
+          (verify === "success" ||
+            (gate === "success" && reuse === "true" && verify === "skipped"));
+        expect(evaluate(job.if)).toBe(safe);
+        for (const build of results)
+          expect(
+            evaluate(workflow.jobs.smoke.if, { build: { result: build } }),
+          ).toBe(
+            !cancelled && build === "success" && ref.startsWith("refs/tags/v"),
+          );
+      }
+  }
   for (const gate of results)
     for (const reuse of ["true", "false", ""])
-      for (const verify of results)
-        for (const cancelled of [true, false])
-          for (const ref of [
-            "refs/heads/feature",
-            "refs/heads/main",
-            "refs/tags/v0.6.2",
-            "refs/tags/other",
-            "refs/pull/1/merge",
-          ]) {
-            const needs = {
-              gate: { result: gate, outputs: { reuse } },
-              verify: { result: verify },
-            };
-            const evaluate = (
-              condition: string,
-              dependencies: object = needs,
-            ) =>
-              Function(
-                "needs",
-                "github",
-                "cancelled",
-                "always",
-                "startsWith",
-                `return (${condition});`,
-              )(
-                dependencies,
-                { ref },
-                () => cancelled,
-                () => true,
-                (value: string, prefix: string) => value.startsWith(prefix),
-              );
-            expect(evaluate(workflow.jobs.gate.if)).toBe(!cancelled);
-            expect(evaluate(workflow.jobs.verify.if)).toBe(
-              !cancelled && (gate !== "success" || reuse !== "true"),
-            );
-            const safe =
-              !cancelled &&
-              (ref === "refs/heads/main" || ref.startsWith("refs/tags/v")) &&
-              (verify === "success" ||
-                (gate === "success" &&
-                  reuse === "true" &&
-                  verify === "skipped"));
-            expect(evaluate(job.if)).toBe(safe);
-            for (const build of results)
-              expect(
-                evaluate(workflow.jobs.smoke.if, { build: { result: build } }),
-              ).toBe(
-                !cancelled &&
-                  build === "success" &&
-                  ref.startsWith("refs/tags/v"),
-              );
-          }
+      for (const verify of results) checkVerification(gate, reuse, verify);
 });
 
 test.each(["pnpm-lock.yaml", "pnpm-workspace.yaml", "package.json", ".npmrc"])(

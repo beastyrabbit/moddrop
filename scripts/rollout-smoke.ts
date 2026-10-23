@@ -135,33 +135,52 @@ export async function rolloutSmoke(options: SmokeOptions) {
       return null;
     }
   }
+  function superseded(newer: string) {
+    log(
+      `::notice::Rollout superseded: expected ${expected}, observed ${newer}. Skipping remaining checks.`,
+    );
+    return "superseded";
+  }
+  async function readHealth(path: string, end: number) {
+    try {
+      const response = await get(path, end);
+      return {
+        ok: response.ok,
+        status: response.status,
+        observation: `HTTP ${response.status}`,
+      };
+    } catch {
+      return { ok: false, status: 0, observation: "network error" };
+    }
+  }
   async function checkHealth(readyDeadline: number) {
     let homeOk = false;
     let home = "not checked";
     let ready = "not checked";
+    let retry = false;
     while (now() < readyDeadline) {
+      if (retry) {
+        const newer = findNewer(
+          await Promise.all(paths.map(readRelease)),
+          version,
+        );
+        if (newer) return superseded(newer);
+      }
+      retry = true;
       if (!homeOk) {
-        try {
-          const response = await get("/", readyDeadline);
-          home = `HTTP ${response.status}`;
-          homeOk = response.ok;
-        } catch {
-          home = "network error";
-        }
+        const response = await readHealth("/", readyDeadline);
+        home = response.observation;
+        homeOk = response.ok;
         if (!homeOk) {
           await wait(readyDeadline);
           continue;
         }
       }
-      try {
-        const response = await get("/canvas-api/ready", readyDeadline);
-        ready = `HTTP ${response.status}`;
-        if (response.status === 200) {
-          log(`Rollout healthy: both components report ${expected}.`);
-          return "healthy";
-        }
-      } catch {
-        ready = "network error";
+      const response = await readHealth("/canvas-api/ready", readyDeadline);
+      ready = response.observation;
+      if (response.status === 200) {
+        log(`Rollout healthy: both components report ${expected}.`);
+        return "healthy";
       }
       await wait(readyDeadline);
     }
@@ -174,12 +193,7 @@ export async function rolloutSmoke(options: SmokeOptions) {
     // even when the other component is still rolling out or unavailable.
     const releases = await Promise.all(paths.map(readRelease));
     const newer = findNewer(releases, version);
-    if (newer) {
-      log(
-        `::notice::Rollout superseded: expected ${expected}, observed ${newer}. Skipping remaining checks.`,
-      );
-      return "superseded";
-    }
+    if (newer) return superseded(newer);
     log(paths.map((path) => `${path}: ${last.get(path)}`).join("; "));
     if (releases.every((release) => release === expected)) {
       if (now() >= deadline) throw timedOut();

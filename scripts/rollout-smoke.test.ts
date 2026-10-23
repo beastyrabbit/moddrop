@@ -67,9 +67,11 @@ test.each([
     const paths = request.mock.calls.map(
       ([url]) => new URL(String(url)).pathname,
     );
-    expect(paths.slice(-3)).toEqual([
+    expect(paths.slice(-5)).toEqual([
       "/",
       "/canvas-api/ready",
+      "/telemetry-config",
+      "/canvas-api/version",
       "/canvas-api/ready",
     ]);
     expect(
@@ -91,6 +93,54 @@ test.each([
     expect(request).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining("::notice::Rollout superseded"),
+    );
+  },
+);
+
+test.each([
+  [[expected, newer], [expected]],
+  [[expected], [expected, newer]],
+] satisfies [Reply[], Reply[]][])(
+  "newer component supersedes a readiness retry: %j / %j",
+  async (frontend, backend) => {
+    const { options, request, log } = fixture(frontend, backend, [503, 200]);
+    expect(await rolloutSmoke(options)).toBe("superseded");
+    expect(
+      request.mock.calls.map(([url]) => new URL(String(url)).pathname),
+    ).toEqual([
+      "/telemetry-config",
+      "/canvas-api/version",
+      "/",
+      "/canvas-api/ready",
+      "/telemetry-config",
+      "/canvas-api/version",
+    ]);
+    expect(log).toHaveBeenCalledWith(
+      `::notice::Rollout superseded: expected ${expected}, observed ${newer}. Skipping remaining checks.`,
+    );
+  },
+);
+
+test.each([
+  [[expected, newer], [expected]],
+  [[expected], [expected, newer]],
+] satisfies [Reply[], Reply[]][])(
+  "newer component supersedes a homepage retry: %j / %j",
+  async (frontend, backend) => {
+    const { options, queues, request, log } = fixture(frontend, backend);
+    queues["/"] = [502, 200];
+    expect(await rolloutSmoke(options)).toBe("superseded");
+    expect(
+      request.mock.calls.map(([url]) => new URL(String(url)).pathname),
+    ).toEqual([
+      "/telemetry-config",
+      "/canvas-api/version",
+      "/",
+      "/telemetry-config",
+      "/canvas-api/version",
+    ]);
+    expect(log).toHaveBeenCalledWith(
+      `::notice::Rollout superseded: expected ${expected}, observed ${newer}. Skipping remaining checks.`,
     );
   },
 );
@@ -143,7 +193,7 @@ test.each([
     );
     expect(
       request.mock.calls.slice(2).map(([url]) => new URL(String(url)).pathname),
-    ).toEqual(["/", "/"]);
+    ).toEqual(["/", "/telemetry-config", "/canvas-api/version", "/"]);
     expect(options.now()).toBe(40);
   },
 );
@@ -156,7 +206,13 @@ test.each([502, new Error("offline")])(
     expect(await rolloutSmoke(options)).toBe("healthy");
     expect(
       request.mock.calls.slice(2).map(([url]) => new URL(String(url)).pathname),
-    ).toEqual(["/", "/", "/canvas-api/ready"]);
+    ).toEqual([
+      "/",
+      "/telemetry-config",
+      "/canvas-api/version",
+      "/",
+      "/canvas-api/ready",
+    ]);
   },
 );
 
@@ -165,7 +221,7 @@ test("readiness retries are bounded by the short window and overall deadline", a
   await expect(rolloutSmoke({ ...options, timeoutMs: 30 })).rejects.toThrow(
     "Readiness timed out: /: HTTP 200; /canvas-api/ready: HTTP 503",
   );
-  expect(request).toHaveBeenCalledTimes(5);
+  expect(request).toHaveBeenCalledTimes(7);
 });
 
 test("homepage retries share the readiness window and overall deadline", async () => {
@@ -177,7 +233,13 @@ test("homepage retries share the readiness window and overall deadline", async (
   expect(options.now()).toBe(30);
   expect(
     request.mock.calls.slice(2).map(([url]) => new URL(String(url)).pathname),
-  ).toEqual(["/", "/", "/canvas-api/ready"]);
+  ).toEqual([
+    "/",
+    "/telemetry-config",
+    "/canvas-api/version",
+    "/",
+    "/canvas-api/ready",
+  ]);
 });
 
 test.each([

@@ -41,6 +41,7 @@ jobs:
       - run: bash scripts/verify.sh
   proof:
     needs: verify
+    continue-on-error: true
     runs-on: arc-moddrop
     steps:
       - uses: actions/checkout@v7
