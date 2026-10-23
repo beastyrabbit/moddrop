@@ -5,8 +5,10 @@ suite passes, a separate job that runs no repository code records the checked-ou
 commit and tree in a JSON proof artifact retained for 14 days.
 The release gate reuses proof only for the exact release
 tree from a completed, successful Verify run in this repository. Proof is reused
-only when the Verify run used the same `verify.yml` as the release. Fork PR runs
-cannot supply proof. Missing, expired, invalid or unavailable proof falls back
+only when GitHub's record of the Verify run's head commit has the release tree.
+The artifact is only an index. PR runs whose merge tree differs from their head
+tree fall back to full verification. Fork PR runs cannot supply proof.
+Missing, expired, invalid or unavailable proof falls back
 to the full Verify workflow. The gate logs the fallback reason as a notice,
 or a warning for API, download and unzip errors. Both production images still
 build on `arc-moddrop` and publish to GHCR after verification succeeds.

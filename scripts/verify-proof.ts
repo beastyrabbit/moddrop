@@ -20,7 +20,7 @@ type Run = {
 export type ProofApi = {
   artifacts: (name: string, page: number) => Promise<Artifact[]>;
   run: (id: number) => Promise<Run>;
-  workflowBlob: (ref: string) => Promise<string>;
+  commitTree: (sha: string) => Promise<string>;
   download: (id: number) => Promise<string>;
 };
 const sha = /^[0-9a-f]{40}$/;
@@ -39,7 +39,6 @@ export async function canReuseVerify(
   api: ProofApi,
   repository: string,
   tree: string,
-  workflowBlob: string,
   now = Date.now(),
   report: Report = () => {},
 ): Promise<boolean> {
@@ -51,8 +50,6 @@ export async function canReuseVerify(
   let operation = "API artifact lookup";
   try {
     if (!sha.test(tree)) return fallback("invalid release tree");
-    if (!sha.test(workflowBlob))
-      return fallback("invalid release workflow blob");
     const name = `verify-proof-${tree}`;
     for (let page = 1; ; page++) {
       operation = "API artifact lookup";
@@ -91,14 +88,18 @@ export async function canReuseVerify(
           reason = "invalid run head SHA";
           continue;
         }
-        operation = "API workflow blob lookup";
-        const runWorkflowBlob = await api.workflowBlob(run.head_sha);
-        if (!sha.test(runWorkflowBlob)) {
-          reason = "invalid verify workflow blob";
+        // Artifacts are only an index: any job in a run can forge their claims.
+        // GitHub binds the run head to its tree, whose verify.sh/verify.yml ran.
+        // PR merge refs add only trusted main changes. Cheating code must come
+        // from this tree, which a fallback verify would also execute.
+        operation = "API commit tree lookup";
+        const runHeadTree = await api.commitTree(run.head_sha);
+        if (!sha.test(runHeadTree)) {
+          reason = "invalid run head tree";
           continue;
         }
-        if (runWorkflowBlob !== workflowBlob) {
-          reason = "verify workflow differs from release";
+        if (runHeadTree !== tree) {
+          reason = "run head tree differs from release";
           continue;
         }
         operation = "artifact download";
@@ -170,11 +171,9 @@ export function githubProofApi(
     async run(id) {
       return (await request(`/actions/runs/${id}`)).json();
     },
-    async workflowBlob(ref) {
-      const response = await request(
-        `/contents/.github/workflows/verify.yml?ref=${encodeURIComponent(ref)}`,
-      );
-      return (await response.json()).sha;
+    async commitTree(sha) {
+      const response = await request(`/git/commits/${encodeURIComponent(sha)}`);
+      return (await response.json()).tree.sha;
     },
     async download(id) {
       const response = await request(`/actions/artifacts/${id}/zip`);
@@ -214,11 +213,6 @@ if (import.meta.main) {
       ["rev-parse", `${process.env.GITHUB_SHA}^{tree}`],
       { encoding: "utf8", timeout: 5_000 },
     ).trim();
-    const workflowBlob = execFileSync(
-      "git",
-      ["rev-parse", `${process.env.GITHUB_SHA}:.github/workflows/verify.yml`],
-      { encoding: "utf8", timeout: 5_000 },
-    ).trim();
     const repository = process.env.GITHUB_REPOSITORY;
     const token = process.env.GH_TOKEN;
     if (repository && token)
@@ -226,17 +220,13 @@ if (import.meta.main) {
         githubProofApi(repository, token, process.env.GITHUB_API_URL),
         repository,
         tree,
-        workflowBlob,
         Date.now(),
         report,
       );
     else report("missing GitHub repository or token", "warning");
   } catch (error) {
     // Checkout or git failures also fall back to the existing workflow.
-    report(
-      `checkout tree or workflow lookup failed (${errorClass(error)})`,
-      "warning",
-    );
+    report(`checkout tree lookup failed (${errorClass(error)})`, "warning");
   }
   if (reuse) console.log("Reusing successful Verify tree proof.");
   if (process.env.GITHUB_OUTPUT)

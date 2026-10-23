@@ -10,7 +10,6 @@ afterEach(() => {
 
 const tree = "a".repeat(40);
 const commit = "b".repeat(40);
-const workflowBlob = "d".repeat(40);
 const repository = "owner/moddrop";
 function fixture() {
   const artifact: Awaited<ReturnType<ProofApi["artifacts"]>>[number] = {
@@ -30,18 +29,18 @@ function fixture() {
   const api = {
     artifacts: vi.fn<ProofApi["artifacts"]>(async () => [artifact]),
     run: vi.fn<ProofApi["run"]>(async () => run),
-    workflowBlob: vi.fn<ProofApi["workflowBlob"]>(async () => workflowBlob),
+    commitTree: vi.fn<ProofApi["commitTree"]>(async () => tree),
     download: vi.fn(async () => JSON.stringify({ tree, commit })),
   } satisfies ProofApi;
   return { artifact, run, api };
 }
 
-test("accepts matching tree and workflow blob from a successful same-repository Verify run, regardless of commit", async () => {
+test("accepts matching artifact and run head trees from a successful same-repository Verify run, regardless of commit", async () => {
   const { api } = fixture();
-  expect(await canReuseVerify(api, repository, tree, workflowBlob)).toBe(true);
+  expect(await canReuseVerify(api, repository, tree)).toBe(true);
   expect(api.artifacts).toHaveBeenCalledWith(`verify-proof-${tree}`, 1);
   expect(api.run).toHaveBeenCalledWith(2);
-  expect(api.workflowBlob).toHaveBeenCalledWith(commit);
+  expect(api.commitTree).toHaveBeenCalledWith(commit);
   expect(api.download).toHaveBeenCalledWith(1);
 });
 
@@ -56,124 +55,86 @@ test.each([
 ])("rejects untrusted/unsuccessful run %j", async (override) => {
   const { api, run } = fixture();
   api.run.mockResolvedValue({ ...run, ...override });
-  expect(await canReuseVerify(api, repository, tree, workflowBlob)).toBe(false);
-  expect(api.workflowBlob).not.toHaveBeenCalled();
+  expect(await canReuseVerify(api, repository, tree)).toBe(false);
+  expect(api.commitTree).not.toHaveBeenCalled();
   expect(api.download).not.toHaveBeenCalled();
 });
 
-test("rejects a different Verify workflow before downloading proof", async () => {
+test("rejects a valid artifact claiming the release tree when the run head tree differs before downloading proof", async () => {
   const { api } = fixture();
   const report = vi.fn();
-  api.workflowBlob.mockResolvedValue("e".repeat(40));
-  expect(
-    await canReuseVerify(
-      api,
-      repository,
-      tree,
-      workflowBlob,
-      Date.now(),
-      report,
-    ),
-  ).toBe(false);
+  api.commitTree.mockResolvedValue("e".repeat(40));
+  expect(await canReuseVerify(api, repository, tree, Date.now(), report)).toBe(
+    false,
+  );
   expect(report).toHaveBeenCalledExactlyOnceWith(
-    "verify workflow differs from release",
+    "run head tree differs from release",
     "notice",
   );
   expect(api.download).not.toHaveBeenCalled();
 });
 
 test.each(["invalid", "x".repeat(40), "a".repeat(39), "a".repeat(41)])(
-  "rejects invalid run head SHA %s before looking up the workflow",
+  "rejects invalid run head SHA %s before looking up the commit tree",
   async (head_sha) => {
     const { api, run } = fixture();
     const report = vi.fn();
     run.head_sha = head_sha;
     expect(
-      await canReuseVerify(
-        api,
-        repository,
-        tree,
-        workflowBlob,
-        Date.now(),
-        report,
-      ),
+      await canReuseVerify(api, repository, tree, Date.now(), report),
     ).toBe(false);
     expect(report).toHaveBeenCalledExactlyOnceWith(
       "invalid run head SHA",
       "notice",
     );
-    expect(api.workflowBlob).not.toHaveBeenCalled();
+    expect(api.commitTree).not.toHaveBeenCalled();
     expect(api.download).not.toHaveBeenCalled();
   },
 );
 
 test.each(["invalid", "x".repeat(40), "a".repeat(39), "a".repeat(41)])(
-  "rejects invalid release or run workflow blob %s",
-  async (blob) => {
+  "rejects invalid run head tree %s before downloading proof",
+  async (invalidTree) => {
     const { api } = fixture();
     const report = vi.fn();
+    api.commitTree.mockResolvedValue(invalidTree);
     expect(
-      await canReuseVerify(api, repository, tree, blob, Date.now(), report),
+      await canReuseVerify(api, repository, tree, Date.now(), report),
     ).toBe(false);
     expect(report).toHaveBeenCalledExactlyOnceWith(
-      "invalid release workflow blob",
-      "notice",
-    );
-    expect(api.artifacts).not.toHaveBeenCalled();
-
-    report.mockClear();
-    api.workflowBlob.mockResolvedValue(blob);
-    expect(
-      await canReuseVerify(
-        api,
-        repository,
-        tree,
-        workflowBlob,
-        Date.now(),
-        report,
-      ),
-    ).toBe(false);
-    expect(report).toHaveBeenCalledExactlyOnceWith(
-      "invalid verify workflow blob",
+      "invalid run head tree",
       "notice",
     );
     expect(api.download).not.toHaveBeenCalled();
   },
 );
 
-test("reports a contents API error as a warning before downloading proof", async () => {
+test("reports a commit tree API error as a warning before downloading proof", async () => {
   const { api } = fixture();
   const report = vi.fn();
-  api.workflowBlob.mockRejectedValue(new TypeError("private diagnostic"));
-  expect(
-    await canReuseVerify(
-      api,
-      repository,
-      tree,
-      workflowBlob,
-      Date.now(),
-      report,
-    ),
-  ).toBe(false);
+  api.commitTree.mockRejectedValue(new TypeError("private diagnostic"));
+  expect(await canReuseVerify(api, repository, tree, Date.now(), report)).toBe(
+    false,
+  );
   expect(report).toHaveBeenCalledExactlyOnceWith(
-    "API workflow blob lookup failed (TypeError)",
+    "API commit tree lookup failed (TypeError)",
     "warning",
   );
   expect(api.download).not.toHaveBeenCalled();
 });
 
-test("looks up the Verify workflow blob at the run head SHA using the contents API", async () => {
-  const fetch = vi.fn(async () => Response.json({ sha: workflowBlob }));
+test("looks up the run head commit tree using the Git commits API", async () => {
+  const fetch = vi.fn(async () => Response.json({ tree: { sha: tree } }));
   vi.stubGlobal("fetch", fetch);
   expect(
     await githubProofApi(
       repository,
       "fixture-token",
       "https://fixture.invalid",
-    ).workflowBlob(commit),
-  ).toBe(workflowBlob);
+    ).commitTree(commit),
+  ).toBe(tree);
   expect(fetch).toHaveBeenCalledExactlyOnceWith(
-    `https://fixture.invalid/repos/${repository}/contents/.github/workflows/verify.yml?ref=${commit}`,
+    `https://fixture.invalid/repos/${repository}/git/commits/${commit}`,
     expect.any(Object),
   );
 });
@@ -187,7 +148,7 @@ test.each([
 ])("rejects unusable artifact %j", async (override) => {
   const { api, artifact } = fixture();
   api.artifacts.mockResolvedValue([{ ...artifact, ...override }]);
-  expect(await canReuseVerify(api, repository, tree, workflowBlob)).toBe(false);
+  expect(await canReuseVerify(api, repository, tree)).toBe(false);
 });
 
 test.each([
@@ -202,26 +163,17 @@ test.each([
 ])("parses proof strictly as data and rejects %s", async (body) => {
   const { api } = fixture();
   api.download.mockResolvedValue(body);
-  expect(await canReuseVerify(api, repository, tree, workflowBlob)).toBe(false);
+  expect(await canReuseVerify(api, repository, tree)).toBe(false);
 });
 
 test("missing proof, invalid expected SHA and API/archive errors fall back", async () => {
   const { api } = fixture();
-  expect(await canReuseVerify(api, repository, "invalid", workflowBlob)).toBe(
-    false,
-  );
+  expect(await canReuseVerify(api, repository, "invalid")).toBe(false);
   api.artifacts.mockResolvedValueOnce([]);
-  expect(await canReuseVerify(api, repository, tree, workflowBlob)).toBe(false);
-  for (const method of [
-    api.artifacts,
-    api.run,
-    api.workflowBlob,
-    api.download,
-  ]) {
+  expect(await canReuseVerify(api, repository, tree)).toBe(false);
+  for (const method of [api.artifacts, api.run, api.commitTree, api.download]) {
     method.mockRejectedValueOnce(new Error("unavailable"));
-    expect(await canReuseVerify(api, repository, tree, workflowBlob)).toBe(
-      false,
-    );
+    expect(await canReuseVerify(api, repository, tree)).toBe(false);
   }
 });
 
@@ -230,7 +182,7 @@ test("paginates named artifacts until a valid proof is found", async () => {
   api.artifacts.mockResolvedValueOnce(
     Array.from({ length: 100 }, () => ({ ...artifact, expired: true })),
   );
-  expect(await canReuseVerify(api, repository, tree, workflowBlob)).toBe(true);
+  expect(await canReuseVerify(api, repository, tree)).toBe(true);
   expect(api.artifacts).toHaveBeenLastCalledWith(`verify-proof-${tree}`, 2);
 });
 
@@ -270,16 +222,9 @@ test.each([
       );
       break;
   }
-  expect(
-    await canReuseVerify(
-      api,
-      repository,
-      tree,
-      workflowBlob,
-      Date.now(),
-      report,
-    ),
-  ).toBe(false);
+  expect(await canReuseVerify(api, repository, tree, Date.now(), report)).toBe(
+    false,
+  );
   expect(report).toHaveBeenCalledExactlyOnceWith(reason, "notice");
 });
 
@@ -287,16 +232,9 @@ test("reports API errors by class without exposing the error message", async () 
   const { api } = fixture();
   const report = vi.fn();
   api.artifacts.mockRejectedValue(new TypeError("private diagnostic"));
-  expect(
-    await canReuseVerify(
-      api,
-      repository,
-      tree,
-      workflowBlob,
-      Date.now(),
-      report,
-    ),
-  ).toBe(false);
+  expect(await canReuseVerify(api, repository, tree, Date.now(), report)).toBe(
+    false,
+  );
   expect(report).toHaveBeenCalledExactlyOnceWith(
     "API artifact lookup failed (TypeError)",
     "warning",
@@ -319,7 +257,7 @@ test.each([401, 403, 404])(
               ? { artifacts: [artifact] }
               : calls === 2
                 ? run
-                : { sha: workflowBlob },
+                : { tree: { sha: tree } },
           );
         }),
       );
@@ -333,7 +271,6 @@ test.each([401, 403, 404])(
           ),
           repository,
           tree,
-          workflowBlob,
           Date.now(),
           report,
         ),
@@ -360,7 +297,7 @@ test.each([
       .fn()
       .mockResolvedValueOnce(Response.json({ artifacts: [artifact] }))
       .mockResolvedValueOnce(Response.json(run))
-      .mockResolvedValueOnce(Response.json({ sha: workflowBlob }))
+      .mockResolvedValueOnce(Response.json({ tree: { sha: tree } }))
       .mockResolvedValueOnce(new Response("fixture archive")),
   );
   vi.mocked(execFileSync).mockImplementation(() => {
@@ -372,7 +309,6 @@ test.each([
       githubProofApi(repository, "fixture-token", "https://fixture.invalid"),
       repository,
       tree,
-      workflowBlob,
       Date.now(),
       report,
     ),
