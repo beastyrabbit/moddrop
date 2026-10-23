@@ -28,12 +28,39 @@ test("GitHub releases use the PR verification gate before production actions", (
     (step: { run?: string }) => step.run === "bash scripts/verify.sh",
   );
   expect(verifyIndex).toBeGreaterThan(-1);
-  expect(steps.at(-1).uses).toBe("actions/upload-artifact@v7");
-  expect(steps.at(-1).with.path).toBe("verify-proof.json");
-  expect(steps.at(-1).with.overwrite).toBe(true);
-  expect(steps.at(-1).with.archive).toBeUndefined(); // v7 defaults to a ZIP.
-  for (const step of steps.slice(verifyIndex + 1))
-    expect(step.if).toBeUndefined(); // Default success() protects the proof.
+  expect(steps.at(-1)).toEqual({ run: "bash scripts/verify.sh" });
+  for (const step of steps) {
+    expect(step.uses ?? "").not.toMatch(/^actions\/upload-artifact@/);
+    expect(step.id).not.toBe("proof");
+    expect(step.run ?? "").not.toContain("verify-proof");
+  }
+  expect(verification.permissions).toEqual({ contents: "read" });
+  expect(verification.jobs.proof).toEqual({
+    needs: "verify", // Default success() requires the full suite to pass.
+    "runs-on": "arc-moddrop",
+    steps: [
+      {
+        uses: "actions/checkout@v7",
+        with: { "persist-credentials": false },
+      },
+      {
+        name: "Record verified checkout",
+        id: "proof",
+        run: expect.stringContaining("git rev-parse 'HEAD^{tree}'"),
+      },
+      {
+        uses: "actions/upload-artifact@v7",
+        with: {
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions expression.
+          name: "verify-proof-${{ steps.proof.outputs.tree }}",
+          path: "verify-proof.json",
+          overwrite: true,
+          "if-no-files-found": "error",
+          "retention-days": 14,
+        },
+      },
+    ],
+  });
 
   const results = ["success", "failure", "cancelled", "skipped"];
   for (const gate of results)
