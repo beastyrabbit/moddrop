@@ -1,0 +1,25 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "defaultThreadEnvMode": "worktree",
+  "scripts": [
+    {
+      "name": "Install dependencies",
+      "command": "pnpm install --frozen-lockfile",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
+    },
+    {
+      "name": "Dev",
+      "command": "pnpm dev",
+      "icon": "play",
+      "stopOnSettle": true,
+      "previewUrl": "https://moddrop.localhost:1355"
+    },
+    {
+      "name": "Verify",
+      "command": "bash -c 'set -euo pipefail; c=$(docker run -d --rm -e POSTGRES_DB=canvas_test -e POSTGRES_USER=canvas_test -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 postgres:18.4-bookworm); trap \"docker rm -f $c >/dev/null\" EXIT; n=0; until docker exec \"$c\" pg_isready -q -h 127.0.0.1 -U canvas_test; do n=$((n+1)); [ $n -lt 60 ] || { echo \"PostgreSQL did not become ready\" >&2; exit 1; }; sleep 1; done; CANVAS_TEST_DATABASE_URL=postgresql://canvas_test@$(docker port \"$c\" 5432/tcp | head -1)/canvas_test bash scripts/verify.sh'",
+      "icon": "test"
+    }
+  ]
+}
